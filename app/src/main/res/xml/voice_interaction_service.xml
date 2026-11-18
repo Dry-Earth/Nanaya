@@ -5,3 +5,4 @@
     android:supportsAssist="true"
     android:supportsLaunchVoiceAssistFromKeyguard="true"
     android:supportsLocalInteraction="false"
+    android:supportsLocalInteraction="false" />
