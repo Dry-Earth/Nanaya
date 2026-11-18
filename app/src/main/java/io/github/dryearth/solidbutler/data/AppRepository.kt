@@ -82,8 +82,8 @@ class AppRepository(
             locked = pkg in prefs.lockedPackages(),
             whitelisted = pkg in prefs.whitelist(),
             trackers = emptyList(),
-            wifiBytes = net[0],
-            cellBytes = net[1],
+            wifiBytes = net.first,
+            cellBytes = net.second,
         )
     }
 
@@ -93,7 +93,7 @@ class AppRepository(
         val end = System.currentTimeMillis()
         val start = end - 24L * 3600_000
         fun query(transport: Int): Long = runCatching {
-            val stats = nsm.querySummaryForUid(transport, uid, start, end)
+            val stats = nsm.queryDetailsForUid(transport, null, uid, start, end)
             val value = stats.totalBytes
             stats.close()
             value
