@@ -4,5 +4,4 @@
     android:settingsActivity="io.github.dryearth.solidbutler.MainActivity"
     android:supportsAssist="true"
     android:supportsLaunchVoiceAssistFromKeyguard="true"
-    android:supportsLocalInteraction="false"
     android:supportsLocalInteraction="false" />
