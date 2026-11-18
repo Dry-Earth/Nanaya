@@ -7,6 +7,7 @@ import io.github.dryearth.solidbutler.ai.AiClient
 import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.core.CapabilityProbe
 import io.github.dryearth.solidbutler.core.ChargingState
+import io.github.dryearth.solidbutler.core.LineageHardware
 import io.github.dryearth.solidbutler.core.LineageHealth
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
@@ -752,6 +753,14 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 title = "修改防火墙",
                 detail = "${if (args["blocked"] == "true") "阻断" else "放行"} $name 的联网",
             )
+            "lineage_feature" -> action.copy(
+                title = "开关 LineageOS 特性",
+                detail = "${args["feature"] ?: "特性"} → ${if (args["enabled"] != "false") "开启" else "关闭"}（lineagehardware）",
+            )
+            "standby" -> action.copy(
+                title = "设置待机分组",
+                detail = "$name → ${args["bucket"] ?: "restricted"}（am set-standby-bucket）",
+            )
             "open_screen" -> action.copy(title = "打开页面", detail = args["screen"] ?: "首页")
             "list_drain" -> action.copy(title = "查看耗电排行", detail = "读取 UsageStats 与 cpuinfo")
             else -> action.copy(title = action.type, detail = args.entries.joinToString { "${it.key}=${it.value}" })
@@ -829,6 +838,21 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 refreshDrain()
                 "已刷新 24 小时耗电排行，见「性能」页。"
             }
+            "lineage_feature" -> {
+                val token = args["feature"] ?: return "没有指定特性"
+                val feature = LineageHardware.FEATURES.firstOrNull {
+                    it.label.contains(token, true) || token.contains(it.label, true)
+                } ?: return "没有找到特性：$token"
+                val enabled = args["enabled"] != "false"
+                val ok = withContext(Dispatchers.IO) { LineageHardware.set(feature.bit, enabled) }
+                if (ok) "已${if (enabled) "开启" else "关闭"} ${feature.label}。" else "设备拒绝了这项写入。"
+            }
+            "standby" -> {
+                val app = resolveApp(args["package"] ?: args["app"] ?: "") ?: return "没有找到该应用"
+                val bucket = args["bucket"] ?: "restricted"
+                val (ok, msg) = withContext(Dispatchers.IO) { appRepo.setStandbyBucket(app.pkg, bucket) }
+                if (ok) "${app.label} 已设为待机分组 $bucket。" else "失败：$msg"
+            }
             "open_screen" -> {
                 _navigate.value = args["screen"] ?: "home"
                 "已为你打开。"
@@ -879,6 +903,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 - 机型：${c.device}，${c.android}
 - 权限：Root=${c.root}，Shizuku=${c.shizukuReady}，所有文件访问=${c.allFiles}，使用情况访问=${c.usageAccess}
 - 充电控制：${if (p.charging.supported) "支持，当前上限 ${p.charging.limit}%，模式 ${LineageHealth.modeLabel(p.charging.mode)}" else "不支持"}
+- LineageOS 硬件接口：${if (io.github.dryearth.solidbutler.core.LineageHardware.bind()) "已连接 lineagehardware" else "未连接"}
 - 电池：${p.snapshot.battery.level}%，${p.snapshot.battery.status}，温度 ${p.snapshot.battery.tempC}℃
 - 内存：${p.snapshot.ramUsed.bytes()} / ${p.snapshot.ramTotal.bytes()}
 - 存储：${if (s != null) "${s.used.bytes()} / ${s.total.bytes()}，剩余 ${s.free.bytes()}" else "尚未扫描"}
@@ -895,7 +920,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 8. {"type":"scan_trackers","args":{"package":"可选"}}
 9. {"type":"firewall","args":{"package":"应用名或包名","blocked":"true"}}
 10. {"type":"list_drain","args":{}}
-11. {"type":"open_screen","args":{"screen":"home|storage|apps|perf|security"}}
+11. {"type":"lineage_feature","args":{"feature":"防闪烁/色彩增强/自适应背光等","enabled":"true"}}
+12. {"type":"standby","args":{"package":"应用名或包名","bucket":"restricted|rare|frequent|active"}}
+13. {"type":"open_screen","args":{"screen":"home|storage|apps|perf|security"}}
 
 输出规则：
 - 只输出一个 JSON 对象，不要 Markdown，不要代码围栏，不要额外文字。

@@ -54,7 +54,7 @@ import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit) {
+fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit, onOpenDomain: () -> Unit) {
     val state by vm.security.collectAsStateWithLifecycle()
     val appsState by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
@@ -80,6 +80,22 @@ fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit) {
                         Text("特殊权限", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
                             "悬浮窗、无障碍、通知监听、设备管理器、安装未知应用",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
+
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpenDomain) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("域名过滤", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "VpnService 只接管 DNS，拦截广告/追踪域名，不用 Root",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )

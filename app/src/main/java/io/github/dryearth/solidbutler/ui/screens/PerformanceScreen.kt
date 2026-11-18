@@ -461,10 +461,28 @@ private fun BatteryPanel(perf: PerfUiState) {
             if (b.powerW > 0f) String.format(java.util.Locale.US, "%.1f W", b.powerW) else "—",
             color = if (b.charging) Glass.Mint else Glass.Muted,
         )
+        val capacity = if (b.chargeCounterUah > 0 && b.level > 0) {
+            b.chargeCounterUah * 100 / b.level / 1000
+        } else -1L
+        KeyValueRow("满充估算", if (capacity > 0) "$capacity mAh" else "系统未提供")
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
         KeyValueRow("瞬时电流", if (b.currentUa != 0) "${b.currentUa / 1000} mA" else "—")
         KeyValueRow("供电", b.plugged)
+        if (perf.history.size > 2) {
+            Spacer(Modifier.height(8.dp))
+            Text("电池温度趋势", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+            Sparkline(
+                perf.history.map { it.third.toFloat() },
+                Modifier.fillMaxWidth().height(30.dp),
+                color = Glass.Amber,
+            )
+            Text(
+                "每 30 分钟采样一次，共 ${perf.history.size} 个样本",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
     }
 }
 
