@@ -65,7 +65,7 @@ import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun StorageScreen(vm: ButlerViewModel, onOpenTrash: () -> Unit) {
+fun StorageScreen(vm: ButlerViewModel) {
     val state by vm.storage.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<StorageCategory?>(null) }
     ToastEffect(state.toast) { vm.clearStorageToast() }
@@ -88,21 +88,6 @@ fun StorageScreen(vm: ButlerViewModel, onOpenTrash: () -> Unit) {
         if (report != null) {
             item { TreemapCard(report) }
             item { ActionRow(vm, report) }
-            item {
-                GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp), onClick = onOpenTrash) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("回收站", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
-                            Text(
-                                "用户文件删除后可在这里恢复，保留 7 天",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Glass.Muted,
-                            )
-                        }
-                        Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
-                    }
-                }
-            }
             item { SafetyNote() }
             item {
                 SectionHeader(
@@ -394,15 +379,33 @@ private fun sliceRects(
 
 @Composable
 private fun SafetyNote() {
-    GlassPanel(tint = Glass.Amber, corner = 14.dp, padding = PaddingValues(12.dp)) {
-        Text("清理规则", style = MaterialTheme.typography.labelLarge, color = Glass.Amber)
-        Spacer(Modifier.height(4.dp))
+    GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp)) {
+        Text("清理分级", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+        Spacer(Modifier.height(6.dp))
+        RuleLine(Glass.Mint, "可直接清理", "缓存、缩略图、日志、空文件夹")
+        RuleLine(Glass.Amber, "选中 + 二次确认", "安装包、下载、重复文件、卸载残留")
+        RuleLine(Glass.Faint, "只读", "大型文件只展示，不提供删除入口")
+        RuleLine(Glass.Rose, "不在这里处理", "应用数据（账号、设置、模型）")
+    }
+}
+
+@Composable
+private fun RuleLine(color: Color, title: String, detail: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.labelSmall, color = Glass.Text)
+        Spacer(Modifier.width(8.dp))
         Text(
-            "缓存 / 空目录 / 缩略图 / 日志：可以直接清。\n" +
-                "安装包 / 下载 / 重复文件 / 卸载残留：必须逐项勾选，再点一次确认。\n" +
-                "应用数据（账号、设置、模型）：这里没有清理入口。",
-            style = MaterialTheme.typography.bodySmall,
+            detail,
+            style = MaterialTheme.typography.labelSmall,
             color = Glass.Muted,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

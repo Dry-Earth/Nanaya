@@ -74,3 +74,6 @@ data class AutostartUiState(
     val busy: String? = null,
     val toast: String? = null,
 )
+
+
+data class Appearance(val style: String = "stars", val uri: String = "")

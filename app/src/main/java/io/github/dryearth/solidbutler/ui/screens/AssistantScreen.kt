@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatMessage
+import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
@@ -83,8 +84,9 @@ fun AssistantScreen(
 ) {
     val state by vm.chat.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val prefs = remember { Prefs(context) }
     var input by rememberSaveable { mutableStateOf("") }
-    var speakReplies by rememberSaveable { mutableStateOf(true) }
+    var speakReplies by rememberSaveable { mutableStateOf(prefs.aiSpeakReplies) }
     var ttsReady by remember { mutableStateOf(false) }
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     val listState = rememberLazyListState()
@@ -93,9 +95,11 @@ fun AssistantScreen(
     ToastEffect(state.toast) { vm.clearChatToast() }
 
     DisposableEffect(Unit) {
-        val engine = TextToSpeech(context) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-        }
+        val engine = TextToSpeech(
+            context,
+            { status -> ttsReady = status == TextToSpeech.SUCCESS },
+            prefs.ttsEngine.takeIf { it.isNotBlank() },
+        )
         ttsEngine = engine
         onDispose {
             engine.stop()
@@ -138,6 +142,7 @@ fun AssistantScreen(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧，汐在听")
+            if (prefs.sttPackage.isNotBlank()) setPackage(prefs.sttPackage)
         }
         if (intent.resolveActivity(context.packageManager) == null) {
             Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
@@ -210,6 +215,7 @@ fun AssistantScreen(
                     .size(20.dp)
                     .clickable {
                         speakReplies = !speakReplies
+                        prefs.aiSpeakReplies = speakReplies
                         if (!speakReplies) ttsEngine?.stop()
                     },
             )

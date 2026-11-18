@@ -1,6 +1,14 @@
 package io.github.dryearth.solidbutler.ui.components
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +31,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -32,58 +45,120 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 @Composable
-fun AmbientBackground() {
-    Canvas(Modifier.fillMaxSize()) {
-        drawRect(
-            Brush.verticalGradient(
-                listOf(Color(0xFF07080B), Color(0xFF0A0D12), Color(0xFF07080B)),
+fun AmbientBackground(style: String = "stars", imageUri: String = "") {
+    val context = LocalContext.current
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, style, imageUri) {
+        value = if (style == "image" && imageUri.isNotBlank()) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(Uri.parse(imageUri))?.use {
+                        BitmapFactory.decodeStream(it)?.asImageBitmap()
+                    }
+                }.getOrNull()
+            }
+        } else null
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().blur(28.dp).alpha(0.52f),
+                contentScale = ContentScale.Crop,
             )
-        )
-        val w = size.width
-        val h = size.height
-        val r1 = w * 0.9f
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(Color(0x227E9CFF), Color(0x0A7E9CFF), Color.Transparent),
-                center = Offset(w * 0.86f, h * 0.06f),
-                radius = r1,
-            ),
-            radius = r1,
-            center = Offset(w * 0.86f, h * 0.06f),
-        )
-        val r2 = w * 0.75f
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(Color(0x146FE0C8), Color.Transparent),
-                center = Offset(w * 0.02f, h * 0.55f),
-                radius = r2,
-            ),
-            radius = r2,
-            center = Offset(w * 0.02f, h * 0.55f),
-        )
-        val step = 46.dp.toPx()
-        var x = 0f
-        while (x < w) {
-            drawLine(Color(0x03FFFFFF), Offset(x, 0f), Offset(x, h), 1f)
-            x += step
         }
-        var y = 0f
-        while (y < h) {
-            drawLine(Color(0x025FFFFF), Offset(0f, y), Offset(w, y), 1f)
-            y += step
+
+        val transition = rememberInfiniteTransition(label = "ambient")
+        val phase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 6.28318f,
+            animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing)),
+            label = "twinkle",
+        )
+        val stars = remember {
+            val random = kotlin.random.Random(7)
+            List(120) {
+                Triple(random.nextFloat(), random.nextFloat(), random.nextFloat())
+            }
+        }
+
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            drawRect(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.55f else 1f),
+                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.62f else 1f),
+                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.75f else 1f),
+                    )
+                )
+            )
+            // nebula glows
+            val r1 = w * 0.95f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(Color(0x2A7E9CFF), Color(0x0A7E9CFF), Color.Transparent),
+                    center = Offset(w * 0.84f, h * 0.08f),
+                    radius = r1,
+                ),
+                radius = r1,
+                center = Offset(w * 0.84f, h * 0.08f),
+            )
+            val r2 = w * 0.8f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(Color(0x1A8D7BFF), Color.Transparent),
+                    center = Offset(w * 0.1f, h * 0.45f),
+                    radius = r2,
+                ),
+                radius = r2,
+                center = Offset(w * 0.1f, h * 0.45f),
+            )
+
+            if (style == "stars") {
+                stars.forEach { (x, y, seed) ->
+                    val brightness = 0.2f + 0.55f * kotlin.math.abs(
+                        kotlin.math.sin(phase + seed * 6.28318f)
+                    )
+                    val radius = (0.55f + seed * 1.05f) * density
+                    drawCircle(
+                        color = if (seed > 0.8f) Color(0xFFBFD4FF).copy(alpha = brightness)
+                        else Color.White.copy(alpha = brightness),
+                        radius = radius,
+                        center = Offset(x * w, y * h),
+                    )
+                }
+            }
+
+            if (style == "plain") {
+                val step = 52.dp.toPx()
+                var x = 0f
+                while (x < w) {
+                    drawLine(Color(0x03FFFFFF), Offset(x, 0f), Offset(x, h), 1f)
+                    x += step
+                }
+            }
         }
     }
 }

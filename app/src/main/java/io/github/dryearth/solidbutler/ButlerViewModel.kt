@@ -69,6 +69,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     private val _autostart = MutableStateFlow(AutostartUiState())
     val autostart = _autostart.asStateFlow()
 
+    private val _appearance = MutableStateFlow(Appearance(prefs.backgroundStyle, prefs.backgroundUri))
+    val appearance = _appearance.asStateFlow()
+
     private val _navigate = MutableStateFlow<String?>(null)
     val navigate = _navigate.asStateFlow()
 
@@ -216,10 +219,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = when (category.id) {
                 "dup" -> withContext(Dispatchers.IO) {
-                    storageRepo.deleteDuplicateCopies(duplicateGroups, keepFirst = true, useTrash = true)
+                    storageRepo.deleteDuplicateCopies(duplicateGroups, keepFirst = true, useTrash = false)
                 }
                 "leftover" -> withContext(Dispatchers.IO) { storageRepo.deleteLeftovers(items) }
-                else -> withContext(Dispatchers.IO) { storageRepo.deleteItems(items, useTrash = true) }
+                else -> withContext(Dispatchers.IO) { storageRepo.deleteItems(items, useTrash = false) }
             }
             _storage.update {
                 it.copy(
@@ -649,6 +652,19 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.aiApiKey = apiKey.trim()
         prefs.aiModel = model.trim()
         _chat.update { it.copy(modelLabel = ai.describe(), modelConfigured = ai.configured(), toast = "云端模型已保存") }
+    }
+
+    fun saveVoiceConfig(sttPackage: String, ttsEngine: String, speakReplies: Boolean) {
+        prefs.sttPackage = sttPackage.trim()
+        prefs.ttsEngine = ttsEngine.trim()
+        prefs.aiSpeakReplies = speakReplies
+        _chat.update { it.copy(toast = "语音设置已保存") }
+    }
+
+    fun setBackground(style: String, uri: String = prefs.backgroundUri) {
+        prefs.backgroundStyle = style
+        prefs.backgroundUri = uri
+        _appearance.value = Appearance(style, uri)
     }
 
     fun sendChat(text: String) {

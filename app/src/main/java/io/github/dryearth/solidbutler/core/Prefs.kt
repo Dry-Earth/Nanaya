@@ -20,6 +20,26 @@ class Prefs(context: Context) {
         get() = sp.getString("ai_model", "gpt-4o-mini") ?: "gpt-4o-mini"
         set(value) = sp.edit().putString("ai_model", value).apply()
 
+    var aiSpeakReplies: Boolean
+        get() = sp.getBoolean("ai_speak", true)
+        set(value) = sp.edit().putBoolean("ai_speak", value).apply()
+
+    var sttPackage: String
+        get() = sp.getString("stt_package", "") ?: ""
+        set(value) = sp.edit().putString("stt_package", value).apply()
+
+    var ttsEngine: String
+        get() = sp.getString("tts_engine", "") ?: ""
+        set(value) = sp.edit().putString("tts_engine", value).apply()
+
+    var backgroundStyle: String
+        get() = sp.getString("bg_style", "stars") ?: "stars"
+        set(value) = sp.edit().putString("bg_style", value).apply()
+
+    var backgroundUri: String
+        get() = sp.getString("bg_uri", "") ?: ""
+        set(value) = sp.edit().putString("bg_uri", value).apply()
+
     var aiConfigured: Boolean
         get() = aiApiKey.isNotBlank()
         set(value) = sp.edit().putBoolean("ai_configured", value).apply()

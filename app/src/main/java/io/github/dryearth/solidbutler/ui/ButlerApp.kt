@@ -1,5 +1,11 @@
 package io.github.dryearth.solidbutler.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,8 +47,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +68,7 @@ import io.github.dryearth.solidbutler.ui.components.AmbientBackground
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
+import io.github.dryearth.solidbutler.ui.screens.AiSettingsScreen
 import io.github.dryearth.solidbutler.ui.screens.AssistantScreen
 import io.github.dryearth.solidbutler.ui.screens.AutostartScreen
 import io.github.dryearth.solidbutler.ui.screens.DiagnosticsScreen
@@ -73,7 +84,6 @@ import io.github.dryearth.solidbutler.ui.screens.PerformanceScreen
 import io.github.dryearth.solidbutler.ui.screens.SecurityScreen
 import io.github.dryearth.solidbutler.ui.screens.SettingsScreen
 import io.github.dryearth.solidbutler.ui.screens.StorageScreen
-import io.github.dryearth.solidbutler.ui.screens.TrashScreen
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 private data class NavItem(val id: String, val label: String, val icon: ImageVector)
@@ -98,7 +108,9 @@ fun ButlerApp(
     var chat by rememberSaveable { mutableStateOf(startWithChat) }
     var autoVoice by remember { mutableStateOf(startWithChat) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var aiSettings by rememberSaveable { mutableStateOf(false) }
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
+    val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
 
     LaunchedEffect(nav) {
@@ -135,7 +147,7 @@ fun ButlerApp(
     }
 
     Box(Modifier.fillMaxSize()) {
-        AmbientBackground()
+        AmbientBackground(appearance.style, appearance.uri)
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 caps = caps,
@@ -157,8 +169,6 @@ fun ButlerApp(
                     WakeupScreen(onBack = { sub = "autostart" })
                 } else if (sub == "diagnostics") {
                     DiagnosticsScreen(onBack = { sub = null })
-                } else if (sub == "trash") {
-                    TrashScreen(onBack = { sub = null })
                 } else if (sub == "domain") {
                     DomainFirewallScreen(onBack = { sub = null })
                 } else if (sub == "rules") {
@@ -173,7 +183,7 @@ fun ButlerApp(
                             onChat = { chat = true },
                             onOpenAutostart = { sub = "autostart" },
                         )
-                        "storage" -> StorageScreen(vm, onOpenTrash = { sub = "trash" })
+                        "storage" -> StorageScreen(vm)
                         "apps" -> AppsScreen(
                             vm,
                             onOpenAutostart = { sub = "autostart" },
@@ -198,26 +208,92 @@ fun ButlerApp(
 
     if (chat) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-            AmbientBackground()
+            AmbientBackground(appearance.style, appearance.uri)
             AssistantScreen(
                 vm = vm,
                 autoListen = autoVoice,
                 onAutoListenConsumed = { autoVoice = false },
                 onClose = { chat = false },
-                onSettings = { settings = true },
+                onSettings = { chat = false; aiSettings = true },
             )
         }
     }
     if (settings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-            AmbientBackground()
+            AmbientBackground(appearance.style, appearance.uri)
             SettingsScreen(
                 vm = vm,
                 caps = caps,
                 onClose = { settings = false },
-                onChat = { settings = false; chat = true },
-                onOpenLineage = { settings = false; sub = "lineage" },
-                onOpenNotifications = { settings = false; sub = "notifications" },
+                onOpenAiSettings = { settings = false; aiSettings = true },
+                onOpenLineage = { settings = false; chat = false; sub = "lineage" },
+                onOpenNotifications = { settings = false; chat = false; sub = "notifications" },
+            )
+        }
+    }
+    if (aiSettings) {
+        Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+            AmbientBackground(appearance.style, appearance.uri)
+            AiSettingsScreen(
+                vm = vm,
+                onBack = { aiSettings = false },
+                onChat = { aiSettings = false; chat = true },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiTitle(ready: Boolean) {
+    if (!ready) {
+        Text(
+            "汐",
+            style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = 1.5.sp),
+            color = Glass.Text,
+            fontWeight = FontWeight.Light,
+        )
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "ai-title")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
+        label = "ai-phase",
+    )
+    val colors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Accent)
+    val brush = Brush.linearGradient(
+        colors = colors,
+        start = Offset(phase * 460f - 160f, 0f),
+        end = Offset(phase * 460f + 120f, 54f),
+    )
+    Column {
+        Text(
+            "汐",
+            style = TextStyle(
+                brush = brush,
+                fontSize = MaterialTheme.typography.headlineLarge.fontSize,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 1.5.sp,
+            ),
+        )
+        Canvas(Modifier.width(58.dp).height(7.dp)) {
+            val path = Path()
+            for (i in 0..80) {
+                val t = i / 80f
+                val x = size.width * t
+                val y = size.height / 2f + kotlin.math.sin(t * 6.28318f + phase * 6.28318f) * 1.6.dp.toPx()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path,
+                brush = Brush.horizontalGradient(
+                    listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber)
+                ),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = 1.3.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                ),
             )
         }
     }
@@ -235,12 +311,7 @@ private fun TopBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "汐",
-                        style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = 1.5.sp),
-                        color = Glass.Text,
-                        fontWeight = FontWeight.Light,
-                    )
+                    AiTitle(aiConfigured)
                     Spacer(Modifier.width(8.dp))
                     Box(
                         Modifier

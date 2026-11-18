@@ -61,17 +61,29 @@ fun SettingsScreen(
     vm: ButlerViewModel,
     caps: Capabilities,
     onClose: () -> Unit,
-    onChat: () -> Unit,
+    onOpenAiSettings: () -> Unit,
     onOpenLineage: () -> Unit,
     onOpenNotifications: () -> Unit,
 ) {
     val context = LocalContext.current
     val chat by vm.chat.collectAsStateWithLifecycle()
+    val appearance by vm.appearance.collectAsStateWithLifecycle()
     ToastEffect(chat.toast) { vm.clearChatToast() }
+    var bgStyle by remember { mutableStateOf(appearance.style) }
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            bgStyle = "image"
+            vm.setBackground("image", uri.toString())
+        }
+    }
 
-    var base by rememberSaveable { mutableStateOf(vm.prefs.aiBaseUrl) }
-    var model by rememberSaveable { mutableStateOf(vm.prefs.aiModel) }
-    var key by rememberSaveable { mutableStateOf(vm.prefs.aiApiKey) }
     var lockEnabled by remember { mutableStateOf(vm.prefs.appLockEnabled) }
     var pinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
@@ -150,32 +162,46 @@ fun SettingsScreen(
             )
         }
 
-        SectionHeader("AI 管家", "云端 OpenAI 兼容接口 · 不填写则完全离线")
+        SectionHeader("AI 管家", "模型、语音识别与语音合成")
+        GlassPanel(onClick = onOpenAiSettings) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("AI 管家设置", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text(
+                        "配置云端模型、系统语音识别与 TTS 引擎",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+            }
+        }
+
+        SectionHeader("外观", "星夜 / 极简 / 自定义背景")
         GlassPanel {
-            GlassField("接口地址", base, "https://api.openai.com/v1") { base = it }
-            Spacer(Modifier.height(10.dp))
-            GlassField("模型名", model, "gpt-4o-mini") { model = it }
-            Spacer(Modifier.height(10.dp))
-            GlassField("API Key", key, "sk-…", password = true) { key = it }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill("星夜", selected = bgStyle == "stars", color = Glass.Violet) {
+                    bgStyle = "stars"; vm.setBackground("stars")
+                }
+                Pill("极简", selected = bgStyle == "plain", color = Glass.Accent) {
+                    bgStyle = "plain"; vm.setBackground("plain")
+                }
+                Pill("自定义图片", selected = bgStyle == "image", color = Glass.Mint) {
+                    bgStyle = "image"
+                    imagePicker.launch(arrayOf("image/*"))
+                }
+            }
+            if (bgStyle == "image") {
+                Spacer(Modifier.height(8.dp))
                 ActionButton(
-                    "保存",
-                    accent = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        vm.saveAiConfig(base, key, model)
-                    },
-                )
-                ActionButton(
-                    "打开对话",
-                    modifier = Modifier.weight(1f),
-                    onClick = onChat,
+                    "选择背景图片",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { imagePicker.launch(arrayOf("image/*")) },
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
-                "只发送你输入的文字与设备摘要。API Key 存在应用私有目录，不写日志。",
+                "自定义图片会以低透明度模糊背景显示；不申请相册权限，只读取你选中的这一张。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -243,14 +269,18 @@ fun SettingsScreen(
                 "去设置",
                 false,
             ) {
-                runCatching {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:${context.packageName}"),
-                        )
-                    )
-                }
+                openFirst(
+                    context,
+                    Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:${context.packageName}"),
+                    ),
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${context.packageName}"),
+                    ),
+                )
             }
             Spacer(Modifier.height(10.dp))
             ActionButton(
@@ -399,6 +429,16 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private fun openFirst(context: android.content.Context, vararg intents: Intent) {
+    for (intent in intents) {
+        if (intent.resolveActivity(context.packageManager) != null) {
+            runCatching { context.startActivity(intent) }
+            return
+        }
+    }
+    runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
 }
 
 @Composable
