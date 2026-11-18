@@ -19,11 +19,11 @@ class KernelInfoRepository(private val context: Context) {
             Shell.run("getprop $key", 4_000).text.trim().ifBlank { null }
 
         add("内核", read("/proc/version")?.take(120) ?: System.getProperty("os.version"))
-        add("SELinux", selinux(read))
-        add("Root", rootManager(read))
+        add("SELinux", selinux { read(it) })
+        add("Root", rootManager { read(it) })
         add("模块", modules())
-        add("ZRAM", zram(read))
-        add("Swap", swaps(read))
+        add("ZRAM", zram { read(it) })
+        add("Swap", swaps { read(it) })
         add("Governors", read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"))
         add("I/O 调度", read("/sys/block/sda/queue/scheduler")
             ?: read("/sys/block/mmcblk0/queue/scheduler"))

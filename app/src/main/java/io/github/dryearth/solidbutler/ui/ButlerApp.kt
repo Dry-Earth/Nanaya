@@ -271,9 +271,9 @@ private fun AiTitle(ready: Boolean) {
             Canvas(Modifier.matchParentSize()) {
                 drawRect(
                     brush = Brush.horizontalGradient(
-                        colors.map { it.copy(alpha = 0.10f) },
-                        start = Offset(phase * size.width - 40f, 0f),
-                        end = Offset(phase * size.width + 80f, 0f),
+                        colors = colors.map { it.copy(alpha = 0.10f) },
+                        startX = phase * size.width - 40f,
+                        endX = phase * size.width + 80f,
                     )
                 )
             }
@@ -333,7 +333,6 @@ private fun BreathingDot(ready: Boolean, active: Boolean) {
 }
 
 @Composable
-private fun TopBar(@Composable
 private fun TopBar(
     caps: Capabilities,
     perf: PerfUiState,
