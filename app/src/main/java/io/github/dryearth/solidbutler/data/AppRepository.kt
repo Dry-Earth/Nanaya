@@ -7,6 +7,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
 import android.net.NetworkCapabilities
+import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.os.PowerManager
 import io.github.dryearth.solidbutler.core.Prefs
@@ -94,9 +95,14 @@ class AppRepository(
         val start = end - 24L * 3600_000
         fun query(transport: Int): Long = runCatching {
             val stats = nsm.queryDetailsForUid(transport, null, start, end, uid)
-            val value = stats.totalBytes
+            val bucket = NetworkStats.Bucket()
+            var total = 0L
+            while (stats.hasNextBucket()) {
+                stats.getNextBucket(bucket)
+                total += bucket.rxBytes + bucket.txBytes
+            }
             stats.close()
-            value
+            total
         }.getOrDefault(-1L)
         return query(NetworkCapabilities.TRANSPORT_WIFI) to query(NetworkCapabilities.TRANSPORT_CELLULAR)
     }
