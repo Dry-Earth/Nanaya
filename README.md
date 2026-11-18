@@ -15,7 +15,9 @@
 | **安全** | 敏感权限聚合、相机/麦克风实时占用、离线追踪 SDK 扫描、侧载与权限组合风险规则、Root 防火墙（iptables 独立链） |
 | **自启** | 开机/网络接收器逐项开关、后台限制、`am set-standby-bucket` 待机分组 |
 | **AI** | OpenAI 兼容接口的云端管家，支持系统语音识别输入与 TTS 播报；所有动作先展示命令与影响，再二次确认 |
-| **LineageOS** | `lineagehealth` 充电控制、`lineagehardware` 硬件特性开关；`livedisplay`/`trust`/`profile` 服务探测 |
+| **LineageOS** | `lineagehealth` 充电控制、`lineagehardware` 硬件特性开关；`livedisplay`/`trust`/`profile` 服务探测；可作为系统数字助理（ACTION_ASSIST） |
+| **规则** | 25% 低电量语音、95% 充满语音、到上限自动限充、锁屏限制后台、连接 Wi-Fi 时限制 |
+| **隐私工具** | 特殊权限总览、通知渠道屏蔽、唤醒/任务审计、崩溃与 ANR、域名 DNS 过滤、回收站 |
 
 ## 为什么是“调用官方接口”
 
