@@ -71,7 +71,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import io.github.dryearth.solidbutler.ActionState
+import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.MainActivity
 import io.github.dryearth.solidbutler.data.ChatMessage
