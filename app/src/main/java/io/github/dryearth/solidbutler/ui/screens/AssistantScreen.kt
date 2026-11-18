@@ -4,11 +4,15 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.VolumeOff
@@ -50,13 +56,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -72,6 +82,10 @@ import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 
 @Composable
@@ -87,6 +101,18 @@ fun AssistantScreen(
     val prefs = remember { Prefs(context) }
     var input by rememberSaveable { mutableStateOf("") }
     var speakReplies by rememberSaveable { mutableStateOf(prefs.aiSpeakReplies) }
+    var pendingImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    var pendingBase64 by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val pair = withContext(Dispatchers.IO) { encodeImage(context, uri) }
+                pendingImage = pair.first
+                pendingBase64 = pair.second
+            }
+        }
+    }
     var ttsReady by remember { mutableStateOf(false) }
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     val listState = rememberLazyListState()
@@ -199,7 +225,7 @@ fun AssistantScreen(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("汐", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Text(prefs.personaName, style = MaterialTheme.typography.titleLarge, color = Glass.Text)
                 Text(
                     if (state.modelConfigured) state.modelLabel else "云端模型未配置",
                     style = MaterialTheme.typography.labelSmall,
@@ -266,7 +292,7 @@ fun AssistantScreen(
                 item {
                     GlassPanel(padding = PaddingValues(18.dp)) {
                         Text(
-                            "我是汐。可以帮你分析存储、盘点后台、设置充电上限、审计权限。",
+                            "我是${prefs.personaName}。可以帮你分析存储、盘点后台、设置充电上限、审计权限，也可以看图。",
                             style = MaterialTheme.typography.bodyLarge,
                             color = Glass.Text,
                         )
@@ -303,7 +329,7 @@ fun AssistantScreen(
                             color = Glass.Accent,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("汐正在思考…", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                        Text("${prefs.personaName}正在思考…", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
                     }
                 }
             }
@@ -312,13 +338,18 @@ fun AssistantScreen(
         Composer(
             value = input,
             enabled = state.modelConfigured && !state.sending,
+            imagePreview = pendingImage,
             onValueChange = { input = it },
+            onPickImage = { imagePicker.launch("image/*") },
+            onRemoveImage = { pendingImage = null; pendingBase64 = null },
             onMic = { requestMic() },
             onSend = {
                 val text = input.trim()
-                if (text.isNotEmpty()) {
+                if (text.isNotEmpty() || pendingBase64 != null) {
+                    vm.sendChat(text, pendingBase64)
                     input = ""
-                    vm.sendChat(text)
+                    pendingImage = null
+                    pendingBase64 = null
                 }
             },
         )
@@ -360,6 +391,24 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
         } else {
             Column(Modifier.fillMaxWidth(0.94f)) {
                 GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp)) {
+                    val imageData = msg.imageBase64
+                    if (imageData != null) {
+                        val bmp = remember(imageData) {
+                            runCatching {
+                                val bytes = Base64.decode(imageData, Base64.DEFAULT)
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                            }.getOrNull()
+                        }
+                        if (bmp != null) {
+                            Image(
+                                bmp,
+                                contentDescription = "图片",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                    }
                     Text(msg.text, style = MaterialTheme.typography.bodyMedium, color = Glass.Text)
                     msg.action?.let { action ->
                         Spacer(Modifier.height(10.dp))
@@ -443,7 +492,10 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
 private fun Composer(
     value: String,
     enabled: Boolean,
+    imagePreview: ImageBitmap?,
     onValueChange: (String) -> Unit,
+    onPickImage: () -> Unit,
+    onRemoveImage: () -> Unit,
     onMic: () -> Unit,
     onSend: () -> Unit,
 ) {
@@ -458,11 +510,29 @@ private fun Composer(
             corner = 20.dp,
             padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         ) {
+            if (imagePreview != null) {
+                Box(Modifier.padding(bottom = 8.dp)) {
+                    Image(
+                        imagePreview,
+                        contentDescription = "待发送图片",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.width(96.dp).height(96.dp).clip(RoundedCornerShape(12.dp)),
+                    )
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp)
+                            .clip(CircleShape).background(Color(0xAA000000))
+                            .clickable { onRemoveImage() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("×", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) {
                         Text(
-                            if (enabled) "让汐做什么…" else "配置模型后可用",
+                            if (enabled) "让${prefs.personaName}做什么…" else "配置模型后可用",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Glass.Faint,
                         )
@@ -486,6 +556,22 @@ private fun Composer(
                         .size(34.dp)
                         .clip(CircleShape)
                         .background(Color(0x0FFFFFFF))
+                        .clickable(enabled = enabled) { onPickImage() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Image,
+                        contentDescription = "发送图片",
+                        tint = if (enabled) Glass.Accent else Glass.Faint,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x0FFFFFFF))
                         .clickable(enabled = enabled) { onMic() },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -501,18 +587,41 @@ private fun Composer(
                     Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(if (enabled && value.isNotBlank()) Glass.Accent else Color(0x10FFFFFF))
-                        .clickable(enabled = enabled && value.isNotBlank()) { onSend() },
+                        .background(if (enabled && (value.isNotBlank() || imagePreview != null)) Glass.Accent else Color(0x10FFFFFF))
+                        .clickable(enabled = enabled && (value.isNotBlank() || imagePreview != null)) { onSend() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Rounded.Send,
                         contentDescription = "发送",
-                        tint = if (enabled && value.isNotBlank()) Color(0xFF0B1220) else Glass.Faint,
+                        tint = if (enabled && (value.isNotBlank() || imagePreview != null)) Color(0xFF0B1220) else Glass.Faint,
                         modifier = Modifier.size(16.dp),
                     )
                 }
             }
         }
     }
+}
+
+
+private fun encodeImage(context: android.content.Context, uri: Uri): Pair<ImageBitmap?, String?> {
+    return runCatching {
+        val original = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it)
+        } ?: return null to null
+        val max = 1024
+        val scale = minOf(1f, max.toFloat() / maxOf(original.width, original.height))
+        val scaled = if (scale < 1f) {
+            android.graphics.Bitmap.createScaledBitmap(
+                original,
+                (original.width * scale).toInt().coerceAtLeast(1),
+                (original.height * scale).toInt().coerceAtLeast(1),
+                true,
+            )
+        } else original
+        val out = ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
+        val bytes = out.toByteArray()
+        (scaled.asImageBitmap()) to Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }.getOrDefault(null to null)
 }

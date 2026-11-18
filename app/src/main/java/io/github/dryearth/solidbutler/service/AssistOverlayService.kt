@@ -261,7 +261,7 @@ private fun OverlayAssistant(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "汐",
+                        vm.prefs.personaName,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = Color(0xFF0B1220),
                     )

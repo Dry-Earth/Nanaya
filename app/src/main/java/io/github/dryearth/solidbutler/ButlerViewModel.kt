@@ -674,6 +674,13 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         _chat.update { it.copy(modelLabel = ai.describe(), modelConfigured = ai.configured(), toast = "云端模型已保存") }
     }
 
+    fun savePersona(name: String, prompt: String, user: String) {
+        prefs.personaName = name.trim().ifBlank { "汐" }
+        prefs.personaPrompt = prompt.trim()
+        prefs.userTitle = user.trim().ifBlank { "你" }
+        _chat.update { it.copy(toast = "人设已保存") }
+    }
+
     fun saveVoiceConfig(sttPackage: String, ttsEngine: String, speakReplies: Boolean) {
         prefs.sttPackage = sttPackage.trim()
         prefs.ttsEngine = ttsEngine.trim()
@@ -687,10 +694,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         _appearance.value = Appearance(style, uri)
     }
 
-    fun sendChat(text: String) {
-        val input = text.trim()
+    fun sendChat(text: String, imageBase64: String? = null) {
+        val input = text.trim().ifBlank { if (imageBase64 != null) "看看这张图" else "" }
         if (input.isBlank() || _chat.value.sending) return
-        val user = ChatMessage(role = ChatRole.USER, text = input)
+        val user = ChatMessage(role = ChatRole.USER, text = input, imageBase64 = imageBase64)
         _chat.update { it.copy(messages = it.messages + user, sending = true) }
         viewModelScope.launch {
             runCatching { ai.complete(buildSystemPrompt(), _chat.value.messages) }
@@ -1082,7 +1089,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val appsCount = _apps.value.apps.size
         val sen = _security.value.report
         return """
-你是「汐」，住在用户 LineageOS 24（Android 17）手机里的设备管家。语气冷静、简短、可靠，不卖萌。
+你是「${prefs.personaName}」，住在用户 LineageOS 24（Android 17）手机里的设备管家。
+用户自定义人设：${prefs.personaPrompt.ifBlank { "冷静、简短、可靠，不卖萌" }}
+称呼用户：${prefs.userTitle}
 你只能通过下面列出的 action 操作设备，每次操作都会由用户二次确认后执行。
 不确定的数据不要编造；需要先扫描就提出扫描。
 

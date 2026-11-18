@@ -94,6 +94,9 @@ fun AiSettingsScreen(
     var sttPkg by rememberSaveable { mutableStateOf(vm.prefs.sttPackage) }
     var ttsPkg by rememberSaveable { mutableStateOf(vm.prefs.ttsEngine) }
     var speak by rememberSaveable { mutableStateOf(vm.prefs.aiSpeakReplies) }
+    var personaName by rememberSaveable { mutableStateOf(vm.prefs.personaName) }
+    var personaPrompt by rememberSaveable { mutableStateOf(vm.prefs.personaPrompt) }
+    var userTitle by rememberSaveable { mutableStateOf(vm.prefs.userTitle) }
     var picker by remember { mutableStateOf<String?>(null) }
     var overlayFirst by remember { mutableStateOf(vm.prefs.overlayAssistant) }
 
@@ -150,7 +153,7 @@ fun AiSettingsScreen(
             AiField("API Key", key, "sk-…", password = true) { key = it }
             Spacer(Modifier.height(8.dp))
             Text(
-                "只发送对话文字与设备摘要，不上传文件。Key 存在应用私有目录。",
+                "文字和图片会发送到你配置的云端模型；图片需要模型支持视觉（如 gpt-4o）。Key 存在应用私有目录。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -185,6 +188,26 @@ fun AiSettingsScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 "语音识别需要系统识别服务与麦克风权限；TTS 需要系统语音引擎。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
+        SectionHeader("人设", "名字、性格与对你的称呼")
+        GlassPanel {
+            AiField("名字", personaName, "汐") { personaName = it }
+            Spacer(Modifier.height(8.dp))
+            AiField("称呼你", userTitle, "你") { userTitle = it }
+            Spacer(Modifier.height(8.dp))
+            AiField(
+                "人设描述",
+                personaPrompt,
+                "例如：冷静、简短、像守岸人一样克制；不要卖萌",
+                singleLine = false,
+            ) { personaPrompt = it }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "人设会注入系统提示词；不会改变应用名称和图标。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -305,6 +328,7 @@ fun AiSettingsScreen(
                     onClick = {
                         vm.saveAiConfig(base, key, model)
                         vm.saveVoiceConfig(sttPkg, ttsPkg, speak)
+                        vm.savePersona(personaName, personaPrompt, userTitle)
                     },
                 )
                 ActionButton(
@@ -395,6 +419,7 @@ private fun AiField(
     value: String,
     placeholder: String,
     password: Boolean = false,
+    singleLine: Boolean = true,
     onChange: (String) -> Unit,
 ) {
     Column {
@@ -415,7 +440,8 @@ private fun AiField(
                 onValueChange = onChange,
                 textStyle = MaterialTheme.typography.bodySmall.copy(color = Glass.Text),
                 cursorBrush = SolidColor(Glass.Accent),
-                singleLine = true,
+                singleLine = singleLine,
+                minLines = if (singleLine) 1 else 3,
                 visualTransformation = if (password) {
                     androidx.compose.ui.text.input.PasswordVisualTransformation()
                 } else androidx.compose.ui.text.input.VisualTransformation.None,

@@ -250,6 +250,7 @@ data class ChatMessage(
     val id: Long = System.nanoTime(),
     val role: ChatRole,
     val text: String,
+    val imageBase64: String? = null,
     val action: ButlerAction? = null,
     val actionState: ActionState = ActionState.NONE,
     val actionResult: String? = null,

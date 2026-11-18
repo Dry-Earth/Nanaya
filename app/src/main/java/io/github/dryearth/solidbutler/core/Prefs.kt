@@ -28,6 +28,18 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("overlay_assistant", false)
         set(value) = sp.edit().putBoolean("overlay_assistant", value).apply()
 
+    var personaName: String
+        get() = sp.getString("persona_name", "汐") ?: "汐"
+        set(value) = sp.edit().putString("persona_name", value).apply()
+
+    var personaPrompt: String
+        get() = sp.getString("persona_prompt", "") ?: ""
+        set(value) = sp.edit().putString("persona_prompt", value).apply()
+
+    var userTitle: String
+        get() = sp.getString("user_title", "你") ?: "你"
+        set(value) = sp.edit().putString("user_title", value).apply()
+
     var aiSpeakReplies: Boolean
         get() = sp.getBoolean("ai_speak", true)
         set(value) = sp.edit().putBoolean("ai_speak", value).apply()
