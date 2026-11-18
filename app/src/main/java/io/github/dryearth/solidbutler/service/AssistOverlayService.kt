@@ -207,11 +207,12 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         private const val CHANNEL_ID = "xi_assist_overlay"
         private const val NOTIFICATION_ID = 12003
 
-        fun show(context: android.content.Context) {
+        fun show(context: android.content.Context): Boolean = runCatching {
             val intent = Intent(context, AssistOverlayService::class.java)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
             else context.startService(intent)
-        }
+            true
+        }.getOrDefault(false)
     }
 }
 

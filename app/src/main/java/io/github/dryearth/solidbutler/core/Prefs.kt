@@ -24,6 +24,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("shizuku_asked", false)
         set(value) = sp.edit().putBoolean("shizuku_asked", value).apply()
 
+    var overlayAssistant: Boolean
+        get() = sp.getBoolean("overlay_assistant", false)
+        set(value) = sp.edit().putBoolean("overlay_assistant", value).apply()
+
     var aiSpeakReplies: Boolean
         get() = sp.getBoolean("ai_speak", true)
         set(value) = sp.edit().putBoolean("ai_speak", value).apply()

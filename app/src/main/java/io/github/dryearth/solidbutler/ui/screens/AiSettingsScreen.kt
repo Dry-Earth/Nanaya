@@ -1,13 +1,12 @@
 package io.github.dryearth.solidbutler.ui.screens
 
-import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import io.github.dryearth.solidbutler.service.AssistOverlayService
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -96,16 +95,7 @@ fun AiSettingsScreen(
     var ttsPkg by rememberSaveable { mutableStateOf(vm.prefs.ttsEngine) }
     var speak by rememberSaveable { mutableStateOf(vm.prefs.aiSpeakReplies) }
     var picker by remember { mutableStateOf<String?>(null) }
-    val roleManager = context.getSystemService(RoleManager::class.java)
-    val role = "android.app.role.ASSISTANT"
-    val roleAvailable = runCatching { roleManager?.isRoleAvailable(role) == true }.getOrDefault(false)
-    var roleVersion by remember { mutableIntStateOf(0) }
-    val roleHeld = remember(roleVersion) {
-        runCatching { roleManager?.isRoleHeld(role) == true }.getOrDefault(false)
-    }
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { roleVersion++ }
+    var overlayFirst by remember { mutableStateOf(vm.prefs.overlayAssistant) }
 
     fun openAssistantSettings() {
         val intents = listOf(
@@ -126,14 +116,6 @@ fun AiSettingsScreen(
             } catch (_: Exception) {
                 // try next
             }
-        }
-    }
-
-    fun requestAssistantRole() {
-        if (roleAvailable && roleManager != null) {
-            runCatching { roleLauncher.launch(roleManager.createRequestRoleIntent(role)) }
-        } else {
-            openAssistantSettings()
         }
     }
 
@@ -224,32 +206,13 @@ fun AiSettingsScreen(
             )
         }
 
-        SectionHeader("系统数字助理", "长按 Home / 电源键唤起汐")
+        SectionHeader("系统数字助理", "在系统默认应用页手动选择汐")
         GlassPanel {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (roleHeld) "汐当前是默认数字助理" else "尚未设为默认数字助理",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Glass.Text,
-                    )
-                    Text(
-                        if (roleAvailable) {
-                            "通过系统 RoleManager 请求 ASSISTANT 角色"
-                        } else {
-                            "此 ROM 没有 ASSISTANT 角色；会打开系统的语音输入/默认应用设置"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Glass.Muted,
-                    )
-                }
-                Pill(
-                    if (roleHeld) "已设置" else "设置",
-                    selected = roleHeld,
-                    color = if (roleHeld) Glass.Mint else Glass.Accent,
-                    onClick = { requestAssistantRole() },
-                )
-            }
+            Text(
+                "汐沿用 0.7 的 ACTION_ASSIST 方式。先去系统默认应用页，把「数字助理」选成汐；之后长按 Home/电源键就能唤起。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
             Spacer(Modifier.height(8.dp))
             ActionButton(
                 "打开系统默认应用页",
@@ -264,7 +227,7 @@ fun AiSettingsScreen(
             )
         }
 
-        SectionHeader("悬浮助手", "数字助理以小窗显示，不切走当前应用")
+        SectionHeader("悬浮助手", "我们自己的液态玻璃浮窗，默认关闭")
         GlassPanel {
             val canOverlay = Settings.canDrawOverlays(context)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -275,15 +238,37 @@ fun AiSettingsScreen(
                         color = Glass.Text,
                     )
                     Text(
-                        "开启后，数字助理会以液态玻璃小窗浮在当前应用上方；关闭时退回全屏对话。",
+                        "开启后，按助理键会优先弹出汐的小窗；关闭时保持 0.7 的全屏对话，不影响助理选择。",
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Muted,
                     )
                 }
                 Pill(
-                    if (canOverlay) "已开启" else "去开启",
-                    selected = canOverlay,
-                    color = if (canOverlay) Glass.Mint else Glass.Accent,
+                    if (overlayFirst) "优先浮窗" else "全屏对话",
+                    selected = overlayFirst,
+                    color = if (overlayFirst) Glass.Mint else Glass.Accent,
+                    onClick = {
+                        if (!canOverlay) {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}"),
+                                    )
+                                )
+                            }
+                        } else {
+                            overlayFirst = !overlayFirst
+                            vm.prefs.overlayAssistant = overlayFirst
+                        }
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    "开启悬浮窗权限",
+                    modifier = Modifier.weight(1f),
                     onClick = {
                         runCatching {
                             context.startActivity(
@@ -293,6 +278,19 @@ fun AiSettingsScreen(
                                 )
                             )
                         }
+                    },
+                )
+                ActionButton(
+                    "预览",
+                    accent = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        val ok = AssistOverlayService.show(context)
+                        Toast.makeText(
+                            context,
+                            if (ok) "悬浮助手已打开" else "启动失败，请检查悬浮窗权限",
+                            Toast.LENGTH_SHORT,
+                        ).show()
                     },
                 )
             }
