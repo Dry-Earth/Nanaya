@@ -91,6 +91,57 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("charging_alert", false)
         set(value) = sp.edit().putBoolean("charging_alert", value).apply()
 
+    var batteryGuardEnabled: Boolean
+        get() = sp.getBoolean("battery_guard", true)
+        set(value) = sp.edit().putBoolean("battery_guard", value).apply()
+
+    var lowBatteryVoice: Boolean
+        get() = sp.getBoolean("low_battery_voice", true)
+        set(value) = sp.edit().putBoolean("low_battery_voice", value).apply()
+
+    var fullBatteryVoice: Boolean
+        get() = sp.getBoolean("full_battery_voice", true)
+        set(value) = sp.edit().putBoolean("full_battery_voice", value).apply()
+
+    var lowNotified: Boolean
+        get() = sp.getBoolean("low_notified", false)
+        set(value) = sp.edit().putBoolean("low_notified", value).apply()
+
+    var fullNotified: Boolean
+        get() = sp.getBoolean("full_notified", false)
+        set(value) = sp.edit().putBoolean("full_notified", value).apply()
+
+    var chargeLimitRuleEnabled: Boolean
+        get() = sp.getBoolean("charge_rule", false)
+        set(value) = sp.edit().putBoolean("charge_rule", value).apply()
+
+    var chargeLimitRule: Int
+        get() = sp.getInt("charge_rule_limit", 80)
+        set(value) = sp.edit().putInt("charge_rule_limit", value).apply()
+
+    fun blockedChannels(): MutableSet<String> =
+        (sp.getStringSet("blocked_channels", emptySet()) ?: emptySet()).toMutableSet()
+
+    fun setChannelBlocked(pkg: String, channel: String, blocked: Boolean) {
+        val set = blockedChannels()
+        val key = "$pkg|$channel"
+        if (blocked) set.add(key) else set.remove(key)
+        sp.edit().putStringSet("blocked_channels", set).apply()
+    }
+
+    fun blockedDomains(): MutableSet<String> =
+        (sp.getStringSet("blocked_domains", emptySet()) ?: emptySet()).toMutableSet()
+
+    fun setDomainBlocked(domain: String, blocked: Boolean) {
+        val set = blockedDomains()
+        if (blocked) set.add(domain.lowercase().trim()) else set.remove(domain.lowercase().trim())
+        sp.edit().putStringSet("blocked_domains", set).apply()
+    }
+
+    var domainFirewallEnabled: Boolean
+        get() = sp.getBoolean("domain_firewall", false)
+        set(value) = sp.edit().putBoolean("domain_firewall", value).apply()
+
     companion object {
         fun hashPin(pin: String, saltHex: String): String {
             val md = MessageDigest.getInstance("SHA-256")

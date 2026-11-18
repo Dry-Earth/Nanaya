@@ -74,7 +74,13 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 import java.util.Locale
 
 @Composable
-fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> Unit) {
+fun AssistantScreen(
+    vm: ButlerViewModel,
+    autoListen: Boolean = false,
+    onAutoListenConsumed: () -> Unit = {},
+    onClose: () -> Unit,
+    onSettings: () -> Unit,
+) {
     val state by vm.chat.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var input by rememberSaveable { mutableStateOf("") }
@@ -155,6 +161,13 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
             launchSpeech()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(autoListen) {
+        if (autoListen) {
+            onAutoListenConsumed()
+            requestMic()
         }
     }
 

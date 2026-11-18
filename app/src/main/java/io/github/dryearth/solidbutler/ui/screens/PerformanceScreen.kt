@@ -1,6 +1,7 @@
 package io.github.dryearth.solidbutler.ui.screens
 
 import android.app.TimePickerDialog
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,7 +48,9 @@ import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.PerfUiState
 import io.github.dryearth.solidbutler.core.ChargingState
 import io.github.dryearth.solidbutler.core.LineageHealth
+import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.bytes
+import io.github.dryearth.solidbutler.service.BatteryGuardService
 import io.github.dryearth.solidbutler.core.safePct
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.BigNumber
@@ -82,6 +86,7 @@ fun PerformanceScreen(vm: ButlerViewModel) {
             item { ChargingPanel(vm, perf) }
         }
         item { BatteryPanel(perf) }
+        item { BatteryRulesCard() }
         item { MemoryPanel(perf, onTrim = { vm.killBackground() }) }
         item {
             SectionHeader(
@@ -460,6 +465,95 @@ private fun BatteryPanel(perf: PerfUiState) {
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
         KeyValueRow("瞬时电流", if (b.currentUa != 0) "${b.currentUa / 1000} mA" else "—")
         KeyValueRow("供电", b.plugged)
+    }
+}
+
+@Composable
+private fun BatteryRulesCard() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs(context) }
+    var guard by remember { mutableStateOf(prefs.batteryGuardEnabled) }
+    var low by remember { mutableStateOf(prefs.lowBatteryVoice) }
+    var full by remember { mutableStateOf(prefs.fullBatteryVoice) }
+    var rule by remember { mutableStateOf(prefs.chargeLimitRuleEnabled) }
+    var limit by remember { mutableFloatStateOf(prefs.chargeLimitRule.toFloat()) }
+
+    GlassPanel {
+        SectionHeader(
+            "电池规则",
+            "25% / 95% 语音提醒，可选自动限充",
+        )
+        Spacer(Modifier.height(10.dp))
+        RuleToggle("电池守护服务", guard) {
+            guard = it
+            prefs.batteryGuardEnabled = it
+            if (it) {
+                BatteryGuardService.start(context)
+                Toast.makeText(context, "守护服务已启动，会显示一条低优先级通知", Toast.LENGTH_SHORT).show()
+            } else {
+                BatteryGuardService.stop(context)
+            }
+        }
+        RuleToggle("电量 25% 语音提醒", low) {
+            low = it
+            prefs.lowBatteryVoice = it
+        }
+        RuleToggle("充电到 95% 语音提醒", full) {
+            full = it
+            prefs.fullBatteryVoice = it
+        }
+        RuleToggle("达到上限自动限充", rule) {
+            rule = it
+            prefs.chargeLimitRuleEnabled = it
+        }
+        if (rule) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("上限 ${limit.toInt()}%", style = MaterialTheme.typography.bodySmall, color = Glass.Text)
+                Spacer(Modifier.width(8.dp))
+                Slider(
+                    value = limit,
+                    onValueChange = { limit = it },
+                    onValueChangeFinished = { prefs.chargeLimitRule = limit.toInt() },
+                    valueRange = 70f..100f,
+                    steps = 29,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Glass.Accent,
+                        activeTrackColor = Glass.Accent.copy(alpha = 0.7f),
+                        inactiveTrackColor = Color(0x14FFFFFF),
+                        activeTickColor = Color.Transparent,
+                        inactiveTickColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Text(
+                "达到上限时调用 lineagehealth 开启限充；拔掉充电器后自动解除规则状态。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "语音使用系统 TTS；服务需要常驻通知（低优先级），锁屏/后台也能触发。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
+        )
+    }
+}
+
+@Composable
+private fun RuleToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Glass.Text, modifier = Modifier.weight(1f))
+        Pill(
+            if (checked) "开" else "关",
+            selected = checked,
+            color = if (checked) Glass.Mint else Glass.Faint,
+            onClick = { onChange(!checked) },
+        )
     }
 }
 

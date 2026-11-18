@@ -2,7 +2,9 @@ package io.github.dryearth.solidbutler
 
 import android.app.Application
 import io.github.dryearth.solidbutler.core.ShizukuHelper
+import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
+import io.github.dryearth.solidbutler.service.BatteryGuardService
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class SolidButlerApp : Application() {
@@ -16,6 +18,9 @@ class SolidButlerApp : Application() {
                 "Landroid/app/",
                 "Landroid/content/pm/",
             )
+        }
+        runCatching {
+            if (Prefs(this).batteryGuardEnabled) BatteryGuardService.start(this)
         }
         runCatching {
             ShizukuHelper.addPermissionListener { requestCode, grantResult ->

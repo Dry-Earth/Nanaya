@@ -12,6 +12,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val prefs = Prefs(context)
+        if (prefs.batteryGuardEnabled) BatteryGuardService.start(context)
         if (!prefs.firewallPersist) return
         val uids = prefs.blockedUids()
         if (uids.isEmpty()) return

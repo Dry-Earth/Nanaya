@@ -79,11 +79,16 @@ private val navItems = listOf(
 )
 
 @Composable
-fun ButlerApp(vm: ButlerViewModel) {
+fun ButlerApp(
+    vm: ButlerViewModel,
+    startWithChat: Boolean = false,
+    onStartChatConsumed: () -> Unit = {},
+) {
     val caps by vm.caps.collectAsStateWithLifecycle()
     val perf by vm.perf.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf("home") }
-    var chat by rememberSaveable { mutableStateOf(false) }
+    var chat by rememberSaveable { mutableStateOf(startWithChat) }
+    var autoVoice by remember { mutableStateOf(startWithChat) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
     val nav by vm.navigate.collectAsStateWithLifecycle()
@@ -95,6 +100,14 @@ fun ButlerApp(vm: ButlerViewModel) {
             else -> if (navItems.any { it.id == target }) tab = target
         }
         vm.consumeNavigation()
+    }
+
+    LaunchedEffect(startWithChat) {
+        if (startWithChat) {
+            chat = true
+            autoVoice = true
+            onStartChatConsumed()
+        }
     }
 
     val owner = LocalLifecycleOwner.current
@@ -150,7 +163,13 @@ fun ButlerApp(vm: ButlerViewModel) {
     if (chat) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
             AmbientBackground()
-            AssistantScreen(vm, onClose = { chat = false }, onSettings = { settings = true })
+            AssistantScreen(
+                vm = vm,
+                autoListen = autoVoice,
+                onAutoListenConsumed = { autoVoice = false },
+                onClose = { chat = false },
+                onSettings = { settings = true },
+            )
         }
     }
     if (settings) {
