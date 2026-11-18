@@ -338,6 +338,7 @@ fun AssistantScreen(
         Composer(
             value = input,
             enabled = state.modelConfigured && !state.sending,
+            assistantName = prefs.personaName,
             imagePreview = pendingImage,
             onValueChange = { input = it },
             onPickImage = { imagePicker.launch("image/*") },
@@ -492,6 +493,7 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
 private fun Composer(
     value: String,
     enabled: Boolean,
+    assistantName: String,
     imagePreview: ImageBitmap?,
     onValueChange: (String) -> Unit,
     onPickImage: () -> Unit,
@@ -532,7 +534,7 @@ private fun Composer(
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) {
                         Text(
-                            if (enabled) "让${prefs.personaName}做什么…" else "配置模型后可用",
+                            if (enabled) "让${assistantName}做什么…" else "配置模型后可用",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Glass.Faint,
                         )
