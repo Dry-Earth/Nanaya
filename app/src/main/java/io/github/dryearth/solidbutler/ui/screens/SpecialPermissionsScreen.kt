@@ -194,7 +194,7 @@ private fun openSettings(context: android.content.Context, groupId: String) {
         "overlay" -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
         "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         "notification" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        "admin" -> Intent(Settings.ACTION_DEVICE_ADMIN_SETTINGS)
+        "admin" -> Intent(Settings.ACTION_SECURITY_SETTINGS)
         "install" -> Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
         "write" -> Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
         "usage" -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)

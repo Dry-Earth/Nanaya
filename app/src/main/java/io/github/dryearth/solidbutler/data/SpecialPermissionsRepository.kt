@@ -45,7 +45,7 @@ class SpecialPermissionsRepository(
         val usage = byOp("android:get_usage_stats")
 
         val accessibilityPkgs = componentPackages(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-        val notificationPkgs = componentPackages(Settings.Secure.ENABLED_NOTIFICATION_LISTENERS)
+        val notificationPkgs = componentPackages("enabled_notification_listeners")
         val adminPkgs = runCatching {
             dpm.activeAdmins?.map { it.packageName }?.toSet() ?: emptySet()
         }.getOrDefault(emptySet())

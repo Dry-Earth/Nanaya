@@ -231,6 +231,6 @@ fun NotificationsScreen(onBack: () -> Unit) {
 private fun listenerEnabled(context: android.content.Context): Boolean = runCatching {
     Settings.Secure.getString(
         context.contentResolver,
-        Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
+        "enabled_notification_listeners",
     )?.contains(context.packageName) == true
 }.getOrDefault(false)
