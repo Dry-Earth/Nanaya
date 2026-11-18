@@ -3,6 +3,8 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +51,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.Capabilities
+import io.github.dryearth.solidbutler.core.ShizukuHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
@@ -67,6 +73,7 @@ fun SettingsScreen(
     onOpenNotifications: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val chat by vm.chat.collectAsStateWithLifecycle()
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     ToastEffect(chat.toast) { vm.clearChatToast() }
@@ -245,6 +252,22 @@ fun SettingsScreen(
                 if (caps.shizukuInstalled) {
                     vm.requestShizuku()
                     io.github.dryearth.solidbutler.core.ShizukuHelper.openManager(context)
+                }
+            }
+            DividerLine()
+            SettingRow(
+                "Shizuku 执行测试",
+                "运行 id，确认 shell 身份是否真的可用",
+                "测试",
+                false,
+            ) {
+                scope.launch {
+                    val r = withContext(Dispatchers.IO) { ShizukuHelper.exec("id", 5_000) }
+                    Toast.makeText(
+                        context,
+                        if (r.ok) "Shizuku shell: ${r.text.take(120)}" else "失败: ${r.text.take(160)}",
+                        Toast.LENGTH_LONG,
+                    ).show()
                 }
             }
             DividerLine()

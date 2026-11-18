@@ -13,21 +13,12 @@ import io.github.dryearth.solidbutler.service.AssistOverlayService
 class AssistLaunchActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Settings.canDrawOverlays(this)) {
-            runCatching {
-                ContextCompat.startForegroundService(
-                    this,
-                    Intent(this, AssistOverlayService::class.java),
-                )
-            }
-        } else {
-            Toast.makeText(this, "悬浮助手需要显示在其他应用上层权限", Toast.LENGTH_SHORT).show()
-            startActivity(
-                Intent(this, MainActivity::class.java)
-                    .putExtra("open_chat", true)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
+        // 0.7 behaviour: always open the full conversation, no overlay dependency.
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra("open_chat", true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        )
         finish()
         overridePendingTransition(0, 0)
     }

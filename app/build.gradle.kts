@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.dryearth.solidbutler"
         minSdk = 31
         targetSdk = targetSdkValue
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "0.7.1"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "汐")
     }

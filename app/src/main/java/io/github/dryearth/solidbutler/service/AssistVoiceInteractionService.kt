@@ -24,7 +24,8 @@ class AssistVoiceInteractionService : VoiceInteractionService() {
     private fun launchOverlay() {
         runCatching {
             startActivity(
-                Intent(this, AssistLaunchActivity::class.java)
+                Intent(this, io.github.dryearth.solidbutler.MainActivity::class.java)
+                    .putExtra("open_chat", true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             )
         }
@@ -48,6 +49,13 @@ private class AssistVoiceSession(context: VoiceInteractionSessionService) :
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
-        AssistOverlayService.show(context)
+        runCatching {
+            context.startActivity(
+                Intent(context, io.github.dryearth.solidbutler.MainActivity::class.java)
+                    .putExtra("open_chat", true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        }
+        finish()
     }
 }
