@@ -102,6 +102,13 @@ fun AiSettingsScreen(
     var userTitle by rememberSaveable { mutableStateOf(vm.prefs.userTitle) }
     var picker by remember { mutableStateOf<String?>(null) }
     var overlayFirst by remember { mutableStateOf(vm.prefs.overlayAssistant) }
+    val aiClient = remember { AiClient(vm.prefs) }
+    val scope = rememberCoroutineScope()
+    var models by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showModels by remember { mutableStateOf(false) }
+    var loadingModels by remember { mutableStateOf(false) }
+    var thinking by remember { mutableStateOf(vm.prefs.aiThinking) }
+    var effort by remember { mutableStateOf(vm.prefs.aiEffort) }
 
     fun openAssistantSettings() {
         val intents = listOf(
