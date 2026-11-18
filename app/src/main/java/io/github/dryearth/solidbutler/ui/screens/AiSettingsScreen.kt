@@ -111,40 +111,28 @@ fun AiSettingsScreen(
         if (roleAvailable && roleManager != null) {
             runCatching { roleLauncher.launch(roleManager.createRequestRoleIntent(role)) }
         } else {
-            val intents = listOf(
-                Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                    .putExtra("android.provider.extra.DEFAULT_APPS_CATEGORY", "android.app.role.ASSISTANT"),
-                Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
-                Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
-                Intent().setComponent(
-                    ComponentName(
-                        "com.android.settings",
-                        "com.android.settings.Settings\$ManageAssistActivity",
-                    )
-                ),
-                Intent().setComponent(
-                    ComponentName(
-                        "com.android.settings",
-                        "com.android.settings.Settings\$DefaultAssistSettingsActivity",
-                    )
-                ),
-                Intent().setComponent(
-                    ComponentName(
-                        "com.android.settings",
-                        "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity",
-                    )
-                ),
-                Intent("com.android.settings.action.SETTINGS_SEARCH")
-                    .putExtra("query", "数字助理"),
-                Intent(Settings.ACTION_SECURITY_SETTINGS),
-            )
-            for (i in intents) {
-                try {
-                    context.startActivity(i)
-                    return
-                } catch (_: Exception) {
-                    // try next
-                }
+            openAssistantSettings()
+        }
+    }
+
+    fun openAssistantSettings() {
+        val intents = listOf(
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                .putExtra("android.provider.extra.DEFAULT_APPS_CATEGORY", "android.app.role.ASSISTANT"),
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+            Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageAssistActivity")),
+            Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$DefaultAssistSettingsActivity")),
+            Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")),
+            Intent("com.android.settings.action.SETTINGS_SEARCH").putExtra("query", "数字助理"),
+            Intent(Settings.ACTION_SECURITY_SETTINGS),
+        )
+        for (i in intents) {
+            try {
+                context.startActivity(i)
+                return
+            } catch (_: Exception) {
+                // try next
             }
         }
     }
@@ -263,6 +251,12 @@ fun AiSettingsScreen(
                 )
             }
             Spacer(Modifier.height(8.dp))
+            ActionButton(
+                "打开系统默认应用页",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { openAssistantSettings() },
+            )
+            Spacer(Modifier.height(6.dp))
             Text(
                 "手动路径：设置 → 应用 → 默认应用 → 数字助理（部分 LineageOS 版本叫「助理与语音输入」）。如果按钮打不开，可在系统设置搜索「数字助理」。",
                 style = MaterialTheme.typography.labelSmall,
