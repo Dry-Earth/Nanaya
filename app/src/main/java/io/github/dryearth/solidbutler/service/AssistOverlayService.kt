@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -20,6 +22,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -237,6 +240,7 @@ private fun OverlayAssistant(
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
+    var voiceStatus by remember { mutableStateOf<String?>(null) }
     var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     val shape = RoundedCornerShape(30.dp)
 
@@ -248,23 +252,32 @@ private fun OverlayAssistant(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            Toast.makeText(context, "请先在全屏对话里授予麦克风权限", Toast.LENGTH_SHORT).show()
+            voiceStatus = "麦克风未授权，请先在完整对话里授权"
+            Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
+            voiceStatus = "系统没有语音识别服务"
+            Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
         val engine = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { r ->
             r.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { listening = true }
+                override fun onReadyForSpeech(params: Bundle?) {
+                    listening = true
+                    voiceStatus = "正在聆听…"
+                }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { listening = false }
+                override fun onEndOfSpeech() {
+                    listening = false
+                    voiceStatus = "正在识别…"
+                }
                 override fun onError(error: Int) {
                     listening = false
-                    Toast.makeText(context, "语音识别失败：$error", Toast.LENGTH_SHORT).show()
+                    voiceStatus = "识别失败：$error"
+                    Toast.makeText(context, voiceStatus, Toast.LENGTH_SHORT).show()
                 }
                 override fun onResults(results: Bundle?) {
                     listening = false
@@ -272,6 +285,7 @@ private fun OverlayAssistant(
                         ?.firstOrNull()
                     if (!text.isNullOrBlank()) {
                         input = ""
+                        voiceStatus = null
                         vm.sendChat(text)
                     }
                 }
@@ -287,8 +301,22 @@ private fun OverlayAssistant(
         listening = !listening
         if (!listening) {
             engine.stopListening()
+            voiceStatus = null
+            try {
+                ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
+                    startTone(ToneGenerator.TONE_PROP_BEEP2, 80)
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
+                }
+            } catch (_: Exception) {}
             return
         }
+        voiceStatus = "正在开始语音…"
+        try {
+            ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
+                startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
+            }
+        } catch (_: Exception) {}
         engine.startListening(
             Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -378,6 +406,14 @@ private fun OverlayAssistant(
                 )
             }
 
+            voiceStatus?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
+                )
+            }
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -401,6 +437,11 @@ private fun OverlayAssistant(
                 Box(
                     Modifier.size(36.dp).clip(CircleShape)
                         .background(if (listening) Color(0x33D85B5B) else Color(0x220B1220))
+                        .border(
+                            width = if (listening) 1.5.dp else 0.dp,
+                            color = if (listening) Color(0x99D85B5B) else Color.Transparent,
+                            shape = CircleShape,
+                        )
                         .clickable { startListening() },
                     contentAlignment = Alignment.Center,
                 ) {

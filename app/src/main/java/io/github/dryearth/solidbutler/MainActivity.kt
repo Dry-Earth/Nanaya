@@ -59,6 +59,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action == Intent.ACTION_ASSIST) assistRequest = true
+        val isAssist = intent.action == Intent.ACTION_ASSIST ||
+            intent.getBooleanExtra("open_chat", false)
+        val prefs = Prefs(this)
+        if (isAssist && prefs.overlayAssistant && Settings.canDrawOverlays(this)) {
+            if (AssistOverlayService.show(this)) {
+                assistRequest = false
+                moveTaskToBack(true)
+                return
+            }
+        }
+        if (isAssist) assistRequest = true
     }
 }

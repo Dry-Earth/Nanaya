@@ -3,10 +3,12 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,11 +47,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -63,6 +71,8 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -81,6 +91,21 @@ fun SettingsScreen(
     ToastEffect(chat.toast) { vm.clearChatToast() }
     var bgStyle by remember { mutableStateOf(appearance.style) }
     var iconStyle by remember { mutableStateOf(vm.prefs.iconStyle) }
+    var customIconUri by remember { mutableStateOf(vm.prefs.customIconUri) }
+    val customIconPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            vm.prefs.customIconUri = uri.toString()
+            customIconUri = uri.toString()
+            Toast.makeText(context, "自定义图片已保存，可添加到桌面", Toast.LENGTH_SHORT).show()
+        }
+    }
     val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -215,10 +240,46 @@ fun SettingsScreen(
                 Pill("狐耳", selected = iconStyle == "fox", color = Glass.Mint) {
                     iconStyle = "fox"; vm.prefs.iconStyle = "fox"; applyIcon(context, "IconFox")
                 }
+                Pill("自定义图片", selected = false, color = Glass.Accent) {
+                    customIconPicker.launch(arrayOf("image/*"))
+                }
+            }
+            if (customIconUri.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, customIconUri) {
+                    value = withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(Uri.parse(customIconUri))?.use {
+                                BitmapFactory.decodeStream(it)?.asImageBitmap()
+                            }
+                        }.getOrNull()
+                    }
+                }
+                preview?.let {
+                    Image(
+                        it,
+                        contentDescription = "自定义图标预览",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(64.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                ActionButton(
+                    "添加到桌面（自定义图标）",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val ok = pinCustomIcon(context, customIconUri)
+                        Toast.makeText(
+                            context,
+                            if (ok) "已请求添加桌面快捷方式" else "当前桌面不支持固定快捷方式",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                )
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "图标通过 activity-alias 切换，不需要重新安装；桌面缓存较久时重启桌面即可。",
+                "红耳/狐耳为代码绘制的矢量图标；自定义图片因 Android 限制不能直接替换应用抽屉图标，会用于桌面快捷方式。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -562,6 +623,26 @@ private fun applyIcon(context: android.content.Context, alias: String) {
         }
         Toast.makeText(context, "图标已切换，桌面可能需要刷新", Toast.LENGTH_SHORT).show()
     }
+}
+
+private fun pinCustomIcon(context: android.content.Context, uri: String): Boolean {
+    return runCatching {
+        val bitmap = context.contentResolver.openInputStream(Uri.parse(uri))?.use {
+            BitmapFactory.decodeStream(it)
+        } ?: return false
+        val icon = IconCompat.createWithAdaptiveBitmap(bitmap)
+        val shortcut = ShortcutInfoCompat.Builder(context, "xi_custom_icon")
+            .setShortLabel("汐")
+            .setLongLabel("汐 · 自定义图标")
+            .setIcon(icon)
+            .setIntent(
+                Intent(context, io.github.dryearth.solidbutler.MainActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+            .build()
+        ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
+        true
+    }.getOrDefault(false)
 }
 
 private fun openFirst(context: android.content.Context, vararg intents: Intent) {

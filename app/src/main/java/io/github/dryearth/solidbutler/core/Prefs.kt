@@ -60,6 +60,10 @@ class Prefs(context: Context) {
         get() = sp.getString("tts_engine", "") ?: ""
         set(value) = sp.edit().putString("tts_engine", value).apply()
 
+    var customIconUri: String
+        get() = sp.getString("custom_icon_uri", "") ?: ""
+        set(value) = sp.edit().putString("custom_icon_uri", value).apply()
+
     var iconStyle: String
         get() = sp.getString("icon_style", "xi") ?: "xi"
         set(value) = sp.edit().putString("icon_style", value).apply()
