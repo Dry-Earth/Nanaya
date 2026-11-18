@@ -67,6 +67,7 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
 import io.github.dryearth.solidbutler.ui.screens.AiSettingsScreen
 import io.github.dryearth.solidbutler.ui.screens.AssistantScreen
+import io.github.dryearth.solidbutler.ui.screens.AutomationScreen
 import io.github.dryearth.solidbutler.ui.screens.AutostartScreen
 import io.github.dryearth.solidbutler.ui.screens.DiagnosticsScreen
 import io.github.dryearth.solidbutler.ui.screens.DomainFirewallScreen
@@ -172,6 +173,8 @@ fun ButlerApp(
                     RulesScreen(vm, onBack = { sub = null })
                 } else if (sub == "memory") {
                     MemoryScreen(onBack = { sub = null })
+                } else if (sub == "automation") {
+                    AutomationScreen(onBack = { sub = null })
                 } else {
                     when (tab) {
                         "home" -> HomeScreen(
@@ -180,6 +183,7 @@ fun ButlerApp(
                             onChat = { chat = true },
                             onOpenAutostart = { sub = "autostart" },
                             onOpenMemory = { sub = "memory" },
+                            onOpenAutomation = { sub = "automation" },
                         )
                         "storage" -> StorageScreen(vm)
                         "apps" -> AppsScreen(
@@ -224,6 +228,7 @@ fun ButlerApp(
                 caps = caps,
                 onClose = { settings = false },
                 onOpenAiSettings = { settings = false; aiSettings = true },
+                onOpenAutomation = { settings = false; sub = "automation" },
                 onOpenLineage = { settings = false; chat = false; sub = "lineage" },
                 onOpenNotifications = { settings = false; chat = false; sub = "notifications" },
             )

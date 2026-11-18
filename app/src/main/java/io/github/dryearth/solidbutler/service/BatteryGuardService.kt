@@ -18,6 +18,14 @@ import android.speech.tts.TextToSpeech
 import io.github.dryearth.solidbutler.core.LineageHealth
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.data.AppRepository
+import io.github.dryearth.solidbutler.data.AutomationEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -32,12 +40,16 @@ class BatteryGuardService : Service() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var limitApplied = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_BATTERY_CHANGED -> handleBattery(intent)
-                Intent.ACTION_SCREEN_OFF -> if (prefs.screenOffRule) applyRule(prefs.screenOffPkg, true)
+                Intent.ACTION_SCREEN_OFF -> {
+                    if (prefs.screenOffRule) applyRule(prefs.screenOffPkg, true)
+                    AutomationEngine.onScreenOff(this@BatteryGuardService) { speak(it) }
+                }
                 Intent.ACTION_SCREEN_ON -> if (prefs.screenOffRule) applyRule(prefs.screenOffPkg, false)
             }
         }
@@ -49,12 +61,14 @@ class BatteryGuardService : Service() {
             val cm = getSystemService(ConnectivityManager::class.java)
             val caps = cm.getNetworkCapabilities(network) ?: return
             if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                applyRule(prefs.wifiPkg, true)
+                if (prefs.wifiRule) applyRule(prefs.wifiPkg, true)
+                AutomationEngine.onWifi(this@BatteryGuardService, true) { speak(it) }
             }
         }
 
         override fun onLost(network: Network) {
             if (prefs.wifiRule) applyRule(prefs.wifiPkg, false)
+            AutomationEngine.onWifi(this@BatteryGuardService, false) { speak(it) }
         }
     }
 
@@ -63,6 +77,12 @@ class BatteryGuardService : Service() {
         prefs = Prefs(this)
         createChannel()
         startForeground(NOTIFICATION_ID, notification("正在守护电量与充电"))
+        scope.launch {
+            while (true) {
+                AutomationEngine.tickTime(this@BatteryGuardService) { speak(it) }
+                delay(30_000)
+            }
+        }
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 runCatching { tts?.language = Locale.SIMPLIFIED_CHINESE }
@@ -96,6 +116,7 @@ class BatteryGuardService : Service() {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -108,6 +129,7 @@ class BatteryGuardService : Service() {
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
             status == BatteryManager.BATTERY_STATUS_FULL
 
+        AutomationEngine.onBattery(this, pct, charging) { speak(it) }
         if (pct > 30) prefs.lowNotified = false
         if (pct < 90 || !charging) prefs.fullNotified = false
 

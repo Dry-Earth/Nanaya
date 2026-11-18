@@ -24,6 +24,8 @@ import io.github.dryearth.solidbutler.core.safePct
 import io.github.dryearth.solidbutler.data.AppDrain
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.data.AppRepository
+import io.github.dryearth.solidbutler.data.AutomationRepository
+import io.github.dryearth.solidbutler.data.AutomationRule
 import io.github.dryearth.solidbutler.data.ButlerAction
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
@@ -819,6 +821,11 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 title = "开关 LineageOS 特性",
                 detail = "${args["feature"] ?: "特性"} → ${if (args["enabled"] != "false") "开启" else "关闭"}（lineagehardware）",
             )
+            "create_automation" -> action.copy(
+                title = "创建自动化",
+                detail = "${args["name"] ?: "新规则"} · ${args["trigger"] ?: ""} → ${args["action"] ?: ""}",
+            )
+            "list_automations" -> action.copy(title = "查看自动化", detail = "读取本地规则")
             "device_state" -> action.copy(title = "读取设备状态", detail = "电量、亮度、音量、响铃、网络省电")
             "set_brightness" -> action.copy(title = "设置亮度", detail = "亮度 ${args["percent"] ?: "50"}%")
             "set_screen_timeout" -> action.copy(title = "设置息屏时间", detail = "${args["seconds"] ?: "60"} 秒")
@@ -915,6 +922,26 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 val enabled = args["enabled"] != "false"
                 val ok = withContext(Dispatchers.IO) { LineageHardware.set(feature.bit, enabled) }
                 if (ok) "已${if (enabled) "开启" else "关闭"} ${feature.label}。" else "设备拒绝了这项写入。"
+            }
+            "create_automation" -> {
+                val name = args["name"]?.ifBlank { "AI 自动化" } ?: "AI 自动化"
+                val trigger = args["trigger"] ?: return "没有指定触发条件"
+                val action = args["action"] ?: return "没有指定动作"
+                val rule = AutomationRule(
+                    name = name,
+                    trigger = trigger,
+                    triggerValue = args["trigger_value"] ?: args["triggerValue"] ?: "",
+                    action = action,
+                    actionValue = args["action_value"] ?: args["actionValue"] ?: "",
+                )
+                AutomationRepository(getApplication()).add(rule)
+                "已创建自动化「$name」，可在首页「自动化」里修改或关闭。"
+            }
+            "list_automations" -> {
+                val rules = AutomationRepository(getApplication()).all()
+                if (rules.isEmpty()) "还没有自动化规则。" else rules.joinToString("\n") {
+                    "• ${it.name}：${it.trigger}/${it.triggerValue} → ${it.action}/${it.actionValue}（${if (it.enabled) "开" else "关"}）"
+                }
             }
             "device_state" -> deviceState()
             "set_brightness" -> {
@@ -1090,12 +1117,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 18. {"type":"set_ringer","args":{"mode":"normal|silent|vibrate"}}
 19. {"type":"open_settings","args":{"page":"wifi|bluetooth|battery|display|sound|apps|accessibility|notifications|location"}}
 20. {"type":"launch_app","args":{"package":"应用名或包名"}}
+21. {"type":"create_automation","args":{"name":"规则名","trigger":"time|battery_low|battery_full|charging_start|screen_off|wifi_on|wifi_off|boot","trigger_value":"23:00 或 25","action":"speak|notify|charge_limit|restrict_app|standby|freeze|lineage_feature|brightness|ringer","action_value":"内容/百分比/应用名/特征:true"}}
+22. {"type":"list_automations","args":{}}
 
 输出规则：
 - 只输出一个 JSON 对象，不要 Markdown，不要代码围栏，不要额外文字。
 - 格式：{"reply":"给用户看的中文回答","action":{"type":"...","args":{...}}}
 - 没有要执行的动作时，省略 action 字段。
 - 一次只给一个 action；需要多步时先做第一步，再询问用户。
+- 创建自动化时，先解释触发条件与后果；删除文件、冻结、断网等动作仍要用户确认。
 - 删除文件、卸载、冻结、断网都属于破坏性操作，reply 里要先说明影响。
         """.trimIndent()
     }

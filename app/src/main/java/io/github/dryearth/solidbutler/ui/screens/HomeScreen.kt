@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoMode
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -68,6 +69,7 @@ fun HomeScreen(
     onChat: () -> Unit,
     onOpenAutostart: () -> Unit,
     onOpenMemory: () -> Unit,
+    onOpenAutomation: () -> Unit,
 ) {
     val caps by vm.caps.collectAsStateWithLifecycle()
     val storage by vm.storage.collectAsStateWithLifecycle()
@@ -92,6 +94,7 @@ fun HomeScreen(
                 onAutostart = onOpenAutostart,
                 onStorage = { onOpenTab("storage") },
                 onSecurity = { onOpenTab("security") },
+                onAutomation = onOpenAutomation,
             )
         }
         item { SummaryCard(storage.report, security.report, caps, onOpenTab) }
@@ -502,10 +505,12 @@ private fun QuickEntries(
     onAutostart: () -> Unit,
     onStorage: () -> Unit,
     onSecurity: () -> Unit,
+    onAutomation: () -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         Entry("管家", Icons.Rounded.AutoAwesome, Glass.Violet, Modifier.weight(1f), onChat)
         Entry("自启", Icons.Rounded.PowerSettingsNew, Glass.Amber, Modifier.weight(1f), onAutostart)
+        Entry("自动化", Icons.Rounded.AutoMode, Glass.Accent, Modifier.weight(1f), onAutomation)
         Entry("存储", Icons.Rounded.Storage, Glass.Mint, Modifier.weight(1f), onStorage)
         Entry("安全", Icons.Rounded.Security, Glass.Ice, Modifier.weight(1f), onSecurity)
     }

@@ -62,6 +62,7 @@ fun SettingsScreen(
     caps: Capabilities,
     onClose: () -> Unit,
     onOpenAiSettings: () -> Unit,
+    onOpenAutomation: () -> Unit,
     onOpenLineage: () -> Unit,
     onOpenNotifications: () -> Unit,
 ) {
@@ -160,6 +161,21 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Muted,
             )
+        }
+
+        SectionHeader("自动化", "本地触发规则")
+        GlassPanel(onClick = onOpenAutomation) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("自动任务", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text(
+                        "时间、电量、充电、锁屏、Wi-Fi、开机触发；可让 AI 创建",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+            }
         }
 
         SectionHeader("AI 管家", "模型、语音识别与语音合成")

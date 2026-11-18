@@ -7,12 +7,14 @@ import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
 import io.github.dryearth.solidbutler.data.AppRepository
 import io.github.dryearth.solidbutler.data.SecurityRepository
+import io.github.dryearth.solidbutler.data.AutomationEngine
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val prefs = Prefs(context)
         if (prefs.batteryGuardEnabled) BatteryGuardService.start(context)
+        AutomationEngine.onBoot(context)
         if (!prefs.firewallPersist) return
         val uids = prefs.blockedUids()
         if (uids.isEmpty()) return
