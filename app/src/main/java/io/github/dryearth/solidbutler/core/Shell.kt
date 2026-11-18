@@ -120,6 +120,20 @@ object Shell {
 
     fun isPrivileged(): Boolean = rootReady || shizukuReady
 
+    /** Cheap periodic check; avoids keeping stale root/shell state after the user revokes it. */
+    fun revalidate() {
+        if (rootReady) {
+            val ok = runCatching {
+                exec(arrayOf(rootBinary, "-c", "id"), 4_000).text.contains("uid=0")
+            }.getOrDefault(false)
+            if (!ok) {
+                rootReady = false
+                rootChecked = true
+            }
+        }
+        shizukuReady = ShizukuHelper.isReady()
+    }
+
     fun hasLineageHealth(context: Context): Boolean =
         context.packageManager.hasSystemFeature("org.lineageos.health") &&
             LineageHealth.bind()

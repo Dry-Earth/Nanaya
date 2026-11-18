@@ -126,7 +126,7 @@ data class CpuSample(
 
 data class TempReading(val label: String, val celsius: Float)
 
-data class ProcLoad(val name: String, val pct: Float)
+data class ProcLoad(val name: String, val pct: Float, val pssKb: Long = 0)
 
 data class MemProcess(val name: String, val pssKb: Long)
 

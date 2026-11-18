@@ -223,10 +223,13 @@ fun SettingsScreen(
                     caps.shizukuInstalled -> "已安装，尚未授权"
                     else -> "未安装"
                 },
-                if (caps.shizukuReady) "可用" else "去授权",
+                if (caps.shizukuReady) "已授权" else if (caps.shizukuInstalled) "去授权" else "未安装",
                 caps.shizukuReady,
             ) {
-                if (caps.shizukuInstalled && !caps.shizukuReady) vm.requestShizuku()
+                if (caps.shizukuInstalled) {
+                    vm.requestShizuku()
+                    io.github.dryearth.solidbutler.core.ShizukuHelper.openManager(context)
+                }
             }
             DividerLine()
             SettingRow(

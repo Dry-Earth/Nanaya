@@ -2,11 +2,6 @@ package io.github.dryearth.solidbutler.ui.components
 
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,9 +26,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -60,11 +58,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 @Composable
-fun AmbientBackground(style: String = "stars", imageUri: String = "") {
+fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: Boolean = false) {
     val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, style, imageUri) {
         value = if (style == "image" && imageUri.isNotBlank()) {
@@ -88,18 +87,28 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "") {
             )
         }
 
-        val transition = rememberInfiniteTransition(label = "ambient")
-        val phase by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 6.28318f,
-            animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing)),
-            label = "twinkle",
-        )
+        // Deliberately low FPS: a full-screen 60 fps starfield was making the GPU
+        // spike whenever the app was in the foreground.
+        var phase by remember { mutableFloatStateOf(0f) }
+        LaunchedEffect(style) {
+            if (style == "stars") {
+                while (true) {
+                    delay(120)
+                    phase = (phase + 0.055f) % 6.28318f
+                }
+            }
+        }
         val stars = remember {
             val random = kotlin.random.Random(7)
-            List(120) {
+            List(80) {
                 Triple(random.nextFloat(), random.nextFloat(), random.nextFloat())
             }
+        }
+        val constellation = remember {
+            listOf(
+                0.16f to 0.20f, 0.27f to 0.16f, 0.36f to 0.24f,
+                0.31f to 0.32f, 0.20f to 0.30f, 0.42f to 0.33f,
+            )
         }
 
         Canvas(Modifier.fillMaxSize()) {
@@ -135,6 +144,21 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "") {
                 radius = r2,
                 center = Offset(w * 0.1f, h * 0.45f),
             )
+
+            if (aiReady && style == "stars") {
+                val points = constellation.map { Offset(it.first * w, it.second * h) }
+                for (i in 0 until points.size - 1) {
+                    drawLine(
+                        Color(0x33AFC6FF),
+                        points[i],
+                        points[i + 1],
+                        strokeWidth = 1f,
+                    )
+                }
+                points.forEach {
+                    drawCircle(Color(0x66C9D8FF), radius = 1.4.dp.toPx(), center = it)
+                }
+            }
 
             if (style == "stars") {
                 stars.forEach { (x, y, seed) ->

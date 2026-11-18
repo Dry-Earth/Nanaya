@@ -227,19 +227,28 @@ class PerformanceRepository(private val context: Context) {
         val now = System.currentTimeMillis()
         if (now - lastProcAt < 10_000) return lastProcList
         lastProcAt = now
-        if (!Shell.isPrivileged()) return lastProcList
+        if (!Shell.isPrivileged()) {
+            lastProcList = emptyList()
+            return emptyList()
+        }
         val r = Shell.run("dumpsys cpuinfo", 15_000)
-        if (!r.ok) return lastProcList
         val regex = Regex("""^\s*([0-9.]+)%\s+\d+/([^\s:]+)""")
         val map = HashMap<String, Float>()
-        for (line in r.text.lineSequence()) {
-            val m = regex.find(line) ?: continue
-            val pct = m.groupValues[1].toFloatOrNull() ?: continue
-            val name = m.groupValues[2]
-            map[name] = (map[name] ?: 0f) + pct
+        if (r.ok) {
+            for (line in r.text.lineSequence()) {
+                val m = regex.find(line) ?: continue
+                val pct = m.groupValues[1].toFloatOrNull() ?: continue
+                val name = m.groupValues[2]
+                map[name] = (map[name] ?: 0f) + pct
+            }
         }
-        lastProcList = map.entries.sortedByDescending { it.value }.take(10)
-            .map { ProcLoad(it.key, it.value) }
+        lastProcList = if (map.isNotEmpty()) {
+            map.entries.sortedByDescending { it.value }.take(10)
+                .map { ProcLoad(it.key, it.value) }
+        } else {
+            // Android 17's cpuinfo format can differ; fall back to PSS per process.
+            memoryProcesses().take(10).map { ProcLoad(it.name, 0f, it.pssKb) }
+        }
         return lastProcList
     }
 

@@ -1,7 +1,11 @@
 package io.github.dryearth.solidbutler.ui.screens
 
+import android.app.role.RoleManager
 import android.content.Intent
+import android.provider.Settings
 import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +93,31 @@ fun AiSettingsScreen(
     var ttsPkg by rememberSaveable { mutableStateOf(vm.prefs.ttsEngine) }
     var speak by rememberSaveable { mutableStateOf(vm.prefs.aiSpeakReplies) }
     var picker by remember { mutableStateOf<String?>(null) }
+    val roleManager = context.getSystemService(RoleManager::class.java)
+    val role = "android.app.role.ASSISTANT"
+    val roleAvailable = runCatching { roleManager?.isRoleAvailable(role) == true }.getOrDefault(false)
+    val roleHeld = runCatching { roleManager?.isRoleHeld(role) == true }.getOrDefault(false)
+    val roleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* system updates the role; reopen the page to see it */ }
+
+    fun requestAssistantRole() {
+        if (roleAvailable && roleManager != null) {
+            runCatching { roleLauncher.launch(roleManager.createRequestRoleIntent(role)) }
+        } else {
+            val intents = listOf(
+                Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+                Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+                Intent(Settings.ACTION_SECURITY_SETTINGS),
+            )
+            for (i in intents) {
+                if (i.resolveActivity(context.packageManager) != null) {
+                    runCatching { context.startActivity(i) }
+                    break
+                }
+            }
+        }
+    }
 
     Column(
         Modifier
@@ -156,6 +185,40 @@ fun AiSettingsScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 "语音识别需要系统识别服务与麦克风权限；TTS 需要系统语音引擎。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
+        SectionHeader("系统数字助理", "长按 Home / 电源键唤起汐")
+        GlassPanel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (roleHeld) "汐当前是默认数字助理" else "尚未设为默认数字助理",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Glass.Text,
+                    )
+                    Text(
+                        if (roleAvailable) {
+                            "通过系统 RoleManager 请求 ASSISTANT 角色"
+                        } else {
+                            "此 ROM 没有 ASSISTANT 角色；会打开系统的语音输入/默认应用设置"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Pill(
+                    if (roleHeld) "已设置" else "设置",
+                    selected = roleHeld,
+                    color = if (roleHeld) Glass.Mint else Glass.Accent,
+                    onClick = { requestAssistantRole() },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "设置入口也可能在：设置 → 默认应用 → 数字助理。LINEAGEOS 不同版本菜单名可能不同。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )

@@ -67,6 +67,7 @@ fun HomeScreen(
     onOpenTab: (String) -> Unit,
     onChat: () -> Unit,
     onOpenAutostart: () -> Unit,
+    onOpenMemory: () -> Unit,
 ) {
     val caps by vm.caps.collectAsStateWithLifecycle()
     val storage by vm.storage.collectAsStateWithLifecycle()
@@ -82,7 +83,7 @@ fun HomeScreen(
     ) {
         item { MemoryCard(perf.snapshot, onTrim = { vm.killBackground() }) }
         item { GpuCard(perf.snapshot) }
-        item { ProcessCard(perf.snapshot, onManage = onOpenAutostart) }
+        item { ProcessCard(perf.snapshot, onManage = onOpenMemory) }
         item { CpuCard(perf.snapshot) }
         item { BatteryTiles(perf.snapshot) }
         item {
@@ -240,11 +241,11 @@ private fun GpuCard(snapshot: PerfSnapshot) {
 private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
     GlassPanel(padding = PaddingValues(14.dp)) {
         SectionHeader(
-            "进程占用",
-            if (snapshot.processes.isEmpty()) "需要 Shizuku 或 Root 读取 dumpsys" else "按 CPU 排序 · 10 秒刷新",
+            "进程与内存",
+            if (snapshot.processes.isEmpty()) "需要 Shizuku 或 Root 读取 dumpsys" else "按 CPU/PSS 排序 · 10 秒刷新",
             trailing = {
                 Text(
-                    "管理",
+                    "内存详情",
                     style = MaterialTheme.typography.labelLarge,
                     color = Glass.Accent,
                     modifier = Modifier.clickable { onManage() },
@@ -295,13 +296,15 @@ private fun ProcessRow(proc: ProcLoad) {
             modifier = Modifier.weight(1f),
         )
         Text(
-            String.format(Locale.US, "%.1f%%", proc.pct),
+            if (proc.pssKb > 0) bytesShort(proc.pssKb * 1024)
+            else String.format(Locale.US, "%.1f%%", proc.pct),
             style = MaterialTheme.typography.labelSmall,
             color = Glass.Muted,
         )
         Spacer(Modifier.width(8.dp))
         Meter(
-            (proc.pct / 40f).coerceIn(0f, 1f),
+            if (proc.pssKb > 0) (proc.pssKb / 1024f / 512f).coerceIn(0f, 1f)
+            else (proc.pct / 40f).coerceIn(0f, 1f),
             color = Glass.Accent,
             height = 4.dp,
             modifier = Modifier.width(44.dp),

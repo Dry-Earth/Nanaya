@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import io.github.dryearth.solidbutler.core.LineageHardware
 import io.github.dryearth.solidbutler.core.LineageHardwareFeature
 import io.github.dryearth.solidbutler.core.LineageHealth
+import io.github.dryearth.solidbutler.data.KernelInfoRepository
+import io.github.dryearth.solidbutler.data.KernelItem
 import io.github.dryearth.solidbutler.data.PerformanceRepository
 import io.github.dryearth.solidbutler.data.PerfSnapshot
 import io.github.dryearth.solidbutler.core.bytes
@@ -63,6 +65,7 @@ fun LineageScreen(onBack: () -> Unit) {
     var toast by remember { mutableStateOf<String?>(null) }
     var snapshot by remember { mutableStateOf<PerfSnapshot?>(null) }
     var charging by remember { mutableStateOf(LineageHealth.read()) }
+    var kernel by remember { mutableStateOf<List<KernelItem>>(emptyList()) }
 
     val services = remember {
         listOf(
@@ -83,6 +86,7 @@ fun LineageScreen(onBack: () -> Unit) {
         features = loaded
         snapshot = withContext(Dispatchers.IO) { PerformanceRepository(context).snapshot() }
         charging = withContext(Dispatchers.IO) { LineageHealth.read() }
+        kernel = withContext(Dispatchers.IO) { KernelInfoRepository(context).detect() }
         loading = false
     }
 
@@ -141,6 +145,22 @@ fun LineageScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = Glass.Faint,
                 )
+            }
+        }
+
+        if (kernel.isNotEmpty()) {
+            item {
+                GlassPanel(tint = Glass.Mint) {
+                    SectionHeader("内核与系统", "只读检测，不修改任何参数")
+                    Spacer(Modifier.height(6.dp))
+                    kernel.forEach { item -> HardwareRow(item.label, item.value) }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "KernelSU/Magisk、SELinux、ZRAM、cgroups、Verified Boot 等状态来自系统节点；需要 Root 的项在无权限时会自动省略。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                    )
+                }
             }
         }
 

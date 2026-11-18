@@ -369,8 +369,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         if (monitorJob?.isActive == true) return
         _perf.update { it.copy(monitoring = true) }
         monitorJob = viewModelScope.launch {
+            var tick = 0
             while (isActive) {
+                if (tick % 15 == 0) {
+                    val before = Shell.isPrivileged()
+                    Shell.revalidate()
+                    if (before != Shell.isPrivileged()) refreshCapabilities()
+                }
                 refreshPerf()
+                tick++
                 delay(2000)
             }
         }

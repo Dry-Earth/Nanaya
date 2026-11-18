@@ -58,6 +58,13 @@ object ShizukuHelper {
 
     fun binder(): IBinder? = runCatching { Shizuku.getBinder() }.getOrNull()
 
+    fun openManager(context: android.content.Context): Boolean = runCatching {
+        val intent = context.packageManager.getLaunchIntentForPackage("moe.shizuku.manager")
+            ?: return false
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
+
     /**
      * Shizuku.newProcess is marked @RestrictTo in recent api artifacts, so the
      * Kotlin compiler refuses the direct call. The method itself is public on

@@ -1,10 +1,5 @@
 package io.github.dryearth.solidbutler.ui
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +52,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -147,7 +144,7 @@ fun ButlerApp(
     }
 
     Box(Modifier.fillMaxSize()) {
-        AmbientBackground(appearance.style, appearance.uri)
+        AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 caps = caps,
@@ -182,6 +179,7 @@ fun ButlerApp(
                             onOpenTab = { tab = it },
                             onChat = { chat = true },
                             onOpenAutostart = { sub = "autostart" },
+                            onOpenMemory = { sub = "memory" },
                         )
                         "storage" -> StorageScreen(vm)
                         "apps" -> AppsScreen(
@@ -208,7 +206,7 @@ fun ButlerApp(
 
     if (chat) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-            AmbientBackground(appearance.style, appearance.uri)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             AssistantScreen(
                 vm = vm,
                 autoListen = autoVoice,
@@ -220,7 +218,7 @@ fun ButlerApp(
     }
     if (settings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-            AmbientBackground(appearance.style, appearance.uri)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             SettingsScreen(
                 vm = vm,
                 caps = caps,
@@ -233,7 +231,7 @@ fun ButlerApp(
     }
     if (aiSettings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-            AmbientBackground(appearance.style, appearance.uri)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             AiSettingsScreen(
                 vm = vm,
                 onBack = { aiSettings = false },
@@ -254,29 +252,41 @@ private fun AiTitle(ready: Boolean) {
         )
         return
     }
-    val transition = rememberInfiniteTransition(label = "ai-title")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
-        label = "ai-phase",
-    )
+    var phase by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(90)
+            phase = (phase + 0.04f) % 1f
+        }
+    }
     val colors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Accent)
     val brush = Brush.linearGradient(
         colors = colors,
-        start = Offset(phase * 460f - 160f, 0f),
-        end = Offset(phase * 460f + 120f, 54f),
+        start = Offset(phase * 280f - 100f, 0f),
+        end = Offset(phase * 280f + 120f, 54f),
     )
     Column {
-        Text(
-            "汐",
-            style = TextStyle(
-                brush = brush,
-                fontSize = MaterialTheme.typography.headlineLarge.fontSize,
-                fontWeight = FontWeight.Light,
-                letterSpacing = 1.5.sp,
-            ),
-        )
+        Box {
+            // aurora wash behind the word
+            Canvas(Modifier.matchParentSize()) {
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors.map { it.copy(alpha = 0.10f) },
+                        start = Offset(phase * size.width - 40f, 0f),
+                        end = Offset(phase * size.width + 80f, 0f),
+                    )
+                )
+            }
+            Text(
+                "汐",
+                style = TextStyle(
+                    brush = brush,
+                    fontSize = MaterialTheme.typography.headlineLarge.fontSize,
+                    fontWeight = FontWeight.Light,
+                    letterSpacing = 1.5.sp,
+                ),
+            )
+        }
         Canvas(Modifier.width(58.dp).height(7.dp)) {
             val path = Path()
             for (i in 0..80) {
@@ -300,6 +310,30 @@ private fun AiTitle(ready: Boolean) {
 }
 
 @Composable
+private fun BreathingDot(ready: Boolean, active: Boolean) {
+    var phase by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(ready) {
+        if (ready) {
+            while (true) {
+                delay(80)
+                phase = (phase + 0.05f) % 6.28318f
+            }
+        }
+    }
+    Canvas(Modifier.size(12.dp)) {
+        val base = if (active) Glass.Mint else Glass.Amber
+        if (ready) {
+            drawCircle(
+                base.copy(alpha = 0.16f + 0.10f * kotlin.math.abs(kotlin.math.sin(phase))),
+                radius = 3.2.dp.toPx() + kotlin.math.abs(kotlin.math.sin(phase)) * 1.6.dp.toPx(),
+            )
+        }
+        drawCircle(base, radius = 2.2.dp.toPx())
+    }
+}
+
+@Composable
+private fun TopBar(@Composable
 private fun TopBar(
     caps: Capabilities,
     perf: PerfUiState,
@@ -313,12 +347,7 @@ private fun TopBar(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AiTitle(aiConfigured)
                     Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(if (caps.privileged) Glass.Mint else Glass.Amber)
-                    )
+                    BreathingDot(ready = aiConfigured, active = caps.privileged)
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
