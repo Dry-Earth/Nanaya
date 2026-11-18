@@ -47,10 +47,21 @@ class AiClient(private val prefs: Prefs) {
                 messages.put(JSONObject().put("role", role).put("content", content))
             }
 
+            val model = prefs.aiModel.trim().ifBlank { "gpt-4o-mini" }
             val body = JSONObject()
-                .put("model", prefs.aiModel.trim().ifBlank { "gpt-4o-mini" })
+                .put("model", model)
                 .put("temperature", 0.2)
                 .put("messages", messages)
+            if (prefs.aiThinking != "auto" && (model.contains("qwen", true) || model.contains("deepseek", true))) {
+                body.put("enable_thinking", prefs.aiThinking == "on")
+            }
+            if (prefs.aiEffort != "auto" && (
+                    model.contains("o1", true) || model.contains("o3", true) ||
+                        model.contains("o4", true) || model.contains("gpt-5", true)
+                    )
+            ) {
+                body.put("reasoning_effort", prefs.aiEffort)
+            }
 
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -79,6 +90,29 @@ class AiClient(private val prefs: Prefs) {
                 conn.disconnect()
             }
         }
+
+    suspend fun listModels(baseUrl: String, apiKey: String): List<String> = withContext(Dispatchers.IO) {
+        val base = baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
+        val conn = (URL("$base/models").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            setRequestProperty("Authorization", "Bearer ${apiKey.trim()}")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            if (code !in 200..299) throw AiException("模型列表返回 $code：${text.take(200)}")
+            val data = JSONObject(text).optJSONArray("data") ?: JSONArray()
+            (0 until data.length()).mapNotNull { i ->
+                data.optJSONObject(i)?.optString("id")?.takeIf { it.isNotBlank() }
+            }.sorted()
+        } finally {
+            conn.disconnect()
+        }
+    }
 
     fun configured(): Boolean = prefs.aiApiKey.isNotBlank()
 

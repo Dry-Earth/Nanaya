@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -51,8 +52,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.ai.AiClient
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
@@ -149,8 +152,61 @@ fun AiSettingsScreen(
             AiField("接口地址", base, "https://api.openai.com/v1") { base = it }
             Spacer(Modifier.height(10.dp))
             AiField("模型名", model, "gpt-4o-mini") { model = it }
+            Spacer(Modifier.height(6.dp))
+            ActionButton(
+                if (loadingModels) "拉取中…" else "拉取模型列表",
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !loadingModels,
+                onClick = {
+                    if (base.isBlank() || key.isBlank()) {
+                        Toast.makeText(context, "先填接口地址和 API Key", Toast.LENGTH_SHORT).show()
+                    } else {
+                        scope.launch {
+                            loadingModels = true
+                            runCatching { aiClient.listModels(base, key) }
+                                .onSuccess {
+                                    models = it
+                                    showModels = true
+                                    if (it.isEmpty()) Toast.makeText(context, "接口没有返回模型", Toast.LENGTH_SHORT).show()
+                                }
+                                .onFailure {
+                                    Toast.makeText(context, it.message ?: "拉取失败", Toast.LENGTH_LONG).show()
+                                }
+                            loadingModels = false
+                        }
+                    }
+                },
+            )
             Spacer(Modifier.height(10.dp))
             AiField("API Key", key, "sk-…", password = true) { key = it }
+            Spacer(Modifier.height(10.dp))
+            val supportsThinking = listOf("o1", "o3", "o4", "gpt-5", "deepseek-r1", "qwq", "qwen3").any {
+                model.contains(it, true)
+            }
+            val supportsEffort = listOf("o1", "o3", "o4", "gpt-5").any { model.contains(it, true) }
+            if (supportsThinking || supportsEffort) {
+                Text("思考与强度（按模型识别）", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                Spacer(Modifier.height(5.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Pill("自动", selected = thinking == "auto", color = Glass.Violet) { thinking = "auto" }
+                    Pill("思考开", selected = thinking == "on", color = Glass.Violet) { thinking = "on" }
+                    Pill("思考关", selected = thinking == "off", color = Glass.Violet) { thinking = "off" }
+                }
+                if (supportsEffort) {
+                    Spacer(Modifier.height(5.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Pill("低", selected = effort == "low", color = Glass.Accent) { effort = "low" }
+                        Pill("中", selected = effort == "medium", color = Glass.Accent) { effort = "medium" }
+                        Pill("高", selected = effort == "high", color = Glass.Accent) { effort = "high" }
+                    }
+                }
+            } else {
+                Text(
+                    "当前模型未识别到思考模式；仍可正常对话。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 "文字和图片会发送到你配置的云端模型；图片需要模型支持视觉（如 gpt-4o）。Key 存在应用私有目录。",
@@ -329,6 +385,8 @@ fun AiSettingsScreen(
                         vm.saveAiConfig(base, key, model)
                         vm.saveVoiceConfig(sttPkg, ttsPkg, speak)
                         vm.savePersona(personaName, personaPrompt, userTitle)
+                        vm.prefs.aiThinking = thinking
+                        vm.prefs.aiEffort = effort
                     },
                 )
                 ActionButton(
@@ -339,6 +397,36 @@ fun AiSettingsScreen(
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showModels) {
+        Dialog(onDismissRequest = { showModels = false }) {
+            GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(16.dp)) {
+                Text("选择模型", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(models, key = { it }) { id ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                model = id
+                                showModels = false
+                            }.padding(vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                id,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Text,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (id == model) Pill("当前", selected = true, color = Glass.Mint)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     picker?.let { type ->

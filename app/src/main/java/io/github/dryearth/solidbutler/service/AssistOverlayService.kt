@@ -1,14 +1,21 @@
 package io.github.dryearth.solidbutler.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.widget.Toast
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -36,12 +43,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +63,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +74,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
@@ -222,9 +233,71 @@ private fun OverlayAssistant(
     onClose: () -> Unit,
     onExpand: () -> Unit,
 ) {
+    val context = LocalContext.current
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
+    var listening by remember { mutableStateOf(false) }
+    var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
     val shape = RoundedCornerShape(30.dp)
+
+    DisposableEffect(Unit) {
+        onDispose { recognizer?.destroy(); recognizer = null }
+    }
+
+    fun startListening() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(context, "请先在全屏对话里授予麦克风权限", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val engine = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { r ->
+            r.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) { listening = true }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { listening = false }
+                override fun onError(error: Int) {
+                    listening = false
+                    Toast.makeText(context, "语音识别失败：$error", Toast.LENGTH_SHORT).show()
+                }
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    if (!text.isNullOrBlank()) {
+                        input = ""
+                        vm.sendChat(text)
+                    }
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.let { input = it }
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            recognizer = r
+            r
+        }
+        listening = !listening
+        if (!listening) {
+            engine.stopListening()
+            return
+        }
+        engine.startListening(
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧")
+            }
+        )
+    }
 
     Box(Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
         Column(
@@ -324,7 +397,21 @@ private fun OverlayAssistant(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape)
+                        .background(if (listening) Color(0x33D85B5B) else Color(0x220B1220))
+                        .clickable { startListening() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Mic,
+                        contentDescription = "语音输入",
+                        tint = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
                 Box(
                     Modifier.size(36.dp).clip(CircleShape)
                         .background(if (input.isBlank()) Color(0x220B1220) else Color(0xFF0B1220))

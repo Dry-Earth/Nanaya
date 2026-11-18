@@ -284,7 +284,7 @@ class PerformanceRepository(private val context: Context) {
     }
 
     private fun readTemps(): List<TempReading> {
-        val grouped = HashMap<String, MutableList<Float>>()
+        val grouped = HashMap<String, MutableList<Pair<Float, String>>>()
         val base = File("/sys/class/thermal")
         base.listFiles()?.filter { it.name.startsWith("thermal_zone") }?.forEach { zone ->
             val type = readText("${zone.absolutePath}/type") ?: return@forEach
@@ -293,12 +293,12 @@ class PerformanceRepository(private val context: Context) {
             val celsius = normalizeTemp(raw) ?: return@forEach
             if (celsius !in 5f..115f) return@forEach
             val label = friendlyTemp(type)
-            grouped.getOrPut(label) { mutableListOf() }.add(celsius)
+            grouped.getOrPut(label) { mutableListOf() }.add(celsius to type)
         }
         val list = grouped.map { (label, values) ->
-            val sorted = values.sorted()
+            val sorted = values.map { it.first }.sorted()
             val median = sorted[sorted.size / 2]
-            TempReading(label, median)
+            TempReading(label, median, values.map { it.second }.distinct().joinToString(" / ").take(40))
         }.sortedByDescending { it.celsius }.take(8).toMutableList()
         if (list.isEmpty()) {
             val b = readBattery()

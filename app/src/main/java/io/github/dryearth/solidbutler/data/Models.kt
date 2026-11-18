@@ -124,7 +124,7 @@ data class CpuSample(
     val minFreqsKhz: List<Long> = emptyList(),
 )
 
-data class TempReading(val label: String, val celsius: Float)
+data class TempReading(val label: String, val celsius: Float, val source: String = "")
 
 data class ProcLoad(val name: String, val pct: Float, val pssKb: Long = 0)
 

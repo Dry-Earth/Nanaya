@@ -40,6 +40,14 @@ class Prefs(context: Context) {
         get() = sp.getString("user_title", "你") ?: "你"
         set(value) = sp.edit().putString("user_title", value).apply()
 
+    var aiThinking: String
+        get() = sp.getString("ai_thinking", "auto") ?: "auto"
+        set(value) = sp.edit().putString("ai_thinking", value).apply()
+
+    var aiEffort: String
+        get() = sp.getString("ai_effort", "auto") ?: "auto"
+        set(value) = sp.edit().putString("ai_effort", value).apply()
+
     var aiSpeakReplies: Boolean
         get() = sp.getBoolean("ai_speak", true)
         set(value) = sp.edit().putBoolean("ai_speak", value).apply()
@@ -51,6 +59,10 @@ class Prefs(context: Context) {
     var ttsEngine: String
         get() = sp.getString("tts_engine", "") ?: ""
         set(value) = sp.edit().putString("tts_engine", value).apply()
+
+    var iconStyle: String
+        get() = sp.getString("icon_style", "xi") ?: "xi"
+        set(value) = sp.edit().putString("icon_style", value).apply()
 
     var backgroundStyle: String
         get() = sp.getString("bg_style", "stars") ?: "stars"

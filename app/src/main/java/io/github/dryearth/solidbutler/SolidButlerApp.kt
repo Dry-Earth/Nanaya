@@ -10,6 +10,7 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 class SolidButlerApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        ShizukuHelper.init(this)
         runCatching {
             HiddenApiBypass.addHiddenApiExemptions(
                 "Landroid/os/",
@@ -32,10 +33,8 @@ class SolidButlerApp : Application() {
         }
         runCatching {
             ShizukuHelper.addPermissionListener { requestCode, grantResult ->
-                if (requestCode == ShizukuHelper.REQUEST_CODE) {
-                    Shell.refreshShizuku()
-                }
-                if (grantResult != 0) Shell.refreshShizuku()
+                ShizukuHelper.ensureBound()
+                Shell.refreshShizuku()
             }
         }
     }

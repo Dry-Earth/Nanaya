@@ -1,6 +1,8 @@
 package io.github.dryearth.solidbutler.ui.screens
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -78,6 +80,7 @@ fun SettingsScreen(
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     ToastEffect(chat.toast) { vm.clearChatToast() }
     var bgStyle by remember { mutableStateOf(appearance.style) }
+    var iconStyle by remember { mutableStateOf(vm.prefs.iconStyle) }
     val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -200,6 +203,27 @@ fun SettingsScreen(
             }
         }
 
+        SectionHeader("应用图标", "切换后桌面可能需重启")
+        GlassPanel {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill("猫耳", selected = iconStyle == "xi", color = Glass.Violet) {
+                    iconStyle = "xi"; vm.prefs.iconStyle = "xi"; applyIcon(context, "IconXi")
+                }
+                Pill("红瞳", selected = iconStyle == "red", color = Glass.Rose) {
+                    iconStyle = "red"; vm.prefs.iconStyle = "red"; applyIcon(context, "IconRed")
+                }
+                Pill("狐耳", selected = iconStyle == "fox", color = Glass.Mint) {
+                    iconStyle = "fox"; vm.prefs.iconStyle = "fox"; applyIcon(context, "IconFox")
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "图标通过 activity-alias 切换，不需要重新安装；桌面缓存较久时重启桌面即可。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
         SectionHeader("外观", "星夜 / 极简 / 自定义背景")
         GlassPanel {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -307,9 +331,9 @@ fun SettingsScreen(
             DividerLine()
             SettingRow(
                 "电池优化白名单",
-                "避免汐被系统冻结",
-                "去设置",
-                false,
+                if (caps.batteryUnrestricted) "已加入白名单，不会被 Doze 冻结" else "未加入，后台任务可能被系统冻结",
+                if (caps.batteryUnrestricted) "已加入" else "去设置",
+                caps.batteryUnrestricted,
             ) {
                 openFirst(
                     context,
@@ -476,6 +500,27 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+private fun applyIcon(context: android.content.Context, alias: String) {
+    val pm = context.packageManager
+    val names = listOf("IconXi", "IconRed", "IconFox")
+    val chosen = ComponentName(context.packageName, "${context.packageName}.$alias")
+    runCatching {
+        pm.setComponentEnabledSetting(
+            chosen,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        names.filter { it != alias }.forEach {
+            pm.setComponentEnabledSetting(
+                ComponentName(context.packageName, "${context.packageName}.$it"),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
+        Toast.makeText(context, "图标已切换，桌面可能需要刷新", Toast.LENGTH_SHORT).show()
     }
 }
 

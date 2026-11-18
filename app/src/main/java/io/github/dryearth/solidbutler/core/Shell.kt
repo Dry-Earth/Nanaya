@@ -68,6 +68,7 @@ object Shell {
 
     fun refreshShizuku() {
         shizukuReady = ShizukuHelper.isReady()
+        if (shizukuReady) ShizukuHelper.ensureBound()
     }
 
     fun run(cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
