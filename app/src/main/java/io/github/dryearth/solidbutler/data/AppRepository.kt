@@ -93,7 +93,7 @@ class AppRepository(
         val end = System.currentTimeMillis()
         val start = end - 24L * 3600_000
         fun query(transport: Int): Long = runCatching {
-            val stats = nsm.queryDetailsForUid(transport, null, uid, start, end)
+            val stats = nsm.queryDetailsForUid(transport, null, start, end, uid)
             val value = stats.totalBytes
             stats.close()
             value
