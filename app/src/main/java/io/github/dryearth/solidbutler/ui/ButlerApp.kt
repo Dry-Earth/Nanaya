@@ -64,6 +64,7 @@ import io.github.dryearth.solidbutler.ui.screens.DiagnosticsScreen
 import io.github.dryearth.solidbutler.ui.screens.DomainFirewallScreen
 import io.github.dryearth.solidbutler.ui.screens.LineageScreen
 import io.github.dryearth.solidbutler.ui.screens.NotificationsScreen
+import io.github.dryearth.solidbutler.ui.screens.RulesScreen
 import io.github.dryearth.solidbutler.ui.screens.WakeupScreen
 import io.github.dryearth.solidbutler.ui.screens.SpecialPermissionsScreen
 import io.github.dryearth.solidbutler.ui.screens.HomeScreen
@@ -159,6 +160,8 @@ fun ButlerApp(
                     TrashScreen(onBack = { sub = null })
                 } else if (sub == "domain") {
                     DomainFirewallScreen(onBack = { sub = null })
+                } else if (sub == "rules") {
+                    RulesScreen(vm, onBack = { sub = null })
                 } else {
                     when (tab) {
                         "home" -> HomeScreen(
@@ -173,7 +176,7 @@ fun ButlerApp(
                             onOpenAutostart = { sub = "autostart" },
                             onOpenDiagnostics = { sub = "diagnostics" },
                         )
-                        "perf" -> PerformanceScreen(vm)
+                        "perf" -> PerformanceScreen(vm, onOpenRules = { sub = "rules" })
                         "security" -> SecurityScreen(
                             vm,
                             onOpenSpecial = { sub = "special" },

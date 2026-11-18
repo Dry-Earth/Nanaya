@@ -119,6 +119,22 @@ class Prefs(context: Context) {
         get() = sp.getInt("charge_rule_limit", 80)
         set(value) = sp.edit().putInt("charge_rule_limit", value).apply()
 
+    var screenOffRule: Boolean
+        get() = sp.getBoolean("screen_off_rule", false)
+        set(value) = sp.edit().putBoolean("screen_off_rule", value).apply()
+
+    var screenOffPkg: String
+        get() = sp.getString("screen_off_pkg", "") ?: ""
+        set(value) = sp.edit().putString("screen_off_pkg", value).apply()
+
+    var wifiRule: Boolean
+        get() = sp.getBoolean("wifi_rule", false)
+        set(value) = sp.edit().putBoolean("wifi_rule", value).apply()
+
+    var wifiPkg: String
+        get() = sp.getString("wifi_pkg", "") ?: ""
+        set(value) = sp.edit().putString("wifi_pkg", value).apply()
+
     fun blockedChannels(): MutableSet<String> =
         (sp.getStringSet("blocked_channels", emptySet()) ?: emptySet()).toMutableSet()
 

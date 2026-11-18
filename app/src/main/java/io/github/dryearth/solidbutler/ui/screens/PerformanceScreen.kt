@@ -67,7 +67,7 @@ import io.github.dryearth.solidbutler.ui.components.humanRate
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun PerformanceScreen(vm: ButlerViewModel) {
+fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}) {
     val perf by vm.perf.collectAsStateWithLifecycle()
     ToastEffect(perf.toast) { vm.clearPerfToast() }
 
@@ -87,6 +87,21 @@ fun PerformanceScreen(vm: ButlerViewModel) {
         }
         item { BatteryPanel(perf) }
         item { BatteryRulesCard() }
+        item {
+            GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp), onClick = onOpenRules) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("条件规则", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "锁屏后限制后台、连接 Wi-Fi 时限制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
         item { MemoryPanel(perf, onTrim = { vm.killBackground() }) }
         item {
             SectionHeader(

@@ -8,12 +8,16 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import io.github.dryearth.solidbutler.core.LineageHealth
 import io.github.dryearth.solidbutler.core.Prefs
+import io.github.dryearth.solidbutler.data.AppRepository
 import java.util.Locale
 
 /**
@@ -33,7 +37,24 @@ class BatteryGuardService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_BATTERY_CHANGED -> handleBattery(intent)
+                Intent.ACTION_SCREEN_OFF -> if (prefs.screenOffRule) applyRule(prefs.screenOffPkg, true)
+                Intent.ACTION_SCREEN_ON -> if (prefs.screenOffRule) applyRule(prefs.screenOffPkg, false)
             }
+        }
+    }
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            if (!prefs.wifiRule) return
+            val cm = getSystemService(ConnectivityManager::class.java)
+            val caps = cm.getNetworkCapabilities(network) ?: return
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                applyRule(prefs.wifiPkg, true)
+            }
+        }
+
+        override fun onLost(network: Network) {
+            if (prefs.wifiRule) applyRule(prefs.wifiPkg, false)
         }
     }
 
@@ -48,12 +69,18 @@ class BatteryGuardService : Service() {
                 ttsReady = true
             }
         }
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED).apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("DEPRECATION")
             registerReceiver(receiver, filter)
+        }
+        runCatching {
+            getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
         }
     }
 
@@ -63,6 +90,9 @@ class BatteryGuardService : Service() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(receiver) }
+        runCatching {
+            getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
+        }
         tts?.stop()
         tts?.shutdown()
         tts = null
@@ -110,6 +140,17 @@ class BatteryGuardService : Service() {
         } else if (!charging) {
             limitApplied = false
         }
+    }
+
+    private fun applyRule(pkg: String, restrict: Boolean) {
+        if (pkg.isBlank()) return
+        Thread {
+            runCatching {
+                val repo = AppRepository(this, prefs)
+                val app = repo.list().firstOrNull { it.pkg == pkg } ?: return@runCatching
+                repo.restrictBackground(pkg, app.uid, restrict)
+            }
+        }.start()
     }
 
     private fun speak(text: String) {
