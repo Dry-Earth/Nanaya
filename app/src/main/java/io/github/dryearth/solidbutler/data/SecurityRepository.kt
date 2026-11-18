@@ -181,8 +181,11 @@ class SecurityRepository(
         if (!Shell.isPrivileged()) return emptyList()
         val out = ArrayList<ActiveCapture>()
         val cam = Shell.run("dumpsys media.camera").text
-        Regex("""Package:\s*([A-Za-z0-9_.]+)""").findAll(cam).map { it.groupValues[1] }
-            .distinct().forEach { out.add(ActiveCapture("相机", it, "正在使用摄像头")) }
+        if (cam.contains("Active Camera Clients")) {
+            val active = cam.substringAfter("Active Camera Clients").take(6000)
+            Regex("""Package:\s*([A-Za-z0-9_.]+)""").findAll(active).map { it.groupValues[1] }
+                .distinct().take(6).forEach { out.add(ActiveCapture("相机", it, "正在使用摄像头")) }
+        }
 
         val audio = Shell.run("dumpsys audio").text
         val mentionsRecord = audio.lineSequence().any { it.contains("record", true) }

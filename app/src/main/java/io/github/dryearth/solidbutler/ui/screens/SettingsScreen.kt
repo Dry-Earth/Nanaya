@@ -70,6 +70,7 @@ fun SettingsScreen(
     var base by rememberSaveable { mutableStateOf(vm.prefs.aiBaseUrl) }
     var model by rememberSaveable { mutableStateOf(vm.prefs.aiModel) }
     var key by rememberSaveable { mutableStateOf(vm.prefs.aiApiKey) }
+    var lockEnabled by remember { mutableStateOf(vm.prefs.appLockEnabled) }
     var pinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var pinConfirm by remember { mutableStateOf("") }
@@ -217,7 +218,7 @@ fun SettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (vm.prefs.appLockEnabled) "已开启" else "未开启",
+                        if (lockEnabled) "已开启" else "未开启",
                         style = MaterialTheme.typography.titleMedium,
                         color = Glass.Text,
                     )
@@ -228,14 +229,16 @@ fun SettingsScreen(
                     )
                 }
                 Pill(
-                    if (vm.prefs.appLockEnabled) "关闭" else "开启",
-                    selected = vm.prefs.appLockEnabled,
+                    if (lockEnabled) "关闭" else "开启",
+                    selected = lockEnabled,
                     color = Glass.Mint,
                     onClick = {
-                        if (vm.prefs.appLockEnabled) {
+                        if (lockEnabled) {
                             vm.prefs.appLockEnabled = false
+                            lockEnabled = false
                         } else if (vm.prefs.hasPin()) {
                             vm.prefs.appLockEnabled = true
+                            lockEnabled = true
                         } else {
                             pinDialog = true
                         }
@@ -253,7 +256,7 @@ fun SettingsScreen(
                     "清除 PIN",
                     modifier = Modifier.weight(1f),
                     enabled = vm.prefs.hasPin(),
-                    onClick = { vm.prefs.clearPin() },
+                    onClick = { vm.prefs.clearPin(); lockEnabled = false },
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -337,6 +340,7 @@ fun SettingsScreen(
                                 else -> {
                                     vm.prefs.setPin(pinInput)
                                     vm.prefs.appLockEnabled = true
+                                    lockEnabled = true
                                     pinInput = ""; pinConfirm = ""; pinError = null; pinDialog = false
                                 }
                             }

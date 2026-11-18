@@ -337,6 +337,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
         val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
         val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
+        val batteryHistory = withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
         _perf.update {
             val cpuHist = (it.cpuHistory + snap.cpu.loadPct).takeLast(90)
             val ramHist = (it.ramHistory + safePct(snap.ramUsed, snap.ramTotal) * 100f).takeLast(90)
@@ -347,7 +348,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 ramHistory = ramHist,
                 governor = governor,
                 presets = presets,
-                history = perfRepo.batteryHistory(),
+                history = batteryHistory,
             )
         }
         withContext(Dispatchers.IO) { perfRepo.recordBattery(snap.battery) }
@@ -442,6 +443,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     fun clearPerfToast() = _perf.update { it.copy(toast = null) }
 
     fun killBackground() {
+        if (!_caps.value.privileged) {
+            _perf.update { it.copy(toast = "回收后台需要 Root 或 Shizuku") }
+            return
+        }
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) { Shell.run("am kill-all") }
             _perf.update {
