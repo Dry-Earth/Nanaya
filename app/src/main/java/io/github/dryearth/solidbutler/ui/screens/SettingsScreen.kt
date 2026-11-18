@@ -71,8 +71,6 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
