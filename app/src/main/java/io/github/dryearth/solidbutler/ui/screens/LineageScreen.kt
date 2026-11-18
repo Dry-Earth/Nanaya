@@ -129,12 +129,11 @@ fun LineageScreen(onBack: () -> Unit) {
                 if ((snap?.storageTotal ?: 0) > 0) HardwareRow("存储", snap!!.storageTotal.bytes())
                 if (!snap?.glEsVersion.isNullOrBlank()) HardwareRow("OpenGL ES", snap!!.glEsVersion!!)
                 if (!snap?.vulkanVersion.isNullOrBlank()) HardwareRow("Vulkan", snap!!.vulkanVersion!!)
-                HardwareRow(
-                    "充电控制",
-                    if (charging.supported) "支持 · 当前上限 ${charging.limit}%" else "系统未提供",
-                )
-                if (charging.fastSupported && charging.fastModes.isNotEmpty()) {
-                    HardwareRow("快充", charging.fastModes.joinToString(" / ") { LineageHealth.fastModeLabel(it) })
+                if (charging.supported) {
+                    HardwareRow("充电控制", "支持 · 当前上限 ${charging.limit}%")
+                    if (charging.fastSupported && charging.fastModes.isNotEmpty()) {
+                        HardwareRow("快充", charging.fastModes.joinToString(" / ") { LineageHealth.fastModeLabel(it) })
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -149,7 +148,15 @@ fun LineageScreen(onBack: () -> Unit) {
             GlassPanel(tint = Glass.Accent) {
                 SectionHeader("已探测到的服务")
                 Spacer(Modifier.height(8.dp))
-                services.forEach { (name, info) ->
+                val connected = services.filter { it.second.second }
+                if (connected.isEmpty()) {
+                    Text(
+                        "没有检测到 LineageOS 专用服务；本页只展示实际存在的接口。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                connected.forEach { (name, info) ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -168,11 +175,7 @@ fun LineageScreen(onBack: () -> Unit) {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Pill(
-                            if (info.second) "已连接" else "未提供",
-                            selected = info.second,
-                            color = if (info.second) Glass.Mint else Glass.Faint,
-                        )
+                        Pill("已连接", selected = true, color = Glass.Mint)
                     }
                 }
                 Spacer(Modifier.height(6.dp))
