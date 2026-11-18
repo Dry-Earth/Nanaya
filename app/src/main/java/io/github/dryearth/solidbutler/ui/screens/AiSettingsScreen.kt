@@ -107,14 +107,6 @@ fun AiSettingsScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { roleVersion++ }
 
-    fun requestAssistantRole() {
-        if (roleAvailable && roleManager != null) {
-            runCatching { roleLauncher.launch(roleManager.createRequestRoleIntent(role)) }
-        } else {
-            openAssistantSettings()
-        }
-    }
-
     fun openAssistantSettings() {
         val intents = listOf(
             Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
@@ -134,6 +126,14 @@ fun AiSettingsScreen(
             } catch (_: Exception) {
                 // try next
             }
+        }
+    }
+
+    fun requestAssistantRole() {
+        if (roleAvailable && roleManager != null) {
+            runCatching { roleLauncher.launch(roleManager.createRequestRoleIntent(role)) }
+        } else {
+            openAssistantSettings()
         }
     }
 
