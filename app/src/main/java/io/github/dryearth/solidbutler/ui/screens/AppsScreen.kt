@@ -64,7 +64,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit) {
+fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnostics: () -> Unit) {
     val state by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
     ToastEffect(state.toast) { vm.clearAppsToast() }
@@ -145,6 +145,25 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit) {
                         Text("自启与后台管理", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
                             "开机接收器、链式唤醒、待机分组与后台限制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
+        item {
+            GlassPanel(
+                corner = 16.dp,
+                padding = PaddingValues(14.dp),
+                onClick = onOpenDiagnostics,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("崩溃与 ANR", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "最近崩溃、启动耗时与最后一次 ANR",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )

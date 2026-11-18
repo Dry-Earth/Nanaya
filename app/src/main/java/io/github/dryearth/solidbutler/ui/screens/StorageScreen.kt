@@ -64,7 +64,7 @@ import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun StorageScreen(vm: ButlerViewModel) {
+fun StorageScreen(vm: ButlerViewModel, onOpenTrash: () -> Unit) {
     val state by vm.storage.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<StorageCategory?>(null) }
     ToastEffect(state.toast) { vm.clearStorageToast() }
@@ -87,6 +87,21 @@ fun StorageScreen(vm: ButlerViewModel) {
         if (report != null) {
             item { TreemapCard(report) }
             item { ActionRow(vm, report) }
+            item {
+                GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp), onClick = onOpenTrash) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("回收站", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                            Text(
+                                "用户文件删除后可在这里恢复，保留 7 天",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Muted,
+                            )
+                        }
+                        Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                    }
+                }
+            }
             item { SafetyNote() }
             item {
                 SectionHeader(

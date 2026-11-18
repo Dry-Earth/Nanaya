@@ -29,6 +29,7 @@ class StorageRepository(
     private val pm: PackageManager = context.packageManager
     private val stats: StorageStatsManager? =
         context.getSystemService(StorageStatsManager::class.java)
+    private val trash = TrashRepository(context)
 
     private data class Found(
         val file: File,
@@ -416,7 +417,11 @@ class StorageRepository(
         CleanResult(freed, deleted, failed, msgs)
     }
 
-    suspend fun deleteItems(items: List<StorageItem>, allowDirs: Boolean = false): CleanResult =
+    suspend fun deleteItems(
+        items: List<StorageItem>,
+        allowDirs: Boolean = false,
+        useTrash: Boolean = false,
+    ): CleanResult =
         withContext(Dispatchers.IO) {
             var freed = 0L
             var deleted = 0
@@ -431,7 +436,9 @@ class StorageRepository(
                     continue
                 }
                 val f = File(path)
-                val ok = if (f.isDirectory) {
+                val ok = if (useTrash && f.isFile) {
+                    trash.trash(f)
+                } else if (f.isDirectory) {
                     allowDirs && runCatching { f.delete() }.getOrDefault(false)
                 } else {
                     runCatching { f.delete() }.getOrDefault(false)
@@ -476,7 +483,11 @@ class StorageRepository(
         CleanResult(freed, deleted, failed)
     }
 
-    suspend fun deleteDuplicateCopies(groups: List<DuplicateGroup>, keepFirst: Boolean = true): CleanResult =
+    suspend fun deleteDuplicateCopies(
+        groups: List<DuplicateGroup>,
+        keepFirst: Boolean = true,
+        useTrash: Boolean = false,
+    ): CleanResult =
         withContext(Dispatchers.IO) {
             var freed = 0L
             var deleted = 0
@@ -489,7 +500,8 @@ class StorageRepository(
                         failed++
                         continue
                     }
-                    if (runCatching { f.delete() }.getOrDefault(false)) {
+                    val ok = if (useTrash) trash.trash(f) else runCatching { f.delete() }.getOrDefault(false)
+                    if (ok) {
                         freed += g.size
                         deleted++
                     } else failed++

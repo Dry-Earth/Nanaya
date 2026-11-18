@@ -63,6 +63,7 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onChat: () -> Unit,
     onOpenLineage: () -> Unit,
+    onOpenNotifications: () -> Unit,
 ) {
     val context = LocalContext.current
     val chat by vm.chat.collectAsStateWithLifecycle()
@@ -111,6 +112,21 @@ fun SettingsScreen(
                     Text("硬件与显示特性", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                     Text(
                         "lineagehardware 支持的触控、背光、色彩、防闪烁等开关",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+            }
+        }
+
+        SectionHeader("通知渠道", "按渠道屏蔽营销通知")
+        GlassPanel(onClick = onOpenNotifications) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("通知管理", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text(
+                        "需要通知使用权；按渠道取消，不修改应用本身",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Muted,
                     )

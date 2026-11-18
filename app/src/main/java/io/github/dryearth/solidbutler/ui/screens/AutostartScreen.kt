@@ -53,7 +53,7 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 import java.util.Locale
 
 @Composable
-fun AutostartScreen(vm: ButlerViewModel, onBack: () -> Unit) {
+fun AutostartScreen(vm: ButlerViewModel, onBack: () -> Unit, onOpenWakeup: () -> Unit) {
     val state by vm.autostart.collectAsStateWithLifecycle()
     ToastEffect(state.toast) { vm.clearAutostartToast() }
 
@@ -94,6 +94,25 @@ fun AutostartScreen(vm: ButlerViewModel, onBack: () -> Unit) {
                     color = Glass.Muted,
                     maxLines = 2,
                 )
+            }
+        }
+
+        GlassPanel(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            corner = 14.dp,
+            padding = PaddingValues(12.dp),
+            onClick = onOpenWakeup,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("唤醒与任务审计", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text(
+                        "JobScheduler、AlarmManager 的包名计数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
             }
         }
 

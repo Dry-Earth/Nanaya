@@ -54,7 +54,7 @@ import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun SecurityScreen(vm: ButlerViewModel) {
+fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit) {
     val state by vm.security.collectAsStateWithLifecycle()
     val appsState by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
@@ -73,6 +73,22 @@ fun SecurityScreen(vm: ButlerViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { ScorePanel(score, report, high) }
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpenSpecial) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("特殊权限", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "悬浮窗、无障碍、通知监听、设备管理器、安装未知应用",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
+
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 io.github.dryearth.solidbutler.ui.components.ActionButton(

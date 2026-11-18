@@ -60,12 +60,17 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
 import io.github.dryearth.solidbutler.ui.screens.AssistantScreen
 import io.github.dryearth.solidbutler.ui.screens.AutostartScreen
+import io.github.dryearth.solidbutler.ui.screens.DiagnosticsScreen
 import io.github.dryearth.solidbutler.ui.screens.LineageScreen
+import io.github.dryearth.solidbutler.ui.screens.NotificationsScreen
+import io.github.dryearth.solidbutler.ui.screens.WakeupScreen
+import io.github.dryearth.solidbutler.ui.screens.SpecialPermissionsScreen
 import io.github.dryearth.solidbutler.ui.screens.HomeScreen
 import io.github.dryearth.solidbutler.ui.screens.PerformanceScreen
 import io.github.dryearth.solidbutler.ui.screens.SecurityScreen
 import io.github.dryearth.solidbutler.ui.screens.SettingsScreen
 import io.github.dryearth.solidbutler.ui.screens.StorageScreen
+import io.github.dryearth.solidbutler.ui.screens.TrashScreen
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 private data class NavItem(val id: String, val label: String, val icon: ImageVector)
@@ -138,9 +143,19 @@ fun ButlerApp(
             )
             Box(Modifier.weight(1f)) {
                 if (sub == "autostart") {
-                    AutostartScreen(vm, onBack = { sub = null })
+                    AutostartScreen(vm, onBack = { sub = null }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
                     LineageScreen(onBack = { sub = null })
+                } else if (sub == "special") {
+                    SpecialPermissionsScreen(onBack = { sub = null })
+                } else if (sub == "notifications") {
+                    NotificationsScreen(onBack = { sub = null })
+                } else if (sub == "wakeup") {
+                    WakeupScreen(onBack = { sub = "autostart" })
+                } else if (sub == "diagnostics") {
+                    DiagnosticsScreen(onBack = { sub = null })
+                } else if (sub == "trash") {
+                    TrashScreen(onBack = { sub = null })
                 } else {
                     when (tab) {
                         "home" -> HomeScreen(
@@ -149,10 +164,14 @@ fun ButlerApp(
                             onChat = { chat = true },
                             onOpenAutostart = { sub = "autostart" },
                         )
-                        "storage" -> StorageScreen(vm)
-                        "apps" -> AppsScreen(vm, onOpenAutostart = { sub = "autostart" })
+                        "storage" -> StorageScreen(vm, onOpenTrash = { sub = "trash" })
+                        "apps" -> AppsScreen(
+                            vm,
+                            onOpenAutostart = { sub = "autostart" },
+                            onOpenDiagnostics = { sub = "diagnostics" },
+                        )
                         "perf" -> PerformanceScreen(vm)
-                        "security" -> SecurityScreen(vm)
+                        "security" -> SecurityScreen(vm, onOpenSpecial = { sub = "special" })
                     }
                 }
             }
@@ -181,6 +200,7 @@ fun ButlerApp(
                 onClose = { settings = false },
                 onChat = { settings = false; chat = true },
                 onOpenLineage = { settings = false; sub = "lineage" },
+                onOpenNotifications = { settings = false; sub = "notifications" },
             )
         }
     }

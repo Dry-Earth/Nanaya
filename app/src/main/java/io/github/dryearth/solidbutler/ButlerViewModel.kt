@@ -194,10 +194,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = when (category.id) {
                 "dup" -> withContext(Dispatchers.IO) {
-                    storageRepo.deleteDuplicateCopies(duplicateGroups, keepFirst = true)
+                    storageRepo.deleteDuplicateCopies(duplicateGroups, keepFirst = true, useTrash = true)
                 }
                 "leftover" -> withContext(Dispatchers.IO) { storageRepo.deleteLeftovers(items) }
-                else -> withContext(Dispatchers.IO) { storageRepo.deleteItems(items) }
+                else -> withContext(Dispatchers.IO) { storageRepo.deleteItems(items, useTrash = true) }
             }
             _storage.update {
                 it.copy(
