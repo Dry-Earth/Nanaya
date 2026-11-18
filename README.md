@@ -1,9 +1,9 @@
-# 守岸人 · Solid Butler
+# 汐 · Solid Butler
 
 > 运行在 **LineageOS 24 / Android 17** 上的本地设备管家。
 > UI 采用 [Solid Glass](https://github.com/deeplethe/solid-glass) 的材质语言：深色中性底、三级玻璃厚度、边缘高光、克制的彩色反馈。
 >
-> 应用名与图标来自《鸣潮》的「守岸人」（官方立绘，版权归库洛游戏），仅作个人非商业使用。
+> 应用名与图标来自《鸣潮》的「汐」（官方立绘，版权归库洛游戏），仅作个人非商业使用。
 
 ## 能做什么
 
@@ -73,4 +73,4 @@ app/src/main/java/io/github/dryearth/solidbutler/
 
 ## 许可
 
-代码以 MIT 发布。Solid Glass 的设计语言来自 [deeplethe/solid-glass](https://github.com/deeplethe/solid-glass)（MIT）。「守岸人」角色版权归库洛游戏所有，本项目仅为个人非商业使用。
+代码以 MIT 发布。Solid Glass 的设计语言来自 [deeplethe/solid-glass](https://github.com/deeplethe/solid-glass)（MIT）。「汐」角色版权归库洛游戏所有，本项目仅为个人非商业使用。

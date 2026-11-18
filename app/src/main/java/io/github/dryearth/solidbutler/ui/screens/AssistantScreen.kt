@@ -88,7 +88,7 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("守岸人", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Text("汐", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
                 Text(
                     if (state.modelConfigured) state.modelLabel else "云端模型未配置",
                     style = MaterialTheme.typography.labelSmall,
@@ -142,7 +142,7 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
                 item {
                     GlassPanel(padding = PaddingValues(18.dp)) {
                         Text(
-                            "我是守岸人。可以帮你分析存储、盘点后台、设置充电上限、审计权限。",
+                            "我是汐。可以帮你分析存储、盘点后台、设置充电上限、审计权限。",
                             style = MaterialTheme.typography.bodyLarge,
                             color = Glass.Text,
                         )
@@ -179,7 +179,7 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
                             color = Glass.Accent,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("守岸人正在思考…", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                        Text("汐正在思考…", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
                     }
                 }
             }
@@ -336,7 +336,7 @@ private fun Composer(
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) {
                         Text(
-                            if (enabled) "让守岸人做什么…" else "配置模型后可用",
+                            if (enabled) "让汐做什么…" else "配置模型后可用",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Glass.Faint,
                         )

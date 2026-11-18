@@ -102,7 +102,7 @@ fun HomeScreen(vm: ButlerViewModel, onOpenTab: (String) -> Unit, onChat: () -> U
         }
         item {
             Text(
-                "守岸人 · 本机分析，不上传文件。AI 对话仅发送你输入的文字与设备摘要。",
+                "汐 · 本机分析，不上传文件。AI 对话仅发送你输入的文字与设备摘要。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Faint,
                 modifier = Modifier.padding(vertical = 10.dp),
@@ -243,7 +243,7 @@ private fun AssistantCard(onChat: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("问守岸人", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Text("问汐", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
                 Text(
                     "「哪些应用在后台偷跑？」「充电限制到 80」",
                     style = MaterialTheme.typography.bodySmall,

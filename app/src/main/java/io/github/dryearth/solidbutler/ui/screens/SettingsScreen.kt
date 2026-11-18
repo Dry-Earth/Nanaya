@@ -192,7 +192,7 @@ fun SettingsScreen(
             DividerLine()
             SettingRow(
                 "电池优化白名单",
-                "避免守岸人被系统冻结",
+                "避免汐被系统冻结",
                 "去设置",
                 false,
             ) {
@@ -287,7 +287,7 @@ fun SettingsScreen(
             }
         }
 
-        SectionHeader("关于", "守岸人 · Solid Glass 风格")
+        SectionHeader("关于", "汐 · Solid Glass 风格")
         GlassPanel {
             Text(
                 "包名：${BuildConfig.APPLICATION_ID}\n版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",

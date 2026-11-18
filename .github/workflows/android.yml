@@ -77,7 +77,7 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: Solid Butler build ${{ github.run_number }}
           body: |
-            守岸人 · LineageOS 24 设备管家
+            汐 · LineageOS 24 设备管家
             commit: ${{ github.sha }}
           files: app/build/outputs/apk/release/app-release.apk
           prerelease: true

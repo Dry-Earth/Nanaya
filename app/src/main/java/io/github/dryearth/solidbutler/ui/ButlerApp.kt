@@ -161,7 +161,7 @@ private fun TopBar(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "守岸人",
+                        "汐",
                         style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = 1.5.sp),
                         color = Glass.Text,
                         fontWeight = FontWeight.Light,

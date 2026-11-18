@@ -80,7 +80,7 @@ class AppLockService : AccessibilityService() {
         }
 
         root.addView(TextView(this).apply {
-            text = "守岸人 · 应用锁"
+            text = "汐 · 应用锁"
             setTextColor(Color.parseColor("#98A2B0"))
             textSize = 12f
             gravity = Gravity.CENTER
