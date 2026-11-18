@@ -373,7 +373,7 @@ private fun RiskRow(risk: RiskFinding) {
 
 @Composable
 private fun PrivacyDialog(app: PrivacyApp, onRevoke: (String) -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dimAmount = 0.82f)) {
+    Dialog(onDismissRequest = onDismiss) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
             opaque = true,

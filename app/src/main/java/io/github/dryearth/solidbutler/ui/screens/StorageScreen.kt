@@ -524,7 +524,7 @@ private fun CategoryDialog(
     val allSelected = if (isDup) selectedGroups.size == duplicates.size && duplicates.isNotEmpty()
     else cat.items.count { it.path.isNotBlank() } > 0 && selectedPaths.size == cat.items.count { it.path.isNotBlank() }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dimAmount = 0.82f)) {
+    Dialog(onDismissRequest = onDismiss) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
             opaque = true,

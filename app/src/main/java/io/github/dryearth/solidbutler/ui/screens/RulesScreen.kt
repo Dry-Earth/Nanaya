@@ -174,7 +174,7 @@ fun RulesScreen(vm: ButlerViewModel, onBack: () -> Unit) {
                 query.isBlank() || it.label.contains(query, true) || it.pkg.contains(query, true)
                 )
         }
-        Dialog(onDismissRequest = { pickFor = null }, properties = DialogProperties(dimAmount = 0.82f)) {
+        Dialog(onDismissRequest = { pickFor = null }) {
             GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(16.dp)) {
                 Text(
                     if (kind == "screen") "选择锁屏限制的应用" else "选择 Wi-Fi 限制的应用",

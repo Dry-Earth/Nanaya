@@ -180,7 +180,7 @@ class PerformanceRepository(private val context: Context) {
         if (used <= 0 || orig <= 0) {
             val stat = readText("/sys/block/zram0/mm_stat")
             if (stat != null) {
-                val parts = stat.trim().split(Regex("\s+"))
+                val parts = stat.trim().split(Regex("""\s+"""))
                 if (orig <= 0) orig = parts.getOrNull(0)?.toLongOrNull() ?: orig
                 if (used <= 0) used = parts.getOrNull(1)?.toLongOrNull() ?: used
             }

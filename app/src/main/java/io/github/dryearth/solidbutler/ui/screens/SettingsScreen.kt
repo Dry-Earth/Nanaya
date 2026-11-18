@@ -360,7 +360,6 @@ fun SettingsScreen(
     if (pinDialog) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { pinDialog = false },
-            properties = androidx.compose.ui.window.DialogProperties(dimAmount = 0.82f),
         ) {
             GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(18.dp)) {
                 Text(if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
