@@ -13,7 +13,9 @@
 | **应用** | 冻结 / 解冻、为当前用户卸载 / 恢复、后台限制、唤醒锁拦截、电池白名单、自启动组件级开关、危险权限批量收回、应用锁（本地 PIN + 无障碍遮罩） |
 | **性能** | 2 秒实时面板（CPU 各核频率/负载、GPU、RAM、温度、网络速率、电池）、24 小时耗电排行、充电上限 / 定时充电 / 快充模式、电池健康、governor 预设、温和回收后台 |
 | **安全** | 敏感权限聚合、相机/麦克风实时占用、离线追踪 SDK 扫描、侧载与权限组合风险规则、Root 防火墙（iptables 独立链） |
-| **AI** | OpenAI 兼容接口的云端管家，所有动作先展示命令与影响，再二次确认 |
+| **自启** | 开机/网络接收器逐项开关、后台限制、`am set-standby-bucket` 待机分组 |
+| **AI** | OpenAI 兼容接口的云端管家，支持系统语音识别输入与 TTS 播报；所有动作先展示命令与影响，再二次确认 |
+| **LineageOS** | `lineagehealth` 充电控制、`lineagehardware` 硬件特性开关；`livedisplay`/`trust`/`profile` 服务探测 |
 
 ## 为什么是“调用官方接口”
 
@@ -22,7 +24,7 @@
 - **充电控制**：直接调用 `lineagehealth` 系统服务（`IHealthInterface`）：`setChargingControlEnabled/Mode/Limit/StartTime/TargetTime`、`setFastChargeMode`。源码中这些事务没有权限检查，因此**不需要 Root**，也不需要 system 签名。
 - **应用控制**：`pm disable-user`、`pm uninstall --user 0`、`appops set`、`cmd deviceidle whitelist`、`am set-standby-bucket`、`am kill-all`、`dumpsys`。
 - **存储**：`StorageStatsManager.queryStatsForUid`、`StatFs`、`MANAGE_EXTERNAL_STORAGE`、流式 SHA-256。
-- **性能**：`/proc/stat`、`cpufreq`、`thermal_zone`、`ActivityManager.MemoryInfo`、`BatteryManager`、`TrafficStats`、`UsageStatsManager`。
+- **性能**：`/proc/stat`、`cpufreq`、`thermal_zone`、`ActivityManager.MemoryInfo`、`BatteryManager`、`TrafficStats`、`UsageStatsManager`、`NetworkStatsManager`。
 - **网络防火墙**：内核 netfilter 的独立链 `BUTLER_FW` / `BUTLER_FW6`，只匹配 `--uid-owner`，可整体清空。
 
 特权分级：**无特权** → **Shizuku（shell）** → **Root**。不支持的能力会明确置灰并给出原因，不做假开关。
