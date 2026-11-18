@@ -23,19 +23,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install platform
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           SDK=36
-          if sdkmanager --list 2>/dev/null | grep -q "platforms;android-37"; then
+          if "$SDKMANAGER" --list 2>/dev/null | grep -q "platforms;android-37"; then
             SDK=37
           fi
           echo "Using compileSdk $SDK"
-          sdkmanager --install "platforms;android-$SDK" "platform-tools" > /dev/null
-          sdkmanager --install "build-tools;36.0.0" > /dev/null 2>&1 || sdkmanager --install "build-tools;35.0.0" > /dev/null
+          "$SDKMANAGER" --install "platforms;android-$SDK" "platform-tools" > /dev/null
+          "$SDKMANAGER" --install "build-tools;36.0.0" > /dev/null 2>&1 || "$SDKMANAGER" --install "build-tools;35.0.0" > /dev/null
           echo "BUTLER_COMPILE_SDK=$SDK" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
