@@ -32,9 +32,6 @@ jobs:
           echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           SDK=36
-          if "$SDKMANAGER" --list 2>/dev/null | grep -q "platforms;android-37"; then
-            SDK=37
-          fi
           echo "Using compileSdk $SDK"
           "$SDKMANAGER" --install "platforms;android-$SDK" "platform-tools" > /dev/null
           "$SDKMANAGER" --install "build-tools;36.0.0" > /dev/null 2>&1 || "$SDKMANAGER" --install "build-tools;35.0.0" > /dev/null
@@ -60,10 +57,8 @@ jobs:
           ./gradlew --no-daemon assembleDebug assembleRelease \
             -PbutlerCompileSdk=$BUTLER_COMPILE_SDK \
             -PbutlerTargetSdk=$BUTLER_COMPILE_SDK 2>&1 | tee build.log
-          if [ "${PIPESTATUS[0]}" != "0" ] && [ "$BUTLER_COMPILE_SDK" = "37" ]; then
-            echo "API 37 build failed, falling back to 36"
-            ./gradlew --no-daemon assembleDebug assembleRelease \
-              -PbutlerCompileSdk=36 -PbutlerTargetSdk=36
+          if [ "${PIPESTATUS[0]}" != "0" ]; then
+            exit 1
           fi
 
       - name: Upload APKs
