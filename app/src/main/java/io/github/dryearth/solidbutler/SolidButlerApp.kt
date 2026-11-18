@@ -23,8 +23,12 @@ class SolidButlerApp : Application() {
             if (Prefs(this).batteryGuardEnabled) BatteryGuardService.start(this)
         }
         runCatching {
+            val prefs = Prefs(this)
             val installed = packageManager.getPackageInfo("moe.shizuku.manager", 0) != null
-            if (installed && !ShizukuHelper.isReady()) ShizukuHelper.requestPermission()
+            if (installed && !ShizukuHelper.isReady() && !prefs.shizukuAsked) {
+                prefs.shizukuAsked = true
+                ShizukuHelper.requestPermission()
+            }
         }
         runCatching {
             ShizukuHelper.addPermissionListener { requestCode, grantResult ->

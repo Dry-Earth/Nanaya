@@ -103,7 +103,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun requestShizuku() = io.github.dryearth.solidbutler.core.ShizukuHelper.requestPermission()
+    fun requestShizuku() {
+        prefs.shizukuAsked = true
+        io.github.dryearth.solidbutler.core.ShizukuHelper.requestPermission()
+    }
 
     fun redetectPrivileges() {
         viewModelScope.launch {

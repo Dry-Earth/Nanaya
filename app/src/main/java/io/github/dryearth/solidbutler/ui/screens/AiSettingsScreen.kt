@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -96,10 +97,13 @@ fun AiSettingsScreen(
     val roleManager = context.getSystemService(RoleManager::class.java)
     val role = "android.app.role.ASSISTANT"
     val roleAvailable = runCatching { roleManager?.isRoleAvailable(role) == true }.getOrDefault(false)
-    val roleHeld = runCatching { roleManager?.isRoleHeld(role) == true }.getOrDefault(false)
+    var roleVersion by remember { mutableIntStateOf(0) }
+    val roleHeld = remember(roleVersion) {
+        runCatching { roleManager?.isRoleHeld(role) == true }.getOrDefault(false)
+    }
     val roleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* system updates the role; reopen the page to see it */ }
+    ) { roleVersion++ }
 
     fun requestAssistantRole() {
         if (roleAvailable && roleManager != null) {
