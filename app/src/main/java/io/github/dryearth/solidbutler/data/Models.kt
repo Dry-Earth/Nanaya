@@ -128,6 +128,8 @@ data class TempReading(val label: String, val celsius: Float)
 
 data class ProcLoad(val name: String, val pct: Float)
 
+data class MemProcess(val name: String, val pssKb: Long)
+
 data class BatterySnapshot(
     val level: Int = 0,
     val charging: Boolean = false,
@@ -168,6 +170,11 @@ data class PerfSnapshot(
     val processes: List<ProcLoad> = emptyList(),
     val storageUsed: Long = 0,
     val storageTotal: Long = 0,
+    val cachedBytes: Long = 0,
+    val buffersBytes: Long = 0,
+    val zramSize: Long = 0,
+    val zramUsed: Long = 0,
+    val zramOrig: Long = 0,
     val uptimeMs: Long = 0,
     val timestamp: Long = 0,
 )

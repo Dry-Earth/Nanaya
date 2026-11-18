@@ -387,8 +387,14 @@ class StorageRepository(
         var deleted = 0
         var failed = 0
         val msgs = ArrayList<String>()
+        if (pkgs.isEmpty()) {
+            return@withContext CleanResult(
+                0, 0, 0,
+                listOf("没有可清理的应用缓存。请先授予「使用情况访问」，并在应用详情里确认应用有缓存。"),
+            )
+        }
         val targets = pkgs.filterNot { it in prefs.whitelist() }
-        if (targets.isEmpty() && pkgs.isNotEmpty()) {
+        if (targets.isEmpty()) {
             return@withContext CleanResult(0, 0, 0, listOf("目标都在保护名单里，已跳过"))
         }
         for (pkg in targets) {
@@ -398,7 +404,7 @@ class StorageRepository(
             }.getOrDefault(0L)
             var ok = false
             val r = Shell.run("pm clear --cache-only $pkg")
-            if (r.text.contains("Success", true) || r.ok) ok = true
+            if (r.text.contains("Success", true)) ok = true
             if (!ok && Shell.rootReady) {
                 val r2 = Shell.runAs(
                     Shell.Backend.ROOT,

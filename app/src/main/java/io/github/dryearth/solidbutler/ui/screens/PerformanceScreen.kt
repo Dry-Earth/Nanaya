@@ -67,7 +67,7 @@ import io.github.dryearth.solidbutler.ui.components.humanRate
 import io.github.dryearth.solidbutler.ui.theme.Glass
 
 @Composable
-fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}) {
+fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenMemory: () -> Unit = {}) {
     val perf by vm.perf.collectAsStateWithLifecycle()
     ToastEffect(perf.toast) { vm.clearPerfToast() }
 
@@ -86,7 +86,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}) {
             item { ChargingPanel(vm, perf) }
         }
         item { BatteryPanel(perf) }
-        item { BatteryRulesCard() }
+        item { BatteryRulesCard(perf.charging.supported) }
         item {
             GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp), onClick = onOpenRules) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -102,7 +102,8 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}) {
                 }
             }
         }
-        item { MemoryPanel(perf, onTrim = { vm.killBackground() }) }
+        item { MemoryPanel(perf, onTrim = { vm.killBackground() }, onOpenMemory = onOpenMemory) }
+        item { ZramCard(perf) }
         item {
             SectionHeader(
                 "24 小时耗电",
@@ -502,7 +503,7 @@ private fun BatteryPanel(perf: PerfUiState) {
 }
 
 @Composable
-private fun BatteryRulesCard() {
+private fun BatteryRulesCard(chargingSupported: Boolean) {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
     var guard by remember { mutableStateOf(prefs.batteryGuardEnabled) }
@@ -535,11 +536,19 @@ private fun BatteryRulesCard() {
             full = it
             prefs.fullBatteryVoice = it
         }
-        RuleToggle("达到上限自动限充", rule) {
-            rule = it
-            prefs.chargeLimitRuleEnabled = it
+        if (chargingSupported) {
+            RuleToggle("达到上限自动限充", rule) {
+                rule = it
+                prefs.chargeLimitRuleEnabled = it
+            }
+        } else {
+            Text(
+                "系统未提供充电控制接口，已隐藏上限与自动限充选项。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
         }
-        if (rule) {
+        if (rule && chargingSupported) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("上限 ${limit.toInt()}%", style = MaterialTheme.typography.bodySmall, color = Glass.Text)
                 Spacer(Modifier.width(8.dp))
@@ -591,13 +600,34 @@ private fun RuleToggle(label: String, checked: Boolean, onChange: (Boolean) -> U
 }
 
 @Composable
-private fun MemoryPanel(perf: PerfUiState, onTrim: () -> Unit) {
+private fun ZramCard(perf: PerfUiState) {
+    val s = perf.snapshot
+    if (s.zramSize <= 0 && s.swapTotal <= 0) return
+    val swapUsed = (s.swapTotal - s.swapFree).coerceAtLeast(0)
+    GlassPanel {
+        SectionHeader("压缩内存", "ZRAM / Swap")
+        Spacer(Modifier.height(10.dp))
+        if (s.zramSize > 0) {
+            KeyValueRow("ZRAM 设备", s.zramSize.bytes())
+            KeyValueRow("已压缩", s.zramUsed.bytes())
+            KeyValueRow("原始数据", s.zramOrig.bytes())
+            val ratio = if (s.zramUsed > 0) s.zramOrig.toFloat() / s.zramUsed.toFloat() else 0f
+            KeyValueRow("压缩比", if (ratio > 0) String.format(java.util.Locale.US, "%.2f×", ratio) else "—")
+        }
+        if (s.swapTotal > 0) {
+            KeyValueRow("Swap", "${swapUsed.bytes()} / ${s.swapTotal.bytes()}")
+        }
+    }
+}
+
+@Composable
+private fun MemoryPanel(perf: PerfUiState, onTrim: () -> Unit, onOpenMemory: () -> Unit) {
     val used = perf.snapshot.ramUsed
     val total = perf.snapshot.ramTotal
-    GlassPanel {
+    GlassPanel(onClick = onOpenMemory) {
         SectionHeader(
             "内存",
-            "Android 会主动利用空闲内存，不必追求清空",
+            "点击查看每个应用的 PSS 占用",
             trailing = {
                 Icon(Icons.Rounded.Memory, contentDescription = null, tint = Glass.Muted, modifier = Modifier.size(18.dp))
             },
@@ -619,6 +649,11 @@ private fun MemoryPanel(perf: PerfUiState, onTrim: () -> Unit) {
                 Icons.Rounded.Refresh,
                 modifier = Modifier.weight(1f),
                 onClick = onTrim,
+            )
+            ActionButton(
+                "应用占用",
+                modifier = Modifier.weight(1f),
+                onClick = onOpenMemory,
             )
         }
         Spacer(Modifier.height(6.dp))

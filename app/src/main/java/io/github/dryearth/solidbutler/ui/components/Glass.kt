@@ -77,12 +77,12 @@ fun AmbientBackground() {
         val step = 46.dp.toPx()
         var x = 0f
         while (x < w) {
-            drawLine(Color(0x05FFFFFF), Offset(x, 0f), Offset(x, h), 1f)
+            drawLine(Color(0x03FFFFFF), Offset(x, 0f), Offset(x, h), 1f)
             x += step
         }
         var y = 0f
         while (y < h) {
-            drawLine(Color(0x04FFFFFF), Offset(0f, y), Offset(w, y), 1f)
+            drawLine(Color(0x025FFFFF), Offset(0f, y), Offset(w, y), 1f)
             y += step
         }
     }
@@ -94,37 +94,51 @@ fun GlassPanel(
     corner: Dp = 20.dp,
     padding: PaddingValues = PaddingValues(16.dp),
     tint: Color = Color.White,
+    opaque: Boolean = false,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(corner)
     Column(
         modifier = modifier
-            .shadow(14.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+            .shadow(16.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
+            // A solid-ish base keeps the background grid from showing through the glass.
+            .background(if (opaque) Color(0xFF0B0E13) else Color(0xDE0B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(
-                        tint.copy(alpha = 0.075f),
-                        tint.copy(alpha = 0.028f),
+                        tint.copy(alpha = 0.105f),
+                        tint.copy(alpha = 0.032f),
+                        tint.copy(alpha = 0.055f),
                     )
                 )
             )
             .border(
                 1.dp,
                 Brush.verticalGradient(
-                    listOf(Color(0x2BFFFFFF), Color(0x0AFFFFFF), Color(0x06FFFFFF))
+                    listOf(Color(0x3DFFFFFF), Color(0x12FFFFFF), Color(0x08FFFFFF))
                 ),
                 shape,
             )
             .drawWithContent {
                 drawContent()
+                // top bevel highlight
                 drawLine(
                     brush = Brush.horizontalGradient(
-                        listOf(Color.Transparent, Color(0x33FFFFFF), Color.Transparent)
+                        listOf(Color.Transparent, Color(0x55FFFFFF), Color.Transparent)
                     ),
                     start = Offset(18.dp.toPx(), 0.7f),
                     end = Offset(size.width - 18.dp.toPx(), 0.7f),
+                    strokeWidth = 1f,
+                )
+                // inner bottom shade
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        listOf(Color.Transparent, Color(0x14000000), Color.Transparent)
+                    ),
+                    start = Offset(18.dp.toPx(), size.height - 0.7f),
+                    end = Offset(size.width - 18.dp.toPx(), size.height - 0.7f),
                     strokeWidth = 1f,
                 )
             }

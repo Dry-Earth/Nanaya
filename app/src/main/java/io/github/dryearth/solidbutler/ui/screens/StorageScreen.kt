@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.bytes
@@ -523,9 +524,10 @@ private fun CategoryDialog(
     val allSelected = if (isDup) selectedGroups.size == duplicates.size && duplicates.isNotEmpty()
     else cat.items.count { it.path.isNotBlank() } > 0 && selectedPaths.size == cat.items.count { it.path.isNotBlank() }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dimAmount = 0.82f)) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
+            opaque = true,
             corner = 22.dp,
             padding = PaddingValues(18.dp),
         ) {

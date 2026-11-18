@@ -34,6 +34,8 @@ class PerformanceRepository(private val context: Context) {
         val (rx, tx) = readNetwork()
         val battery = readBattery()
         val (swapTotal, swapFree) = readSwap()
+        val (cached, buffers) = readMemDetail()
+        val (zramSize, zramUsed, zramOrig) = readZram()
         val storage = io.github.dryearth.solidbutler.core.Shell.storageStats()
         return PerfSnapshot(
             cpu = cpu,
@@ -56,6 +58,11 @@ class PerformanceRepository(private val context: Context) {
             processes = readProcesses(),
             storageUsed = storage.second,
             storageTotal = storage.first,
+            cachedBytes = cached,
+            buffersBytes = buffers,
+            zramSize = zramSize,
+            zramUsed = zramUsed,
+            zramOrig = zramOrig,
             temps = temps,
             rxBps = rx,
             txBps = tx,
@@ -104,12 +111,11 @@ class PerformanceRepository(private val context: Context) {
     }
 
     private fun busyDelta(a: LongArray, b: LongArray): Float {
-        fun sumFrom(aa: LongArray, from: Int) = aa.drop(from).sum()
-        fun sumTo(aa: LongArray, to: Int) = aa.take(to).sum()
-        val totalA = sumFrom(a, 0)
-        val totalB = sumFrom(b, 0)
-        val idleA = sumTo(a, 4.coerceAtMost(a.size))
-        val idleB = sumTo(b, 4.coerceAtMost(b.size))
+        val totalA = a.sum()
+        val totalB = b.sum()
+        // /proc/stat: 0 user, 1 nice, 2 system, 3 idle, 4 iowait
+        val idleA = (a.getOrNull(3) ?: 0L) + (a.getOrNull(4) ?: 0L)
+        val idleB = (b.getOrNull(3) ?: 0L) + (b.getOrNull(4) ?: 0L)
         val dt = totalB - totalA
         val di = idleB - idleA
         if (dt <= 0) return 0f
@@ -140,6 +146,51 @@ class PerformanceRepository(private val context: Context) {
     }
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
+    fun memoryProcesses(): List<MemProcess> {
+        if (!Shell.isPrivileged()) return emptyList()
+        val text = Shell.run("dumpsys meminfo", 25_000).text
+        val regex = Regex("""^\s*([\d,]+)K:\s+([^\s(]+)\s+\(pid""")
+        return text.lineSequence().mapNotNull { line ->
+            val m = regex.find(line) ?: return@mapNotNull null
+            val pss = m.groupValues[1].replace(",", "").toLongOrNull() ?: return@mapNotNull null
+            val name = m.groupValues[2]
+            MemProcess(name, pss)
+        }.distinctBy { it.name }.sortedByDescending { it.pssKb }.take(40).toList()
+    }
+
+    private fun readMemDetail(): Pair<Long, Long> {
+        var cached = 0L
+        var buffers = 0L
+        runCatching {
+            for (line in File("/proc/meminfo").readLines()) {
+                when {
+                    line.startsWith("Cached:") -> cached = line.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                    line.startsWith("Buffers:") -> buffers = line.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                }
+            }
+        }
+        return cached * 1024 to buffers * 1024
+    }
+
+    private fun readZram(): Triple<Long, Long, Long> {
+        val size = sysLong("/sys/block/zram0/disksize").coerceAtLeast(0)
+        var used = sysLong("/sys/block/zram0/mem_used_total")
+        var orig = sysLong("/sys/block/zram0/orig_data_size")
+        if (used <= 0 || orig <= 0) {
+            val stat = readText("/sys/block/zram0/mm_stat")
+            if (stat != null) {
+                val parts = stat.trim().split(Regex("\s+"))
+                if (orig <= 0) orig = parts.getOrNull(0)?.toLongOrNull() ?: orig
+                if (used <= 0) used = parts.getOrNull(1)?.toLongOrNull() ?: used
+            }
+        }
+        return Triple(
+            size.coerceAtLeast(0),
+            used.coerceAtLeast(0),
+            orig.coerceAtLeast(0),
+        )
+    }
 
     private fun readSwap(): Pair<Long, Long> {
         var total = 0L
@@ -224,23 +275,32 @@ class PerformanceRepository(private val context: Context) {
     }
 
     private fun readTemps(): List<TempReading> {
-        val list = ArrayList<TempReading>()
+        val grouped = HashMap<String, MutableList<Float>>()
         val base = File("/sys/class/thermal")
         base.listFiles()?.filter { it.name.startsWith("thermal_zone") }?.forEach { zone ->
             val type = readText("${zone.absolutePath}/type") ?: return@forEach
             val raw = sysLong("${zone.absolutePath}/temp")
-            if (raw == 0L) return@forEach
-            val c = if (raw > 1000) raw / 1000f else raw.toFloat()
-            if (c < -20f || c > 130f) return@forEach
+            if (raw <= 0) return@forEach
+            val celsius = normalizeTemp(raw) ?: return@forEach
+            if (celsius !in 5f..115f) return@forEach
             val label = friendlyTemp(type)
-            if (list.none { it.label == label }) list.add(TempReading(label, c))
+            grouped.getOrPut(label) { mutableListOf() }.add(celsius)
         }
+        val list = grouped.map { (label, values) ->
+            val sorted = values.sorted()
+            val median = sorted[sorted.size / 2]
+            TempReading(label, median)
+        }.sortedByDescending { it.celsius }.take(8).toMutableList()
         if (list.isEmpty()) {
             val b = readBattery()
             if (b.tempC > 0) list.add(TempReading("电池", b.tempC))
         }
-        return list.sortedByDescending { it.celsius }.take(8)
+        return list
     }
+
+    /** Thermal zones use millidegrees, decicelsius, or raw degrees depending on vendor. */
+    private fun normalizeTemp(raw: Long): Float? =
+        listOf(raw / 1000f, raw / 10f, raw.toFloat()).firstOrNull { it in 5f..115f }
 
     private fun friendlyTemp(type: String): String {
         val t = type.lowercase(Locale.US)
@@ -289,7 +349,11 @@ class PerformanceRepository(private val context: Context) {
         val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
         val health = intent?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1
         val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
-        val voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        var voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        if (voltage <= 0) {
+            val vNow = readText("/sys/class/power_supply/battery/voltage_now")?.filter { it.isDigit() }?.toLongOrNull()
+            if (vNow != null && vNow > 0) voltage = (vNow / 1000).toInt()
+        }
         val tech = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: ""
         val cycles = if (Build.VERSION.SDK_INT >= 34) {
             intent?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1) ?: -1
@@ -297,10 +361,21 @@ class PerformanceRepository(private val context: Context) {
         val chargeCounter = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
         }.getOrDefault(-1L)
-        val current = runCatching {
+        var current = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
         }.getOrDefault(0L)
-        val power = kotlin.math.abs(current) / 1_000_000f * (voltage / 1000f)
+        if (current == 0L) {
+            current = readText("/sys/class/power_supply/battery/current_now")
+                ?.filter { it.isDigit() || it == '-' }
+                ?.toLongOrNull() ?: 0L
+        }
+        if (current in 1L..9999L || current in -9999L..-1L) current *= 1000L
+        var power = kotlin.math.abs(current) / 1_000_000f * (voltage / 1000f)
+        if (power <= 0f) {
+            val powerNow = readText("/sys/class/power_supply/battery/power_now")
+                ?.filter { it.isDigit() }?.toLongOrNull() ?: 0L
+            if (powerNow > 0) power = powerNow / 1_000_000f
+        }
         return BatterySnapshot(
             level = level * 100 / scale.coerceAtLeast(1),
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||

@@ -90,10 +90,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- capabilities ----------------
 
-    fun refreshCapabilities() {
+    fun refreshCapabilities(force: Boolean = false) {
         viewModelScope.launch {
             val c = withContext(Dispatchers.IO) {
-                CapabilityProbe.probe(getApplication(), detectRoot = true)
+                CapabilityProbe.probe(getApplication(), detectRoot = true, forceRoot = force)
             }
             _caps.value = c
             _security.update { it.copy(rootFirewall = securityRepo.firewallSupported()) }
@@ -101,6 +101,16 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun requestShizuku() = io.github.dryearth.solidbutler.core.ShizukuHelper.requestPermission()
+
+    fun redetectPrivileges() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                Shell.detectRoot(force = true)
+                io.github.dryearth.solidbutler.core.ShizukuHelper.isReady()
+            }
+            refreshCapabilities(force = true)
+        }
+    }
 
     // ---------------- storage ----------------
 
@@ -132,10 +142,14 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { storageRepo.clearAppCaches(pkgs) }
             _storage.update {
-                it.copy(
-                    cleaning = false,
-                    toast = "已清理 $labels：释放 ${result.freed.bytes()}（${result.deleted} 个成功，${result.failed} 个失败）",
-                )
+                val msg = if (result.deleted > 0 && result.freed <= 0) {
+                    "已清理 ${result.deleted} 个应用缓存（系统未返回释放量）"
+                } else if (result.deleted == 0 && result.messages.isNotEmpty()) {
+                    result.messages.first()
+                } else {
+                    "已清理 $labels：释放 ${result.freed.bytes()}（${result.deleted} 个成功，${result.failed} 个失败）"
+                }
+                it.copy(cleaning = false, toast = msg)
             }
             scanStorage()
         }
@@ -176,8 +190,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             _storage.update {
                 it.copy(
                     cleaning = false,
-                    toast = "${category.title}：释放 ${result.freed.bytes()}，删除 ${result.deleted} 项" +
-                        if (result.failed > 0) "，${result.failed} 项失败" else "",
+                    toast = when {
+                        result.deleted == 0 && result.failed > 0 ->
+                            "${category.title}：没有删除任何项（${result.failed} 项失败，可能受系统保护）"
+                        result.deleted == 0 ->
+                            "${category.title}：没有可删除的项"
+                        else ->
+                            "${category.title}：释放 ${result.freed.bytes()}，删除 ${result.deleted} 项" +
+                                if (result.failed > 0) "，${result.failed} 项失败" else ""
+                    },
                 )
             }
             scanStorage()
@@ -203,8 +224,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             _storage.update {
                 it.copy(
                     cleaning = false,
-                    toast = "${category.title}：释放 ${result.freed.bytes()}，删除 ${result.deleted} 项" +
-                        if (result.failed > 0) "，${result.failed} 项失败" else "",
+                    toast = when {
+                        result.deleted == 0 && result.failed > 0 ->
+                            "${category.title}：没有删除任何项（${result.failed} 项失败，可能受系统保护）"
+                        result.deleted == 0 ->
+                            "${category.title}：没有可删除的项"
+                        else ->
+                            "${category.title}：释放 ${result.freed.bytes()}，删除 ${result.deleted} 项" +
+                                if (result.failed > 0) "，${result.failed} 项失败" else ""
+                    },
                 )
             }
             scanStorage()

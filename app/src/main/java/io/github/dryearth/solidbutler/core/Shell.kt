@@ -31,6 +31,7 @@ object Shell {
         private set
 
     @Volatile private var rootChecked = false
+    @Volatile private var rootBinary: String = "su"
 
     private const val DEFAULT_TIMEOUT = 25_000L
 
@@ -38,14 +39,31 @@ object Shell {
         if (rootReady) return true
         if (rootChecked && !force) return false
         rootChecked = true
-        rootReady = runCatching {
-            val p = ProcessBuilder("su", "-c", "id").redirectErrorStream(true).start()
-            val finished = p.waitFor(5, TimeUnit.SECONDS)
-            val text = p.inputStream.bufferedReader().readText()
-            if (!finished) p.destroyForcibly()
-            finished && text.contains("uid=0")
-        }.getOrDefault(false)
-        return rootReady
+        val candidates = listOf(
+            "su",
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/debug_ramdisk/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/magisk/su",
+        ).distinct()
+        for (bin in candidates) {
+            val ok = runCatching {
+                val p = ProcessBuilder(bin, "-c", "id").redirectErrorStream(true).start()
+                val finished = p.waitFor(5, TimeUnit.SECONDS)
+                val text = p.inputStream.bufferedReader().readText()
+                if (!finished) p.destroyForcibly()
+                finished && text.contains("uid=0")
+            }.getOrDefault(false)
+            if (ok) {
+                rootBinary = bin
+                rootReady = true
+                return true
+            }
+        }
+        rootReady = false
+        return false
     }
 
     fun refreshShizuku() {
@@ -54,7 +72,7 @@ object Shell {
 
     fun run(cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when {
-            rootReady || detectRoot() -> exec(arrayOf("su", "-c", cmd), timeoutMs)
+            rootReady || detectRoot() -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
             shizukuReady -> runCatching {
                 ShizukuHelper.exec(cmd, timeoutMs)
             }.getOrElse { exec(arrayOf("sh", "-c", cmd), timeoutMs) }
@@ -65,7 +83,7 @@ object Shell {
     /** Force one backend, used by the UI to preview the exact command. */
     fun runAs(backend: Backend, cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when (backend) {
-            Backend.ROOT -> exec(arrayOf("su", "-c", cmd), timeoutMs)
+            Backend.ROOT -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
             Backend.SHIZUKU -> ShizukuHelper.exec(cmd, timeoutMs)
             Backend.APP -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }

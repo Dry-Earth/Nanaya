@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.PrivacyApp
@@ -372,9 +373,10 @@ private fun RiskRow(risk: RiskFinding) {
 
 @Composable
 private fun PrivacyDialog(app: PrivacyApp, onRevoke: (String) -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dimAmount = 0.82f)) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
+            opaque = true,
             padding = PaddingValues(18.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

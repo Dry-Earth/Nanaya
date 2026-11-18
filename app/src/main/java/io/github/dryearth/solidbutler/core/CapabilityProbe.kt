@@ -24,14 +24,14 @@ data class Capabilities(
 
 object CapabilityProbe {
 
-    fun probe(context: Context, detectRoot: Boolean = true): Capabilities {
+    fun probe(context: Context, detectRoot: Boolean = true, forceRoot: Boolean = false): Capabilities {
         val pm = context.packageManager
         val shizukuInstalled = runCatching {
             pm.getPackageInfo("rikka.shizuku", 0)
             true
         }.getOrDefault(false) || ShizukuHelper.isInstalled()
 
-        if (detectRoot) Shell.detectRoot()
+        if (detectRoot) Shell.detectRoot(force = forceRoot)
         Shell.refreshShizuku()
 
         val usage = runCatching {

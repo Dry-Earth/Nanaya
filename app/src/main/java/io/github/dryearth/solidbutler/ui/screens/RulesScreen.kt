@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.Prefs
@@ -173,8 +174,8 @@ fun RulesScreen(vm: ButlerViewModel, onBack: () -> Unit) {
                 query.isBlank() || it.label.contains(query, true) || it.pkg.contains(query, true)
                 )
         }
-        Dialog(onDismissRequest = { pickFor = null }) {
-            GlassPanel(modifier = Modifier.fillMaxWidth(), padding = PaddingValues(16.dp)) {
+        Dialog(onDismissRequest = { pickFor = null }, properties = DialogProperties(dimAmount = 0.82f)) {
+            GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(16.dp)) {
                 Text(
                     if (kind == "screen") "选择锁屏限制的应用" else "选择 Wi-Fi 限制的应用",
                     style = MaterialTheme.typography.titleLarge,

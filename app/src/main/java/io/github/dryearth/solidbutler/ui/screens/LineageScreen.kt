@@ -38,11 +38,16 @@ import androidx.compose.ui.unit.dp
 import io.github.dryearth.solidbutler.core.LineageHardware
 import io.github.dryearth.solidbutler.core.LineageHardwareFeature
 import io.github.dryearth.solidbutler.core.LineageHealth
+import io.github.dryearth.solidbutler.data.PerformanceRepository
+import io.github.dryearth.solidbutler.data.PerfSnapshot
+import io.github.dryearth.solidbutler.core.bytes
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,10 +56,13 @@ private data class FeatureState(val feature: LineageHardwareFeature, val enabled
 
 @Composable
 fun LineageScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(true) }
     var features by remember { mutableStateOf<List<FeatureState>>(emptyList()) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var snapshot by remember { mutableStateOf<PerfSnapshot?>(null) }
+    var charging by remember { mutableStateOf(LineageHealth.read()) }
 
     val services = remember {
         listOf(
@@ -73,6 +81,8 @@ fun LineageScreen(onBack: () -> Unit) {
             }
         }
         features = loaded
+        snapshot = withContext(Dispatchers.IO) { PerformanceRepository(context).snapshot() }
+        charging = withContext(Dispatchers.IO) { LineageHealth.read() }
         loading = false
     }
 
@@ -95,13 +105,43 @@ fun LineageScreen(onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("LineageOS 接口", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
+                    Text("系统接口与硬件", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
                     Text(
-                        "直接读写系统服务，不做模拟开关",
+                        "只陈列这台设备实际提供的接口与硬件",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Muted,
                     )
                 }
+            }
+        }
+
+        item {
+            GlassPanel(tint = Glass.Accent) {
+                SectionHeader("硬件与系统")
+                Spacer(Modifier.height(6.dp))
+                val snap = snapshot
+                HardwareRow("设备", "${Build.MANUFACTURER} ${Build.MODEL}")
+                HardwareRow("系统", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.DISPLAY}")
+                if (!snap?.socModel.isNullOrBlank()) HardwareRow("SoC", snap!!.socModel)
+                if (!snap?.gpuName.isNullOrBlank()) HardwareRow("GPU", snap!!.gpuName!!)
+                if (!snap?.npuName.isNullOrBlank()) HardwareRow("NPU", snap!!.npuName!!)
+                if ((snap?.ramTotal ?: 0) > 0) HardwareRow("内存", snap!!.ramTotal.bytes())
+                if ((snap?.storageTotal ?: 0) > 0) HardwareRow("存储", snap!!.storageTotal.bytes())
+                if (!snap?.glEsVersion.isNullOrBlank()) HardwareRow("OpenGL ES", snap!!.glEsVersion!!)
+                if (!snap?.vulkanVersion.isNullOrBlank()) HardwareRow("Vulkan", snap!!.vulkanVersion!!)
+                HardwareRow(
+                    "充电控制",
+                    if (charging.supported) "支持 · 当前上限 ${charging.limit}%" else "系统未提供",
+                )
+                if (charging.fastSupported && charging.fastModes.isNotEmpty()) {
+                    HardwareRow("快充", charging.fastModes.joinToString(" / ") { LineageHealth.fastModeLabel(it) })
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "只列出检测到的项；缺失的接口不会显示空开关。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
             }
         }
 
@@ -216,6 +256,24 @@ fun LineageScreen(onBack: () -> Unit) {
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun HardwareRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint, modifier = Modifier.width(74.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = Glass.Text,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

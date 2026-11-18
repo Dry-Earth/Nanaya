@@ -105,13 +105,13 @@ fun SettingsScreen(
             Pill("v${BuildConfig.VERSION_NAME}", color = Glass.Faint)
         }
 
-        SectionHeader("LineageOS 接口", "直接读写系统服务")
+        SectionHeader("系统接口与硬件", "只展示这台设备实际提供的项")
         GlassPanel(onClick = onOpenLineage) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("硬件与显示特性", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text("接口与硬件清单", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                     Text(
-                        "lineagehardware 支持的触控、背光、色彩、防闪烁等开关",
+                        "lineagehealth / lineagehardware 与 SoC、GPU、NPU、内存等检测结果",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Muted,
                     )
@@ -256,7 +256,7 @@ fun SettingsScreen(
             ActionButton(
                 "重新检测权限",
                 modifier = Modifier.fillMaxWidth(),
-                onClick = { vm.refreshCapabilities() },
+                onClick = { vm.redetectPrivileges() },
             )
         }
 
@@ -358,8 +358,11 @@ fun SettingsScreen(
     }
 
     if (pinDialog) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { pinDialog = false }) {
-            GlassPanel(modifier = Modifier.fillMaxWidth(), padding = PaddingValues(18.dp)) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { pinDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(dimAmount = 0.82f),
+        ) {
+            GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(18.dp)) {
                 Text(if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
                 Spacer(Modifier.height(10.dp))
                 GlassField("新 PIN（4–8 位数字）", pinInput, "••••", password = true, number = true) {
