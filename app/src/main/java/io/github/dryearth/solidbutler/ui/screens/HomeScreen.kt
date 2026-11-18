@@ -19,9 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,29 +38,36 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.core.bytes
 import io.github.dryearth.solidbutler.core.safePct
 import io.github.dryearth.solidbutler.data.PerfSnapshot
+import io.github.dryearth.solidbutler.data.ProcLoad
 import io.github.dryearth.solidbutler.data.SecurityReport
 import io.github.dryearth.solidbutler.data.StorageReport
 import io.github.dryearth.solidbutler.ui.components.ActionButton
-import io.github.dryearth.solidbutler.ui.components.BigNumber
+import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
-import io.github.dryearth.solidbutler.ui.components.KeyValueRow
 import io.github.dryearth.solidbutler.ui.components.Meter
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.Ring
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
-import io.github.dryearth.solidbutler.ui.components.Sparkline
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import java.util.Locale
 
 @Composable
-fun HomeScreen(vm: ButlerViewModel, onOpenTab: (String) -> Unit, onChat: () -> Unit) {
+fun HomeScreen(
+    vm: ButlerViewModel,
+    onOpenTab: (String) -> Unit,
+    onChat: () -> Unit,
+    onOpenAutostart: () -> Unit,
+) {
     val caps by vm.caps.collectAsStateWithLifecycle()
     val storage by vm.storage.collectAsStateWithLifecycle()
     val perf by vm.perf.collectAsStateWithLifecycle()
@@ -65,162 +77,452 @@ fun HomeScreen(vm: ButlerViewModel, onOpenTab: (String) -> Unit, onChat: () -> U
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Hero(caps, storage.report, perf.snapshot) }
+        item { MemoryCard(perf.snapshot, onTrim = { vm.killBackground() }) }
+        item { GpuCard(perf.snapshot) }
+        item { ProcessCard(perf.snapshot, onManage = onOpenAutostart) }
+        item { CpuCard(perf.snapshot) }
+        item { BatteryTiles(perf.snapshot) }
         item {
-            QuickActions(
-                onScan = { vm.scanStorage(); onOpenTab("storage") },
-                onStorage = { onOpenTab("storage") },
-                onSecurity = { vm.refreshSecurity(); onOpenTab("security") },
+            QuickEntries(
                 onChat = onChat,
+                onAutostart = onOpenAutostart,
+                onStorage = { onOpenTab("storage") },
+                onSecurity = { onOpenTab("security") },
             )
         }
-        item { AssistantCard(onChat) }
-        item {
-            StorageCard(
-                report = storage.report,
-                scanning = storage.scanning,
-                onScan = { vm.scanStorage() },
-                onOpen = { onOpenTab("storage") },
-            )
-        }
-        item {
-            BatteryCard(
-                perf = perf,
-                cpuHistory = perf.cpuHistory,
-                onOpen = { onOpenTab("perf") },
-            )
-        }
-        item {
-            PrivacyCard(
-                report = security.report,
-                onOpen = { onOpenTab("security") },
-            )
-        }
+        item { SummaryCard(storage.report, security.report, caps, onOpenTab) }
         item {
             Text(
-                "汐 · 本机分析，不上传文件。AI 对话仅发送你输入的文字与设备摘要。",
+                "汐 · 本机读取，不上传文件。NPU/进程占用取决于厂商驱动与 Shizuku/Root。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Faint,
-                modifier = Modifier.padding(vertical = 10.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
             )
         }
     }
 }
 
+// ---------------- Memory ----------------
+
 @Composable
-private fun Hero(caps: Capabilities, report: StorageReport?, snapshot: PerfSnapshot) {
-    GlassPanel(padding = PaddingValues(18.dp)) {
+private fun MemoryCard(snapshot: PerfSnapshot, onTrim: () -> Unit) {
+    val total = snapshot.ramTotal
+    val used = snapshot.ramUsed
+    val pct = safePct(used, total)
+    val swapUsed = (snapshot.swapTotal - snapshot.swapFree).coerceAtLeast(0)
+    val swapPct = safePct(swapUsed, snapshot.swapTotal)
+
+    GlassPanel(padding = PaddingValues(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "设备状态",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Glass.Faint,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    when {
-                        !caps.allFiles -> "等待授权存储"
-                        report == null -> "还没有分析过存储"
-                        snapshot.battery.level > 0 -> "运行平稳"
-                        else -> "正在读取状态"
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Glass.Text,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill(caps.backend, selected = caps.privileged, color = Glass.Mint)
-                    Pill(
-                        if (caps.usageAccess) "使用情况已授权" else "使用情况未授权",
-                        selected = caps.usageAccess,
-                        color = Glass.Accent,
-                    )
-                }
-                Spacer(Modifier.height(14.dp))
-                if (report != null) {
-                    val safe = reclaimable(report)
-                    val userFiles = report.categories.filter { it.requiresConfirm }.sumOf { it.bytes }
-                    Text(
-                        "缓存可清理 ${safe.bytes()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Glass.Mint,
-                    )
-                    if (userFiles > 0) {
-                        Text(
-                            "用户文件 ${userFiles.bytes()} · 需要逐项确认",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Glass.Amber,
-                        )
-                    }
-                    Text(
-                        "共扫描 ${report.fileCount} 个文件 · 应用数据不会被清理",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Glass.Muted,
-                    )
-                } else {
-                    Text(
-                        "先做一次深度扫描，才能给出可解释的清理建议。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Glass.Muted,
-                    )
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
-                val usedPct = if (report != null) safePct(report.used, report.total) else 0f
-                Ring(usedPct, Modifier.fillMaxSize(), color = Glass.Accent, stroke = 8.dp) {
+            Box(Modifier.size(98.dp), contentAlignment = Alignment.Center) {
+                Ring(pct, Modifier.fillMaxSize(), color = Glass.Accent, stroke = 9.dp) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            if (report != null) "${(usedPct * 100).toInt()}%" else "—",
+                            "${(pct * 100).toInt()}%",
                             style = MaterialTheme.typography.headlineMedium,
                             color = Glass.Text,
                         )
-                        Text(
-                            "已用",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Faint,
-                        )
+                        Text("Memory", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                     }
                 }
             }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                MemoryBar("物理内存", used, total, pct, Glass.Accent)
+                Spacer(Modifier.height(10.dp))
+                MemoryBar("交换分区", swapUsed, snapshot.swapTotal, swapPct, Glass.Violet)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x0FFFFFFF))
+                    .clickable { onTrim() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Refresh, contentDescription = "回收后台", tint = Glass.Mint, modifier = Modifier.size(16.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                "已用 ${used.bytes()} / ${total.bytes()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Muted,
+            )
+            Text(
+                "可用 ${snapshot.ramAvailable.bytes()} · Swap ${swapUsed.bytes()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
         }
     }
 }
 
 @Composable
-private fun QuickActions(
-    onScan: () -> Unit,
-    onStorage: () -> Unit,
-    onSecurity: () -> Unit,
-    onChat: () -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuickAction("扫描", Icons.Rounded.Search, Glass.Accent, Modifier.weight(1f), onScan)
-        QuickAction("存储", Icons.Rounded.Storage, Glass.Mint, Modifier.weight(1f), onStorage)
-        QuickAction("体检", Icons.Rounded.Shield, Glass.Ice, Modifier.weight(1f), onSecurity)
-        QuickAction("管家", Icons.Rounded.AutoAwesome, Glass.Violet, Modifier.weight(1f), onChat)
+private fun MemoryBar(label: String, used: Long, total: Long, pct: Float, color: Color) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Glass.Muted)
+            Text(
+                if (total > 0) "${(pct * 100).toInt()}%  ${used.bytes()}" else "未启用",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Text,
+            )
+        }
+        Spacer(Modifier.height(5.dp))
+        Meter(pct, color = color, height = 7.dp)
+    }
+}
+
+// ---------------- GPU ----------------
+
+@Composable
+private fun GpuCard(snapshot: PerfSnapshot) {
+    val gpuPct = snapshot.gpuLoad.coerceIn(0, 100) / 100f
+    GlassPanel(padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(86.dp), contentAlignment = Alignment.Center) {
+                Ring(gpuPct, Modifier.fillMaxSize(), color = Glass.Violet, stroke = 8.dp) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("GPU", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                        Text(
+                            if (snapshot.gpuLoad >= 0) "${snapshot.gpuLoad}%" else "—",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Glass.Text,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (snapshot.gpuFreqMhz > 0) "${snapshot.gpuFreqMhz} MHz" else "频率未知",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Glass.Text,
+                )
+                Text(
+                    "负载 ${if (snapshot.gpuLoad >= 0) "${snapshot.gpuLoad}%" else "厂商未开放"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Glass.Muted,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    snapshot.gpuName.ifBlank { "GPU 型号未读取" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    buildString {
+                        if (snapshot.glEsVersion.isNotBlank()) append("OpenGL ES ${snapshot.glEsVersion}")
+                        if (snapshot.vulkanVersion.isNotBlank()) {
+                            if (isNotBlank()) append(" · ")
+                            append("Vulkan ${snapshot.vulkanVersion}")
+                        }
+                    }.ifBlank { "图形接口未知" },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
+        }
+    }
+}
+
+// ---------------- Processes ----------------
+
+@Composable
+private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
+    GlassPanel(padding = PaddingValues(14.dp)) {
+        SectionHeader(
+            "进程占用",
+            if (snapshot.processes.isEmpty()) "需要 Shizuku 或 Root 读取 dumpsys" else "按 CPU 排序 · 10 秒刷新",
+            trailing = {
+                Text(
+                    "管理",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Glass.Accent,
+                    modifier = Modifier.clickable { onManage() },
+                )
+            },
+        )
+        Spacer(Modifier.height(10.dp))
+        if (snapshot.processes.isEmpty()) {
+            Text(
+                "没有可显示的进程占用。授予 Shizuku 后，这里会列出 top CPU 进程。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Faint,
+            )
+            return@GlassPanel
+        }
+        snapshot.processes.take(6).forEach { p ->
+            ProcessRow(p)
+        }
     }
 }
 
 @Composable
-private fun QuickAction(
+private fun ProcessRow(proc: ProcLoad) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (proc.name.contains('.')) {
+            AppIcon(proc.name, 24.dp)
+        } else {
+            Box(
+                Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color(0x0FFFFFFF)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("›", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            proc.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = Glass.Text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            String.format(Locale.US, "%.1f%%", proc.pct),
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Muted,
+        )
+        Spacer(Modifier.width(8.dp))
+        Meter(
+            (proc.pct / 40f).coerceIn(0f, 1f),
+            color = Glass.Accent,
+            height = 4.dp,
+            modifier = Modifier.width(44.dp),
+        )
+    }
+}
+
+// ---------------- CPU ----------------
+
+@Composable
+private fun CpuCard(snapshot: PerfSnapshot) {
+    val cpu = snapshot.cpu
+    if (cpu.cores == 0) return
+    GlassPanel(padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    snapshot.socModel.ifBlank { "CPU" },
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Glass.Text,
+                )
+                Text(
+                    "${cpu.cores} 核 · 负载 ${cpu.loadPct.toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Glass.Muted,
+                )
+            }
+            Pill(cpu.governor.ifBlank { "governor 未知" }, color = Glass.Violet)
+        }
+        Spacer(Modifier.height(12.dp))
+        val rows = (0 until cpu.cores).chunked(4)
+        rows.forEach { indices ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                indices.forEach { i ->
+                    CoreTile(
+                        index = i,
+                        load = cpu.perCore.getOrNull(i) ?: 0f,
+                        freq = cpu.freqsKhz.getOrNull(i) ?: -1,
+                        min = cpu.minFreqsKhz.getOrNull(i) ?: -1,
+                        max = cpu.maxFreqsKhz.getOrNull(i) ?: -1,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(4 - indices.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun CoreTile(
+    index: Int,
+    load: Float,
+    freq: Long,
+    min: Long,
+    max: Long,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0x07FFFFFF))
+            .padding(8.dp),
+    ) {
+        Text(
+            "${load.toInt()}%",
+            style = MaterialTheme.typography.titleMedium,
+            color = when {
+                load > 80 -> Glass.Amber
+                load > 40 -> Glass.Text
+                else -> Glass.Muted
+            },
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            repeat(5) { i ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (load / 20f > i) Glass.Accent else Color(0x14FFFFFF)
+                        )
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (freq > 0) "${freq / 1000}MHz" else "—",
+            style = MaterialTheme.typography.labelLarge,
+            color = Glass.Text,
+        )
+        Text(
+            if (min > 0 && max > 0) "${min / 1000}~${max / 1000}MHz" else "CPU$index",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
+            maxLines = 1,
+        )
+    }
+}
+
+// ---------------- Battery tiles ----------------
+
+@Composable
+private fun BatteryTiles(snapshot: PerfSnapshot) {
+    val b = snapshot.battery
+    val maxTemp = snapshot.temps.maxByOrNull { it.celsius }?.celsius ?: b.tempC
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tile(
+                icon = Icons.Rounded.Bolt,
+                value = if (b.powerW > 0f) String.format(Locale.US, "%s%.2f W", if (b.charging) "+" else "-", b.powerW) else "—",
+                label = if (b.charging) "充电功率" else "放电功率",
+                color = if (b.charging) Glass.Mint else Glass.Amber,
+                modifier = Modifier.weight(1f),
+            )
+            Tile(
+                icon = Icons.Rounded.PowerSettingsNew,
+                value = "${b.level}%",
+                label = "电池 · ${String.format(Locale.US, "%.2f V", b.voltageMv / 1000f)}",
+                color = if (b.level <= 15) Glass.Rose else Glass.Text,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tile(
+                icon = Icons.Rounded.Thermostat,
+                value = if (maxTemp > 0f) String.format(Locale.US, "%.1f℃", maxTemp) else "—",
+                label = snapshot.temps.maxByOrNull { it.celsius }?.label ?: "温度",
+                color = when {
+                    maxTemp >= 60 -> Glass.Rose
+                    maxTemp >= 45 -> Glass.Amber
+                    else -> Glass.Text
+                },
+                modifier = Modifier.weight(1f),
+            )
+            Tile(
+                icon = Icons.Rounded.Schedule,
+                value = uptimeText(),
+                label = "已开机",
+                color = Glass.Text,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Tile(
+                icon = Icons.Rounded.Memory,
+                value = if (b.cycles >= 0) "${b.cycles}" else "—",
+                label = if (b.cycles >= 0) "充电循环" else "循环次数未开放",
+                color = Glass.Muted,
+                modifier = Modifier.weight(1f),
+            )
+            Tile(
+                icon = Icons.Rounded.Storage,
+                value = snapshot.storageTotal.let { if (it > 0) bytesShort(snapshot.storageTotal - snapshot.storageUsed) else "—" },
+                label = "可用存储",
+                color = Glass.Text,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Tile(
+    icon: ImageVector,
+    value: String,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    GlassPanel(modifier = modifier, corner = 16.dp, padding = PaddingValues(12.dp)) {
+        Icon(icon, contentDescription = null, tint = Glass.Muted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(7.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint, maxLines = 1)
+    }
+}
+
+// ---------------- Entries ----------------
+
+@Composable
+private fun QuickEntries(
+    onChat: () -> Unit,
+    onAutostart: () -> Unit,
+    onStorage: () -> Unit,
+    onSecurity: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Entry("管家", Icons.Rounded.AutoAwesome, Glass.Violet, Modifier.weight(1f), onChat)
+        Entry("自启", Icons.Rounded.PowerSettingsNew, Glass.Amber, Modifier.weight(1f), onAutostart)
+        Entry("存储", Icons.Rounded.Storage, Glass.Mint, Modifier.weight(1f), onStorage)
+        Entry("安全", Icons.Rounded.Security, Glass.Ice, Modifier.weight(1f), onSecurity)
+    }
+}
+
+@Composable
+private fun Entry(
     label: String,
     icon: ImageVector,
     color: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    GlassPanel(
-        modifier = modifier,
-        corner = 16.dp,
-        padding = PaddingValues(vertical = 12.dp),
-        onClick = onClick,
-    ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally))
+    GlassPanel(modifier = modifier, corner = 16.dp, padding = PaddingValues(vertical = 12.dp), onClick = onClick) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = color,
+            modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
+        )
         Spacer(Modifier.height(7.dp))
         Text(
             label,
@@ -231,172 +533,60 @@ private fun QuickAction(
     }
 }
 
-@Composable
-private fun AssistantCard(onChat: () -> Unit) {
-    GlassPanel(
-        tint = Glass.Violet,
-        padding = PaddingValues(18.dp),
-        onClick = onChat,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Glass.Violet.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Glass.Violet, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("问汐", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
-                Text(
-                    "「哪些应用在后台偷跑？」「充电限制到 80」",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Glass.Muted,
-                )
-            }
-            Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
-        }
-    }
-}
+// ---------------- Summary ----------------
 
 @Composable
-private fun StorageCard(
-    report: StorageReport?,
-    scanning: Boolean,
-    onScan: () -> Unit,
-    onOpen: () -> Unit,
+private fun SummaryCard(
+    storage: StorageReport?,
+    security: SecurityReport,
+    caps: Capabilities,
+    onOpenTab: (String) -> Unit,
 ) {
-    GlassPanel(onClick = onOpen) {
-        SectionHeader(
-            "存储",
-            if (report == null) "尚未扫描" else "剩余 ${report.free.bytes()} / ${report.total.bytes()}",
-            trailing = {
+    val safe = storage?.categories
+        ?.filter { it.id in setOf("cache", "log", "thumb", "empty") }
+        ?.sumOf { it.bytes } ?: 0L
+    val high = security.risks.count { it.level == io.github.dryearth.solidbutler.data.RiskLevel.HIGH }
+    GlassPanel(padding = PaddingValues(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).clickable { onOpenTab("storage") }) {
+                Text("存储", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                 Text(
-                    if (scanning) "扫描中" else "查看",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Glass.Accent,
-                )
-            },
-        )
-        Spacer(Modifier.height(14.dp))
-        if (report == null) {
-            Text(
-                "深度扫描缓存、残留 APK、日志、空文件夹、旧下载与重复文件。",
-                style = MaterialTheme.typography.bodySmall,
-                color = Glass.Muted,
-            )
-            Spacer(Modifier.height(12.dp))
-            ActionButton(
-                if (scanning) "扫描中…" else "开始扫描",
-                Icons.Rounded.Search,
-                accent = true,
-                enabled = !scanning,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onScan,
-            )
-        } else {
-            Meter(safePct(report.used, report.total), color = Glass.Accent)
-            Spacer(Modifier.height(14.dp))
-            report.categories
-                .filter { it.bytes > 0 || it.count > 0 }
-                .sortedByDescending { it.bytes }
-                .take(3)
-                .forEach {
-                    KeyValueRow(it.title, if (it.bytes > 0) it.bytes.bytes() else "${it.count} 项")
-                }
-        }
-    }
-}
-
-@Composable
-private fun BatteryCard(perf: io.github.dryearth.solidbutler.PerfUiState, cpuHistory: List<Float>, onOpen: () -> Unit) {
-    GlassPanel(onClick = onOpen) {
-        SectionHeader(
-            "电池与性能",
-            "实时读取系统接口",
-            trailing = {
-                Text("详情", style = MaterialTheme.typography.labelLarge, color = Glass.Accent)
-            },
-        )
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            BigNumber(
-                perf.snapshot.battery.level.toString(),
-                "%",
-                "电池",
-                color = when {
-                    perf.snapshot.battery.level <= 15 -> Glass.Rose
-                    perf.snapshot.battery.charging -> Glass.Mint
-                    else -> Glass.Text
-                },
-            )
-            Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    if (perf.charging.supported) "上限 ${perf.charging.limit}%" else "无充电控制",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (perf.charging.enabled) Glass.Accent else Glass.Muted,
+                    if (storage != null) "可清理 ${safe.bytes()}" else "尚未扫描",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Glass.Mint,
                 )
                 Text(
-                    perf.snapshot.battery.status + " · ${perf.snapshot.battery.tempC}℃",
-                    style = MaterialTheme.typography.bodySmall,
+                    if (storage != null) "剩余 ${storage.free.bytes()}" else "点击去扫描",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Muted,
+                )
+            }
+            Box(Modifier.width(1.dp).height(38.dp).background(Color(0x14FFFFFF)))
+            Column(Modifier.weight(1f).padding(start = 14.dp).clickable { onOpenTab("security") }) {
+                Text("隐私", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                Text(
+                    if (high > 0) "$high 个高风险" else "未见高风险",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (high > 0) Glass.Rose else Glass.Text,
+                )
+                Text(
+                    "${security.privacyApps.size} 个敏感权限应用 · ${caps.backend}",
+                    style = MaterialTheme.typography.labelSmall,
                     color = Glass.Muted,
                 )
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Sparkline(cpuHistory, Modifier.fillMaxWidth().height(34.dp), color = Glass.Ice, maxOverride = 100f)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill("CPU ${(perf.snapshot.cpu.loadPct).toInt()}%", selected = true, color = Glass.Ice)
-            Pill("RAM ${safePct(perf.snapshot.ramUsed, perf.snapshot.ramTotal).let { (it * 100).toInt() }}%", color = Glass.Accent)
-            if (perf.snapshot.gpuLoad >= 0) Pill("GPU ${perf.snapshot.gpuLoad}%", color = Glass.Mint)
-        }
     }
 }
 
-@Composable
-private fun PrivacyCard(report: SecurityReport, onOpen: () -> Unit) {
-    val high = report.risks.count { it.level == io.github.dryearth.solidbutler.data.RiskLevel.HIGH }
-    GlassPanel(onClick = onOpen) {
-        SectionHeader(
-            "安全与隐私",
-            "权限、追踪器与本地风险规则",
-            trailing = { Text("查看", style = MaterialTheme.typography.labelLarge, color = Glass.Accent) },
-        )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniStat("敏感应用", report.privacyApps.size.toString(), Glass.Ice, Modifier.weight(1f))
-            MiniStat("高风险", high.toString(), if (high > 0) Glass.Rose else Glass.Mint, Modifier.weight(1f))
-            MiniStat("追踪命中", report.trackerHits.size.toString(), Glass.Amber, Modifier.weight(1f))
-        }
-        if (report.activeCaptures.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "正在使用：${report.activeCaptures.joinToString { "${it.kind} · ${it.pkg.substringAfterLast('.')}" }}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Glass.Amber,
-            )
-        }
-    }
+// ---------------- helpers ----------------
+
+private fun uptimeText(): String {
+    val sec = android.os.SystemClock.elapsedRealtime() / 1000
+    val d = sec / 86400
+    val h = (sec % 86400) / 3600
+    val m = (sec % 3600) / 60
+    return if (d > 0) "${d}天 ${h}小时" else "${h}小时 ${m}分"
 }
 
-@Composable
-private fun MiniStat(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0x08FFFFFF))
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-    ) {
-        Text(value, style = MaterialTheme.typography.titleLarge, color = color)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-    }
-}
-
-private fun reclaimable(report: StorageReport): Long =
-    report.categories.filter { it.id in setOf("cache", "log", "thumb", "empty") }
-        .sumOf { it.bytes }
+private fun bytesShort(v: Long): String = v.bytes()

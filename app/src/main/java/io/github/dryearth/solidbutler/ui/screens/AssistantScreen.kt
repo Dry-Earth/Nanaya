@@ -1,5 +1,14 @@
 package io.github.dryearth.solidbutler.ui.screens
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,12 +36,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,8 +57,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -56,14 +71,92 @@ import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import java.util.Locale
 
 @Composable
 fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> Unit) {
     val state by vm.chat.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var input by rememberSaveable { mutableStateOf("") }
+    var speakReplies by rememberSaveable { mutableStateOf(true) }
+    var ttsReady by remember { mutableStateOf(false) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     val listState = rememberLazyListState()
+    var lastSpokenId by remember { mutableStateOf(state.messages.lastOrNull()?.id ?: 0L) }
 
     ToastEffect(state.toast) { vm.clearChatToast() }
+
+    DisposableEffect(Unit) {
+        val engine = TextToSpeech(context) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+        }
+        ttsEngine = engine
+        onDispose {
+            engine.stop()
+            engine.shutdown()
+            ttsEngine = null
+        }
+    }
+    LaunchedEffect(ttsReady) {
+        if (ttsReady) {
+            runCatching { ttsEngine?.language = Locale.SIMPLIFIED_CHINESE }
+        }
+    }
+    LaunchedEffect(state.messages.size, speakReplies, ttsReady) {
+        if (!speakReplies || !ttsReady) return@LaunchedEffect
+        val last = state.messages.lastOrNull() ?: return@LaunchedEffect
+        if (last.role == ChatRole.ASSISTANT && last.text.isNotBlank() && last.id != lastSpokenId) {
+            lastSpokenId = last.id
+            runCatching {
+                ttsEngine?.speak(last.text, TextToSpeech.QUEUE_FLUSH, null, "xi-${last.id}")
+            }
+        }
+    }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val text = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!text.isNullOrBlank()) {
+                input = ""
+                vm.sendChat(text)
+            }
+        }
+    }
+
+    fun launchSpeech() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧，汐在听")
+        }
+        if (intent.resolveActivity(context.packageManager) == null) {
+            Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
+            return
+        }
+        speechLauncher.launch(intent)
+    }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) launchSpeech() else {
+            Toast.makeText(context, "需要麦克风权限才能语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun requestMic() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            launchSpeech()
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     LaunchedEffect(state.messages.size, state.sending) {
         if (state.messages.isNotEmpty()) {
@@ -96,6 +189,18 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
                     maxLines = 1,
                 )
             }
+            Icon(
+                if (speakReplies) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                contentDescription = "语音播报",
+                tint = if (speakReplies) Glass.Accent else Glass.Faint,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable {
+                        speakReplies = !speakReplies
+                        if (!speakReplies) ttsEngine?.stop()
+                    },
+            )
+            Spacer(Modifier.width(12.dp))
             if (state.messages.isNotEmpty()) {
                 Icon(
                     Icons.Rounded.DeleteOutline,
@@ -189,6 +294,7 @@ fun AssistantScreen(vm: ButlerViewModel, onClose: () -> Unit, onSettings: () -> 
             value = input,
             enabled = state.modelConfigured && !state.sending,
             onValueChange = { input = it },
+            onMic = { requestMic() },
             onSend = {
                 val text = input.trim()
                 if (text.isNotEmpty()) {
@@ -319,6 +425,7 @@ private fun Composer(
     value: String,
     enabled: Boolean,
     onValueChange: (String) -> Unit,
+    onMic: () -> Unit,
     onSend: () -> Unit,
 ) {
     Box(
@@ -354,7 +461,23 @@ private fun Composer(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x0FFFFFFF))
+                        .clickable(enabled = enabled) { onMic() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Mic,
+                        contentDescription = "语音输入",
+                        tint = if (enabled) Glass.Accent else Glass.Faint,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
                 Box(
                     Modifier
                         .size(34.dp)

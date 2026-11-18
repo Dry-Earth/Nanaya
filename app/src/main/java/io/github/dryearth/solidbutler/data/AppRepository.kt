@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
+import android.net.NetworkCapabilities
+import android.app.usage.NetworkStatsManager
 import android.os.PowerManager
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
@@ -59,6 +61,7 @@ class AppRepository(
 
     fun detail(pkg: String): AppDetail? {
         val app = list().firstOrNull { it.pkg == pkg } ?: return null
+        val net = networkUsage(app.uid)
         val perms = app.permissions.map { name ->
             val granted = runCatching {
                 pm.checkPermission(name, pkg) == PackageManager.PERMISSION_GRANTED
@@ -79,7 +82,23 @@ class AppRepository(
             locked = pkg in prefs.lockedPackages(),
             whitelisted = pkg in prefs.whitelist(),
             trackers = emptyList(),
+            wifiBytes = net[0],
+            cellBytes = net[1],
         )
+    }
+
+    private fun networkUsage(uid: Int): Pair<Long, Long> {
+        val nsm = context.getSystemService(NetworkStatsManager::class.java)
+            ?: return -1L to -1L
+        val end = System.currentTimeMillis()
+        val start = end - 24L * 3600_000
+        fun query(transport: Int): Long = runCatching {
+            val stats = nsm.querySummaryForUid(transport, uid, start, end)
+            val value = stats.totalBytes
+            stats.close()
+            value
+        }.getOrDefault(-1L)
+        return query(NetworkCapabilities.TRANSPORT_WIFI) to query(NetworkCapabilities.TRANSPORT_CELLULAR)
     }
 
     fun freeze(pkg: String, freeze: Boolean): Pair<Boolean, String> {
@@ -169,6 +188,64 @@ class AppRepository(
                 enabled = enabled,
             )
         }.sortedBy { it.shortName }
+    }
+
+    fun autostartApps(): List<AutostartApp> {
+        val bootActions = listOf(
+            "android.intent.action.BOOT_COMPLETED",
+            "android.intent.action.QUICKBOOT_POWERON",
+            "android.intent.action.LOCKED_BOOT_COMPLETED",
+            "android.intent.action.MY_PACKAGE_REPLACED",
+            "android.intent.action.CONNECTIVITY_CHANGE",
+        )
+        val found = HashMap<String, MutableMap<String, MutableList<String>>>()
+        for (action in bootActions) {
+            val receivers = runCatching {
+                pm.queryBroadcastReceivers(
+                    android.content.Intent(action),
+                    PackageManager.MATCH_DISABLED_COMPONENTS,
+                )
+            }.getOrDefault(emptyList())
+            for (ri in receivers) {
+                val ai = ri.activityInfo ?: continue
+                val pkg = ai.packageName ?: continue
+                val name = ai.name ?: continue
+                found.getOrPut(pkg) { linkedMapOf() }
+                    .getOrPut(name) { mutableListOf() }
+                    .add(action.substringAfterLast('.'))
+            }
+        }
+        val apps = list().filter { it.pkg in found }
+        return apps.mapNotNull { app ->
+            val comps = found[app.pkg]?.map { (name, actions) ->
+                val comp = ComponentName(app.pkg, name)
+                val setting = runCatching { pm.getComponentEnabledSetting(comp) }
+                    .getOrDefault(PackageManager.COMPONENT_ENABLED_STATE_DEFAULT)
+                BootComponent(
+                    pkg = app.pkg,
+                    component = name,
+                    shortName = name.substringAfterLast('.'),
+                    actions = actions.distinct(),
+                    enabled = setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED &&
+                        setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER,
+                )
+            }?.sortedBy { it.shortName } ?: emptyList()
+            if (comps.isEmpty()) null else AutostartApp(
+                app = app,
+                components = comps,
+                backgroundRestricted = isOpIgnored("android:run_in_background", app.uid, app.pkg),
+            )
+        }.sortedWith(
+            compareByDescending<AutostartApp> { it.components.count { c -> c.enabled } }
+                .thenBy { it.app.system }
+                .thenBy { it.app.label }
+        )
+    }
+
+    fun setStandbyBucket(pkg: String, bucket: String): Pair<Boolean, String> {
+        if (!Shell.isPrivileged()) return false to "需要 Root 或 Shizuku"
+        val r = Shell.run("am set-standby-bucket $pkg $bucket")
+        return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "已设为 $bucket" }
     }
 
     fun setComponentEnabled(pkg: String, component: String, enabled: Boolean): Pair<Boolean, String> {

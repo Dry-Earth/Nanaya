@@ -85,6 +85,12 @@ data class BootComponent(
     val enabled: Boolean,
 )
 
+data class AutostartApp(
+    val app: AppEntry,
+    val components: List<BootComponent>,
+    val backgroundRestricted: Boolean,
+)
+
 data class PermissionRow(
     val name: String,
     val label: String,
@@ -102,6 +108,8 @@ data class AppDetail(
     val locked: Boolean,
     val whitelisted: Boolean,
     val trackers: List<String> = emptyList(),
+    val wifiBytes: Long = -1,
+    val cellBytes: Long = -1,
 )
 
 // ---------- Performance ----------
@@ -113,9 +121,12 @@ data class CpuSample(
     val maxFreqsKhz: List<Long> = emptyList(),
     val governor: String = "",
     val cores: Int = 0,
+    val minFreqsKhz: List<Long> = emptyList(),
 )
 
 data class TempReading(val label: String, val celsius: Float)
+
+data class ProcLoad(val name: String, val pct: Float)
 
 data class BatterySnapshot(
     val level: Int = 0,
@@ -147,6 +158,16 @@ data class PerfSnapshot(
     val npuName: String = "",
     val npuLoad: Int = -1,
     val npuFreqMhz: Int = -1,
+    val swapTotal: Long = 0,
+    val swapFree: Long = 0,
+    val gpuName: String = "",
+    val glEsVersion: String = "",
+    val vulkanVersion: String = "",
+    val socModel: String = "",
+    val minFreqsKhz: List<Long> = emptyList(),
+    val processes: List<ProcLoad> = emptyList(),
+    val storageUsed: Long = 0,
+    val storageTotal: Long = 0,
     val uptimeMs: Long = 0,
     val timestamp: Long = 0,
 )

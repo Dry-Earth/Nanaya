@@ -62,6 +62,7 @@ fun SettingsScreen(
     caps: Capabilities,
     onClose: () -> Unit,
     onChat: () -> Unit,
+    onOpenLineage: () -> Unit,
 ) {
     val context = LocalContext.current
     val chat by vm.chat.collectAsStateWithLifecycle()
@@ -101,6 +102,21 @@ fun SettingsScreen(
                 Text("权限、模型与本地数据", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
             }
             Pill("v${BuildConfig.VERSION_NAME}", color = Glass.Faint)
+        }
+
+        SectionHeader("LineageOS 接口", "直接读写系统服务")
+        GlassPanel(onClick = onOpenLineage) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("硬件与显示特性", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    Text(
+                        "lineagehardware 支持的触控、背光、色彩、防闪烁等开关",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+            }
         }
 
         SectionHeader("清理保护", "白名单应用不会被批量清缓存")

@@ -59,6 +59,8 @@ import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
 import io.github.dryearth.solidbutler.ui.screens.AssistantScreen
+import io.github.dryearth.solidbutler.ui.screens.AutostartScreen
+import io.github.dryearth.solidbutler.ui.screens.LineageScreen
 import io.github.dryearth.solidbutler.ui.screens.HomeScreen
 import io.github.dryearth.solidbutler.ui.screens.PerformanceScreen
 import io.github.dryearth.solidbutler.ui.screens.SecurityScreen
@@ -83,6 +85,7 @@ fun ButlerApp(vm: ButlerViewModel) {
     var tab by rememberSaveable { mutableStateOf("home") }
     var chat by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var sub by rememberSaveable { mutableStateOf<String?>(null) }
     val nav by vm.navigate.collectAsStateWithLifecycle()
 
     LaunchedEffect(nav) {
@@ -121,15 +124,26 @@ fun ButlerApp(vm: ButlerViewModel) {
                 onSettings = { settings = true },
             )
             Box(Modifier.weight(1f)) {
-                when (tab) {
-                    "home" -> HomeScreen(vm, onOpenTab = { tab = it }, onChat = { chat = true })
-                    "storage" -> StorageScreen(vm)
-                    "apps" -> AppsScreen(vm)
-                    "perf" -> PerformanceScreen(vm)
-                    "security" -> SecurityScreen(vm)
+                if (sub == "autostart") {
+                    AutostartScreen(vm, onBack = { sub = null })
+                } else if (sub == "lineage") {
+                    LineageScreen(onBack = { sub = null })
+                } else {
+                    when (tab) {
+                        "home" -> HomeScreen(
+                            vm,
+                            onOpenTab = { tab = it },
+                            onChat = { chat = true },
+                            onOpenAutostart = { sub = "autostart" },
+                        )
+                        "storage" -> StorageScreen(vm)
+                        "apps" -> AppsScreen(vm, onOpenAutostart = { sub = "autostart" })
+                        "perf" -> PerformanceScreen(vm)
+                        "security" -> SecurityScreen(vm)
+                    }
                 }
             }
-            BottomBar(current = tab, onSelect = { tab = it })
+            BottomBar(current = tab, onSelect = { sub = null; tab = it })
         }
     }
 
@@ -147,6 +161,7 @@ fun ButlerApp(vm: ButlerViewModel) {
                 caps = caps,
                 onClose = { settings = false },
                 onChat = { settings = false; chat = true },
+                onOpenLineage = { settings = false; sub = "lineage" },
             )
         }
     }

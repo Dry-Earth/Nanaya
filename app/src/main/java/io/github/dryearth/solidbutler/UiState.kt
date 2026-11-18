@@ -5,6 +5,7 @@ import io.github.dryearth.solidbutler.core.ChargingState
 import io.github.dryearth.solidbutler.data.AppDetail
 import io.github.dryearth.solidbutler.data.AppDrain
 import io.github.dryearth.solidbutler.data.AppEntry
+import io.github.dryearth.solidbutler.data.AutostartApp
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.PerfPreset
 import io.github.dryearth.solidbutler.data.PerfSnapshot
@@ -61,4 +62,15 @@ data class ChatUiState(
     val toast: String? = null,
     val modelLabel: String = "",
     val modelConfigured: Boolean = false,
+)
+
+
+data class AutostartUiState(
+    val loading: Boolean = true,
+    val items: List<AutostartApp> = emptyList(),
+    val query: String = "",
+    val onlyUser: Boolean = true,
+    val onlyEnabled: Boolean = false,
+    val busy: String? = null,
+    val toast: String? = null,
 )

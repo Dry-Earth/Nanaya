@@ -65,6 +65,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     private val _chat = MutableStateFlow(ChatUiState())
     val chat = _chat.asStateFlow()
 
+    private val _autostart = MutableStateFlow(AutostartUiState())
+    val autostart = _autostart.asStateFlow()
+
     private val _navigate = MutableStateFlow<String?>(null)
     val navigate = _navigate.asStateFlow()
 
@@ -540,6 +543,75 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearSecurityToast() = _security.update { it.copy(toast = null) }
+
+    // ---------------- autostart ----------------
+
+    fun loadAutostart() {
+        _autostart.update { it.copy(loading = true) }
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { appRepo.autostartApps() }
+            _autostart.update { it.copy(loading = false, items = list) }
+        }
+    }
+
+    fun setAutostartQuery(q: String) = _autostart.update { it.copy(query = q) }
+
+    fun setAutostartOnlyUser(v: Boolean) = _autostart.update { it.copy(onlyUser = v) }
+
+    fun setAutostartOnlyEnabled(v: Boolean) = _autostart.update { it.copy(onlyEnabled = v) }
+
+    fun toggleAutostartComponent(app: io.github.dryearth.solidbutler.data.AppEntry, comp: io.github.dryearth.solidbutler.data.BootComponent, enabled: Boolean) {
+        _autostart.update { it.copy(busy = comp.component) }
+        viewModelScope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) {
+                appRepo.setComponentEnabled(app.pkg, comp.component, enabled)
+            }
+            _autostart.update {
+                it.copy(
+                    busy = null,
+                    toast = if (ok) {
+                        if (enabled) "已启用 ${comp.shortName}" else "已禁用 ${comp.shortName}"
+                    } else "失败：$msg",
+                )
+            }
+            loadAutostart()
+        }
+    }
+
+    fun setAutostartBackground(app: io.github.dryearth.solidbutler.data.AppEntry, restrict: Boolean) {
+        _autostart.update { it.copy(busy = app.pkg) }
+        viewModelScope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) {
+                appRepo.restrictBackground(app.pkg, app.uid, restrict)
+            }
+            _autostart.update {
+                it.copy(
+                    busy = null,
+                    toast = if (ok) {
+                        if (restrict) "已限制 ${app.label} 后台" else "已恢复 ${app.label} 后台"
+                    } else "失败：$msg",
+                )
+            }
+            loadAutostart()
+        }
+    }
+
+    fun setAutostartStandby(app: io.github.dryearth.solidbutler.data.AppEntry, bucket: String) {
+        _autostart.update { it.copy(busy = app.pkg) }
+        viewModelScope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) {
+                appRepo.setStandbyBucket(app.pkg, bucket)
+            }
+            _autostart.update {
+                it.copy(
+                    busy = null,
+                    toast = if (ok) "${app.label} 已设为 $bucket" else "失败：$msg",
+                )
+            }
+        }
+    }
+
+    fun clearAutostartToast() = _autostart.update { it.copy(toast = null) }
 
     // ---------------- AI ----------------
 

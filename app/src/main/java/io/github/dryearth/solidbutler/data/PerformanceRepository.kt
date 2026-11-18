@@ -20,17 +20,21 @@ class PerformanceRepository(private val context: Context) {
     private var prevRx = 0L
     private var prevTx = 0L
     private var prevNetTs = 0L
+    private var lastProcAt = 0L
+    private var lastProcList: List<ProcLoad> = emptyList()
 
     fun snapshot(): PerfSnapshot {
         val cpu = readCpu()
         val am = context.getSystemService(ActivityManager::class.java)
         val mi = ActivityManager.MemoryInfo()
         am.getMemoryInfo(mi)
-        val (gpuLoad, gpuFreq, gpuMax) = readGpu()
+        val (gpuLoad, gpuFreq, gpuMax, gpuName) = readGpu()
         val (npuName, npuLoad, npuFreq) = readNpu()
         val temps = readTemps()
         val (rx, tx) = readNetwork()
         val battery = readBattery()
+        val (swapTotal, swapFree) = readSwap()
+        val storage = io.github.dryearth.solidbutler.core.Shell.storageStats()
         return PerfSnapshot(
             cpu = cpu,
             ramUsed = mi.totalMem - mi.availMem,
@@ -42,6 +46,16 @@ class PerformanceRepository(private val context: Context) {
             npuName = npuName,
             npuLoad = npuLoad,
             npuFreqMhz = npuFreq,
+            swapTotal = swapTotal,
+            swapFree = swapFree,
+            gpuName = gpuName,
+            glEsVersion = glEsVersion(),
+            vulkanVersion = vulkanVersion(),
+            socModel = runCatching { Build.SOC_MODEL }.getOrDefault(Build.HARDWARE),
+            minFreqsKhz = cpu.minFreqsKhz,
+            processes = readProcesses(),
+            storageUsed = storage.second,
+            storageTotal = storage.first,
             temps = temps,
             rxBps = rx,
             txBps = tx,
@@ -69,8 +83,9 @@ class PerformanceRepository(private val context: Context) {
         prevCpu = now
         val freqs = (0 until cores).map { sysLong("/sys/devices/system/cpu/cpu$it/cpufreq/scaling_cur_freq") }
         val maxFreqs = (0 until cores).map { sysLong("/sys/devices/system/cpu/cpu$it/cpufreq/cpuinfo_max_freq").let { v -> if (v <= 0L) sysLong("/sys/devices/system/cpu/cpu$it/cpufreq/scaling_max_freq") else v } }
+        val minFreqs = (0 until cores).map { sysLong("/sys/devices/system/cpu/cpu$it/cpufreq/cpuinfo_min_freq").let { v -> if (v <= 0L) sysLong("/sys/devices/system/cpu/cpu$it/cpufreq/scaling_min_freq") else v } }
         val governor = readText("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor") ?: ""
-        return CpuSample(load, perCore, freqs, maxFreqs, governor, cores)
+        return CpuSample(load, perCore, freqs, maxFreqs, governor, cores, minFreqs)
     }
 
     private fun readProcStat(): Map<String, LongArray> {
@@ -101,7 +116,7 @@ class PerformanceRepository(private val context: Context) {
         return ((dt - di).toFloat() / dt.toFloat() * 100f).coerceIn(0f, 100f)
     }
 
-    private fun readGpu(): Triple<Int, Int, Int> {
+    private fun readGpu(): Quad<Int, Int, Int, String> {
         val kgsl = "/sys/class/kgsl/kgsl-3d0"
         var load = sysInt("$kgsl/gpu_busy_percentage", -1)
         var freq = (sysLong("$kgsl/gpuclk") / 1_000_000L).toInt()
@@ -117,7 +132,64 @@ class PerformanceRepository(private val context: Context) {
         if (max <= 0) {
             max = (sysLong("/sys/class/misc/mali0/device/max_freq") / 1_000_000L).toInt()
         }
-        return Triple(load, freq, max)
+        val name = readText("$kgsl/gpu_model")
+            ?: readText("$kgsl/devfreq/name")
+            ?: readText("/sys/class/kgsl/kgsl-3d0/device/gpu_model")
+            ?: ""
+        return Quad(load, freq, max, name)
+    }
+
+    private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
+    private fun readSwap(): Pair<Long, Long> {
+        var total = 0L
+        var free = 0L
+        runCatching {
+            for (line in File("/proc/meminfo").readLines()) {
+                when {
+                    line.startsWith("SwapTotal:") -> total = line.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                    line.startsWith("SwapFree:") -> free = line.filter { it.isDigit() }.toLongOrNull() ?: 0L
+                }
+            }
+        }
+        return total * 1024 to free * 1024
+    }
+
+    private fun glEsVersion(): String = runCatching {
+        val am = context.getSystemService(ActivityManager::class.java)
+        am.deviceConfigurationInfo.glEsVersion
+    }.getOrDefault("")
+
+    private fun vulkanVersion(): String = runCatching {
+        val info = context.packageManager.systemAvailableFeatures
+            ?.firstOrNull { it.name == "android.hardware.vulkan.version" }
+        val v = info?.version ?: 0
+        if (v == 0) "" else {
+            val major = v shr 22
+            val minor = (v shr 12) and 0x3ff
+            val patch = v and 0xfff
+            "$major.$minor.$patch"
+        }
+    }.getOrDefault("")
+
+    private fun readProcesses(): List<ProcLoad> {
+        val now = System.currentTimeMillis()
+        if (now - lastProcAt < 10_000) return lastProcList
+        lastProcAt = now
+        if (!Shell.isPrivileged()) return lastProcList
+        val r = Shell.run("dumpsys cpuinfo", 15_000)
+        if (!r.ok) return lastProcList
+        val regex = Regex("""^\s*([0-9.]+)%\s+\d+/([^\s:]+)""")
+        val map = HashMap<String, Float>()
+        for (line in r.text.lineSequence()) {
+            val m = regex.find(line) ?: continue
+            val pct = m.groupValues[1].toFloatOrNull() ?: continue
+            val name = m.groupValues[2]
+            map[name] = (map[name] ?: 0f) + pct
+        }
+        lastProcList = map.entries.sortedByDescending { it.value }.take(10)
+            .map { ProcLoad(it.key, it.value) }
+        return lastProcList
     }
 
     private fun readNpu(): Triple<String, Int, Int> {

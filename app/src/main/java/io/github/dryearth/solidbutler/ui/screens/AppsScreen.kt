@@ -49,6 +49,7 @@ import io.github.dryearth.solidbutler.AppFilter
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.AppDetail
 import io.github.dryearth.solidbutler.data.AppEntry
+import io.github.dryearth.solidbutler.core.bytes
 import io.github.dryearth.solidbutler.data.BootComponent
 import io.github.dryearth.solidbutler.data.PermissionRow
 import io.github.dryearth.solidbutler.ui.components.ActionButton
@@ -63,7 +64,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppsScreen(vm: ButlerViewModel) {
+fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit) {
     val state by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
     ToastEffect(state.toast) { vm.clearAppsToast() }
@@ -129,6 +130,26 @@ fun AppsScreen(vm: ButlerViewModel) {
                         selected = state.filter == f,
                         onClick = { vm.setAppFilter(f) },
                     )
+                }
+            }
+        }
+        item {
+            GlassPanel(
+                corner = 16.dp,
+                padding = PaddingValues(14.dp),
+                tint = Glass.Amber,
+                onClick = onOpenAutostart,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("自启与后台管理", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "开机接收器、链式唤醒、待机分组与后台限制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
                 }
             }
         }
@@ -322,6 +343,26 @@ private fun AppDetailSheet(vm: ButlerViewModel, detail: AppDetail, privileged: B
                     style = MaterialTheme.typography.labelSmall,
                     color = Glass.Faint,
                 )
+            }
+        }
+
+        item {
+            GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp)) {
+                Text("24 小时流量", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                if (detail.wifiBytes >= 0 || detail.cellBytes >= 0) {
+                    Text(
+                        "Wi-Fi ${if (detail.wifiBytes >= 0) detail.wifiBytes.bytes() else "—"} · " +
+                            "移动数据 ${if (detail.cellBytes >= 0) detail.cellBytes.bytes() else "—"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Glass.Text,
+                    )
+                } else {
+                    Text(
+                        "授予「使用情况访问」后显示 NetworkStats 统计",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
             }
         }
 

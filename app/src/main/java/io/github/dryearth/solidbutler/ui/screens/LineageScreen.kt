@@ -1,0 +1,226 @@
+package io.github.dryearth.solidbutler.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import io.github.dryearth.solidbutler.core.LineageHardware
+import io.github.dryearth.solidbutler.core.LineageHardwareFeature
+import io.github.dryearth.solidbutler.core.LineageHealth
+import io.github.dryearth.solidbutler.ui.components.EmptyHint
+import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.Pill
+import io.github.dryearth.solidbutler.ui.components.SectionHeader
+import io.github.dryearth.solidbutler.ui.theme.Glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private data class FeatureState(val feature: LineageHardwareFeature, val enabled: Boolean)
+
+@Composable
+fun LineageScreen(onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(true) }
+    var features by remember { mutableStateOf<List<FeatureState>>(emptyList()) }
+    var toast by remember { mutableStateOf<String?>(null) }
+
+    val services = remember {
+        listOf(
+            "lineagehealth" to "充电控制 / 快充",
+            "lineagehardware" to "显示与触控特性",
+            "livedisplay" to "LiveDisplay 色彩",
+            "trust" to "Trust 安全提示",
+            "profile" to "系统情景模式",
+        ).map { it.first to (it.second to hasService(it.first)) }
+    }
+
+    LaunchedEffect(Unit) {
+        val loaded = withContext(Dispatchers.IO) {
+            LineageHardware.supported().map { f ->
+                FeatureState(f, if (f.toggleable) LineageHardware.get(f.bit) else false)
+            }
+        }
+        features = loaded
+        loading = false
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x0FFFFFFF))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("LineageOS 接口", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
+                    Text(
+                        "直接读写系统服务，不做模拟开关",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+            }
+        }
+
+        item {
+            GlassPanel(tint = Glass.Accent) {
+                SectionHeader("已探测到的服务")
+                Spacer(Modifier.height(8.dp))
+                services.forEach { (name, info) ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Text,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            info.first,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Glass.Faint,
+                            modifier = Modifier.weight(1.2f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Pill(
+                            if (info.second) "已连接" else "未提供",
+                            selected = info.second,
+                            color = if (info.second) Glass.Mint else Glass.Faint,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "lineagehealth 用于充电上限与快充；lineagehardware 用于下列开关。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
+        }
+
+        item {
+            SectionHeader(
+                "硬件特性",
+                if (loading) "读取中…" else "只显示这台设备真正支持的项",
+            )
+        }
+
+        if (!loading && features.isEmpty()) {
+            item {
+                GlassPanel {
+                    Text(
+                        "没有可用的 lineagehardware 特性。可能是非 LineageOS ROM，或该机型没有注册这些节点。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+            }
+        }
+
+        items(features.size) { index ->
+            val state = features[index]
+            val f = state.feature
+            GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.label, style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(f.description, style = MaterialTheme.typography.labelSmall, color = Glass.Muted)
+                    }
+                    if (f.toggleable) {
+                        Pill(
+                            if (state.enabled) "已开启" else "已关闭",
+                            selected = state.enabled,
+                            color = if (state.enabled) Glass.Mint else Glass.Faint,
+                            onClick = {
+                                scope.launch {
+                                    val ok = withContext(Dispatchers.IO) {
+                                        LineageHardware.set(f.bit, !state.enabled)
+                                    }
+                                    if (ok) {
+                                        features = features.map {
+                                            if (it.feature.bit == f.bit) it.copy(enabled = !state.enabled) else it
+                                        }
+                                    } else {
+                                        toast = "这台设备拒绝了 ${f.label} 的写入"
+                                    }
+                                }
+                            },
+                        )
+                    } else {
+                        Pill("系统设置", color = Glass.Faint)
+                    }
+                }
+            }
+        }
+
+        item {
+            GlassPanel {
+                Text(
+                    "这些开关来自 ILineageHardwareService.get/set(feature, enable)。部分特性（色彩校准、显示模式）只有系统设置能改，这里只做能力展示。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
+        }
+        toast?.let { text ->
+            item {
+                GlassPanel(tint = Glass.Amber) {
+                    Text(text, style = MaterialTheme.typography.bodySmall, color = Glass.Amber)
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+private fun hasService(name: String): Boolean = runCatching {
+    val sm = Class.forName("android.os.ServiceManager")
+    val getService = sm.getDeclaredMethod("getService", String::class.java)
+    getService.invoke(null, name) != null
+}.getOrDefault(false)
