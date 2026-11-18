@@ -362,6 +362,46 @@ fun SettingsScreen(
             )
         }
 
+        SectionHeader("无线调试 / ADB", "通过 Shizuku 的 UserService 执行 shell")
+        GlassPanel {
+            Text(
+                "Android 11+ 可在开发者选项里开启无线调试并配对，然后用 Shizuku 的无线调试启动服务。汐不保存 ADB 密钥，也不内置 ADB 客户端；shell 权限统一走 Shizuku UserService。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    "开发者选项",
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                        }
+                    },
+                )
+                ActionButton(
+                    "无线调试",
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        val wireless = Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS")
+                        if (wireless.resolveActivity(context.packageManager) != null) {
+                            runCatching { context.startActivity(wireless) }
+                        } else {
+                            runCatching {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+                            }
+                        }
+                    },
+                )
+                ActionButton(
+                    "打开 Shizuku",
+                    modifier = Modifier.weight(1f),
+                    onClick = { ShizukuHelper.openManager(context) },
+                )
+            }
+        }
+
         SectionHeader("应用锁", "本地 PIN · 不上传")
         GlassPanel {
             Row(verticalAlignment = Alignment.CenterVertically) {
