@@ -20,7 +20,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         vectorDrawables { useSupportLibrary = true }
-        resValue("string", "app_name", "澄明管家")
+        resValue("string", "app_name", "守岸人")
     }
 
     signingConfigs {
