@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.service.voice.VoiceInteractionService
 import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
+import android.view.View
 import io.github.dryearth.solidbutler.ui.AssistLaunchActivity
 
 /**
@@ -42,6 +43,8 @@ private class AssistVoiceSession(context: VoiceInteractionSessionService) :
         super.onCreate()
         setUiEnabled(false)
     }
+
+    override fun onCreateContentView(): View = View(context)
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
