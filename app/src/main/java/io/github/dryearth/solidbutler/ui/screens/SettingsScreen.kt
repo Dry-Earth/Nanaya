@@ -279,6 +279,12 @@ fun SettingsScreen(
                         Uri.parse("package:${context.packageName}"),
                     ),
                     Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                    Intent().setComponent(
+                        android.content.ComponentName(
+                            "com.android.settings",
+                            "com.android.settings.Settings\$HighPowerApplicationsActivity",
+                        )
+                    ),
                     Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.parse("package:${context.packageName}"),
@@ -436,9 +442,11 @@ fun SettingsScreen(
 
 private fun openFirst(context: android.content.Context, vararg intents: Intent) {
     for (intent in intents) {
-        if (intent.resolveActivity(context.packageManager) != null) {
-            runCatching { context.startActivity(intent) }
+        try {
+            context.startActivity(intent)
             return
+        } catch (_: Exception) {
+            // try the next fallback
         }
     }
     runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }

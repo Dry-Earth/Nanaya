@@ -1,6 +1,14 @@
 package io.github.dryearth.solidbutler
 
 import android.app.Application
+import android.app.NotificationManager
+import android.content.Intent
+import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dryearth.solidbutler.ai.AiClient
@@ -811,6 +819,13 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 title = "开关 LineageOS 特性",
                 detail = "${args["feature"] ?: "特性"} → ${if (args["enabled"] != "false") "开启" else "关闭"}（lineagehardware）",
             )
+            "device_state" -> action.copy(title = "读取设备状态", detail = "电量、亮度、音量、响铃、网络省电")
+            "set_brightness" -> action.copy(title = "设置亮度", detail = "亮度 ${args["percent"] ?: "50"}%")
+            "set_screen_timeout" -> action.copy(title = "设置息屏时间", detail = "${args["seconds"] ?: "60"} 秒")
+            "set_volume" -> action.copy(title = "设置媒体音量", detail = "${args["percent"] ?: "50"}%")
+            "set_ringer" -> action.copy(title = "设置响铃模式", detail = args["mode"] ?: "normal")
+            "open_settings" -> action.copy(title = "打开系统设置", detail = args["page"] ?: "settings")
+            "launch_app" -> action.copy(title = "启动应用", detail = name)
             "standby" -> action.copy(
                 title = "设置待机分组",
                 detail = "$name → ${args["bucket"] ?: "restricted"}（am set-standby-bucket）",
@@ -901,6 +916,48 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 val ok = withContext(Dispatchers.IO) { LineageHardware.set(feature.bit, enabled) }
                 if (ok) "已${if (enabled) "开启" else "关闭"} ${feature.label}。" else "设备拒绝了这项写入。"
             }
+            "device_state" -> deviceState()
+            "set_brightness" -> {
+                val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(1, 100)
+                val value = percent * 255 / 100
+                val r = withContext(Dispatchers.IO) { Shell.run("settings put system screen_brightness $value") }
+                if (r.ok) "亮度已设为 $percent%。" else "需要 Shizuku 或 Root 才能改系统亮度。"
+            }
+            "set_screen_timeout" -> {
+                val sec = (args["seconds"]?.toIntOrNull() ?: 60).coerceIn(15, 1800)
+                val r = withContext(Dispatchers.IO) {
+                    Shell.run("settings put system screen_off_timeout ${sec * 1000}")
+                }
+                if (r.ok) "息屏时间已设为 $sec 秒。" else "需要 Shizuku 或 Root。"
+            }
+            "set_volume" -> {
+                val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(0, 100)
+                val am = getApplication<Application>().getSystemService(AudioManager::class.java)
+                val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val ok = runCatching {
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, max * percent / 100, 0)
+                }.isSuccess
+                if (ok) "媒体音量已设为 $percent%。" else "系统拒绝了音量修改。"
+            }
+            "set_ringer" -> {
+                val am = getApplication<Application>().getSystemService(AudioManager::class.java)
+                val mode = when ((args["mode"] ?: "").lowercase()) {
+                    "silent", "静音" -> AudioManager.RINGER_MODE_SILENT
+                    "vibrate", "振动" -> AudioManager.RINGER_MODE_VIBRATE
+                    else -> AudioManager.RINGER_MODE_NORMAL
+                }
+                val ok = runCatching { am.ringerMode = mode }.isSuccess
+                if (ok) "响铃模式已切换。" else "没有勿扰访问权限，系统拒绝了切换。"
+            }
+            "open_settings" -> openSettingsPage(args["page"] ?: "settings")
+            "launch_app" -> {
+                val app = resolveApp(args["package"] ?: args["app"] ?: "") ?: return "没有找到该应用"
+                val intent = getApplication<Application>().packageManager.getLaunchIntentForPackage(app.pkg)
+                    ?: return "这个应用没有可启动的入口"
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                runCatching { getApplication<Application>().startActivity(intent) }
+                "已启动 ${app.label}。"
+            }
             "standby" -> {
                 val app = resolveApp(args["package"] ?: args["app"] ?: "") ?: return "没有找到该应用"
                 val bucket = args["bucket"] ?: "restricted"
@@ -942,6 +999,55 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun deviceState(): String {
+        val app = getApplication<Application>()
+        val bm = app.getSystemService(BatteryManager::class.java)
+        val am = app.getSystemService(AudioManager::class.java)
+        val nm = app.getSystemService(NotificationManager::class.java)
+        val pm = app.getSystemService(PowerManager::class.java)
+        val cm = app.getSystemService(ConnectivityManager::class.java)
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        val battery = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val charging = runCatching { bm.isCharging }.getOrDefault(false)
+        val brightness = runCatching {
+            Settings.System.getInt(app.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+        }.getOrDefault(-1)
+        val volume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val vmax = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val ringer = when (am.ringerMode) {
+            AudioManager.RINGER_MODE_SILENT -> "静音"
+            AudioManager.RINGER_MODE_VIBRATE -> "振动"
+            else -> "正常"
+        }
+        val wifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val cell = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        return "电量 $battery%${if (charging) " · 充电中" else ""}；亮度 $brightness/255；" +
+            "媒体音量 $volume/$vmax；响铃 $ringer；省电模式 ${pm.isPowerSaveMode}；" +
+            "Wi-Fi ${if (wifi) "已连接" else "未连接"}；移动数据 ${if (cell) "已连接" else "未连接"}；" +
+            "勿扰过滤 ${nm.currentInterruptionFilter}；Root=${Shell.rootReady}；Shizuku=${Shell.shizukuReady}"
+    }
+
+    private fun openSettingsPage(page: String): String {
+        val action = when (page.lowercase()) {
+            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+            "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+            "display" -> Settings.ACTION_DISPLAY_SETTINGS
+            "sound" -> Settings.ACTION_SOUND_SETTINGS
+            "apps" -> Settings.ACTION_APPLICATION_SETTINGS
+            "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
+            "notifications" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+            "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+            else -> Settings.ACTION_SETTINGS
+        }
+        val ok = runCatching {
+            getApplication<Application>().startActivity(
+                Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.isSuccess
+        return if (ok) "已打开系统设置：$page。" else "系统没有打开这个设置页。"
+    }
+
     private suspend fun buildSystemPrompt(): String {
         val c = _caps.value
         val p = _perf.value
@@ -977,6 +1083,13 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 11. {"type":"lineage_feature","args":{"feature":"防闪烁/色彩增强/自适应背光等","enabled":"true"}}
 12. {"type":"standby","args":{"package":"应用名或包名","bucket":"restricted|rare|frequent|active"}}
 13. {"type":"open_screen","args":{"screen":"home|storage|apps|perf|security"}}
+14. {"type":"device_state","args":{}}
+15. {"type":"set_brightness","args":{"percent":"50"}}
+16. {"type":"set_screen_timeout","args":{"seconds":"60"}}
+17. {"type":"set_volume","args":{"percent":"50"}}
+18. {"type":"set_ringer","args":{"mode":"normal|silent|vibrate"}}
+19. {"type":"open_settings","args":{"page":"wifi|bluetooth|battery|display|sound|apps|accessibility|notifications|location"}}
+20. {"type":"launch_app","args":{"package":"应用名或包名"}}
 
 输出规则：
 - 只输出一个 JSON 对象，不要 Markdown，不要代码围栏，不要额外文字。

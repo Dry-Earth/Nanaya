@@ -1,0 +1,417 @@
+package io.github.dryearth.solidbutler.service
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Intent
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.IBinder
+import android.provider.Settings
+import android.view.Gravity
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.OpenInFull
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import io.github.dryearth.solidbutler.ActionState
+import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.MainActivity
+import io.github.dryearth.solidbutler.data.ChatMessage
+import io.github.dryearth.solidbutler.data.ChatRole
+import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
+
+/**
+ * Floating assistant. The window is a real application overlay, so it can
+ * appear above another app instead of replacing the current screen.
+ *
+ * Everything is drawn inside a compact liquid-glass panel; the window asks
+ * the system for cross-window background blur on Android 12+.
+ */
+class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner {
+
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    private val savedStateController = SavedStateRegistryController.create(this)
+    private val store = ViewModelStore()
+    private val vm by lazy { ButlerViewModel(application) }
+    private var windowManager: WindowManager? = null
+    private var view: ComposeView? = null
+
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
+    override val viewModelStore: ViewModelStore get() = store
+
+    override fun onCreate() {
+        super.onCreate()
+        savedStateController.performRestore(null)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        createChannel()
+        startForeground(NOTIFICATION_ID, notification())
+        showWindow()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (view == null) showWindow()
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        removeWindow()
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        store.clear()
+        super.onDestroy()
+    }
+
+    private fun showWindow() {
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
+        val wm = getSystemService(WindowManager::class.java)
+        windowManager = wm
+        val compose = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(this@AssistOverlayService)
+            setViewTreeSavedStateRegistryOwner(this@AssistOverlayService)
+            setViewTreeViewModelStoreOwner(this@AssistOverlayService)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                SolidButlerTheme {
+                    OverlayAssistant(
+                        vm = vm,
+                        onClose = { stopSelf() },
+                        onExpand = { openFullChat() },
+                    )
+                }
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM
+            y = (20 * resources.displayMetrics.density).toInt()
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            if (Build.VERSION.SDK_INT >= 31) blurBehindRadius = 70
+        }
+        runCatching { wm.addView(compose, params) }
+        view = compose
+        compose.requestFocus()
+        compose.post {
+            getSystemService(InputMethodManager::class.java)
+                ?.showSoftInput(compose, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun removeWindow() {
+        val v = view ?: return
+        runCatching { windowManager?.removeView(v) }
+        view = null
+    }
+
+    private fun openFullChat() {
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .putExtra("open_chat", true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            )
+        }
+        stopSelf()
+    }
+
+    private fun createChannel() {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "悬浮助手", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "数字助理悬浮窗"
+                setShowBadge(false)
+            }
+        )
+    }
+
+    private fun notification(): Notification =
+        Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("汐 · 悬浮助手")
+            .setContentText("数字助理悬浮窗正在运行")
+            .setOngoing(true)
+            .build()
+
+    companion object {
+        private const val CHANNEL_ID = "xi_assist_overlay"
+        private const val NOTIFICATION_ID = 12003
+
+        fun show(context: android.content.Context) {
+            val intent = Intent(context, AssistOverlayService::class.java)
+            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
+            else context.startService(intent)
+        }
+    }
+}
+
+@Composable
+private fun OverlayAssistant(
+    vm: ButlerViewModel,
+    onClose: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    val state by vm.chat.collectAsStateWithLifecycle()
+    var input by remember { mutableStateOf("") }
+    val shape = RoundedCornerShape(30.dp)
+
+    Box(Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                .clip(shape)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xE6FFFFFF),
+                            Color(0xB8F4F8FF),
+                            Color(0x99E7EEFF),
+                        )
+                    )
+                )
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF), Color(0x33FFFFFF))
+                    ),
+                    shape,
+                )
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape)
+                        .background(Color(0x220B1220)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFF33406A), modifier = Modifier.size(17.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "汐",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color(0xFF0B1220),
+                    )
+                    Text(
+                        if (state.modelConfigured) "悬浮助手 · 直接对话" else "悬浮助手 · 尚未配置模型",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0x990B1220),
+                    )
+                }
+                Icon(
+                    Icons.Rounded.OpenInFull,
+                    contentDescription = "展开",
+                    tint = Color(0x990B1220),
+                    modifier = Modifier.size(19.dp).clickable { onExpand() },
+                )
+                Spacer(Modifier.width(12.dp))
+                Icon(
+                    Icons.Rounded.Close,
+                    contentDescription = "关闭",
+                    tint = Color(0x990B1220),
+                    modifier = Modifier.size(19.dp).clickable { onClose() },
+                )
+            }
+
+            if (state.messages.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                LazyColumn(
+                    Modifier.heightIn(max = 330.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.messages.takeLast(8), key = { it.id }) { msg ->
+                        OverlayBubble(vm, msg)
+                    }
+                }
+            } else {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "直接说或输入。要语音、操作确认和完整历史时点右上角展开。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0x990B1220),
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                        .background(Color(0x330B1220))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    if (input.isEmpty()) {
+                        Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x660B1220))
+                    }
+                    BasicTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        textStyle = TextStyle(color = Color(0xFF0B1220), fontSize = 13.sp),
+                        cursorBrush = SolidColor(Color(0xFF33406A)),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape)
+                        .background(if (input.isBlank()) Color(0x220B1220) else Color(0xFF0B1220))
+                        .clickable(enabled = input.isNotBlank()) {
+                            val text = input.trim()
+                            input = ""
+                            if (text.isNotEmpty()) vm.sendChat(text)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Send,
+                        contentDescription = "发送",
+                        tint = if (input.isBlank()) Color(0x660B1220) else Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "点展开进入完整对话 / 语音",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0x660B1220),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "展开",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF33406A),
+                    modifier = Modifier.clickable { onExpand() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
+    val isUser = msg.role == ChatRole.USER
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (isUser) Color(0x1F0B1220) else Color(0x12FFFFFF))
+                .padding(10.dp),
+        ) {
+            Text(
+                msg.text,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF0B1220),
+            )
+            val action = msg.action
+            if (action != null && msg.actionState == ActionState.PENDING) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    action.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF33406A),
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "执行",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF0B1220),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x220B1220))
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .clickable { vm.confirmAction(msg.id) },
+                    )
+                    Text(
+                        "取消",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0x990B1220),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x110B1220))
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .clickable { vm.rejectAction(msg.id) },
+                    )
+                }
+            }
+        }
+    }
+}

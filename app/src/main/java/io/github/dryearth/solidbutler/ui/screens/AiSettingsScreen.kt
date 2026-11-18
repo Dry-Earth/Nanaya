@@ -2,6 +2,7 @@ package io.github.dryearth.solidbutler.ui.screens
 
 import android.app.role.RoleManager
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -194,6 +195,22 @@ fun AiSettingsScreen(
             )
         }
 
+        SectionHeader("可调用工具", "模型可以直接执行或先征求确认")
+        GlassPanel {
+            Text(
+                "设备状态、亮度、息屏时间、媒体音量、响铃/勿扰、打开系统设置、启动应用；" +
+                    "以及原有的存储扫描/清理、冻结与后台限制、权限收回、充电上限、自启组件、待机分组、防火墙、域名过滤、LineageOS 硬件特性。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "涉及删除、冻结、断网的动作仍会先弹出确认卡片。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
         SectionHeader("系统数字助理", "长按 Home / 电源键唤起汐")
         GlassPanel {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -226,6 +243,40 @@ fun AiSettingsScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
+        }
+
+        SectionHeader("悬浮助手", "数字助理以小窗显示，不切走当前应用")
+        GlassPanel {
+            val canOverlay = Settings.canDrawOverlays(context)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (canOverlay) "悬浮窗权限已授予" else "需要「显示在其他应用上层」",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Glass.Text,
+                    )
+                    Text(
+                        "开启后，数字助理会以液态玻璃小窗浮在当前应用上方；关闭时退回全屏对话。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Pill(
+                    if (canOverlay) "已开启" else "去开启",
+                    selected = canOverlay,
+                    color = if (canOverlay) Glass.Mint else Glass.Accent,
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}"),
+                                )
+                            )
+                        }
+                    },
+                )
+            }
         }
 
         GlassPanel {

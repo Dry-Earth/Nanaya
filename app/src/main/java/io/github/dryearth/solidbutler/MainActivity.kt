@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        assistRequest = intent?.action == Intent.ACTION_ASSIST
+        assistRequest = intent?.action == Intent.ACTION_ASSIST || intent?.getBooleanExtra("open_chat", false) == true
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
             navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
