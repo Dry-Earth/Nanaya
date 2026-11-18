@@ -101,24 +101,27 @@ class StorageRepository(
         progress("统计应用缓存", 0.55f)
         val appCaches = collectAppCaches()
 
-        val residualApks = files.filter { it.ext == "apk" }
-            .map {
-                val pkg = runCatching { pm.getPackageArchiveInfo(it.file.absolutePath, 0)?.packageName }.getOrNull()
-                val installed = pkg != null && runCatching { pm.getPackageInfo(pkg, 0); true }.getOrDefault(false)
-                StorageItem(
-                    path = it.file.absolutePath,
-                    bytes = it.size,
-                    label = it.file.name,
-                    kind = StorageKind.APK,
-                    detail = when {
-                        pkg == null -> "无法解析，疑似残留"
-                        installed -> "已安装：$pkg"
-                        else -> "残留：$pkg"
-                    },
-                ) to installed
-            }
-            .filter { !it.second }
-            .map { it.first }
+        val installedPkgs = runCatching {
+            pm.getInstalledPackages(0).map { it.packageName }.toHashSet()
+        }.getOrDefault(hashSetOf())
+
+        val apkItems = files.filter { it.ext == "apk" }.map { f ->
+            val pkg = runCatching {
+                pm.getPackageArchiveInfo(f.file.absolutePath, 0)?.packageName
+            }.getOrNull()
+            val installed = pkg != null && pkg in installedPkgs
+            StorageItem(
+                path = f.file.absolutePath,
+                bytes = f.size,
+                label = f.file.name,
+                kind = StorageKind.APK,
+                detail = when {
+                    pkg == null -> "无法解析包名，可能是损坏的安装包"
+                    installed -> "已安装：$pkg · 删除安装包不会卸载应用"
+                    else -> "未安装：$pkg"
+                },
+            )
+        }.sortedByDescending { it.bytes }
 
         val logs = files.filter {
             it.ext == "log" || it.file.name.contains(".log.", true) || it.ext == "dmp"
@@ -144,56 +147,92 @@ class StorageRepository(
 
         progress("查找重复文件", 0.68f)
         val duplicates = findDuplicates(files.filter { it.size >= 1024 * 1024 }, progress)
+
+        progress("检查卸载残留", 0.94f)
+        val (leftoverBytes, leftoverItems) = findLeftovers(installedPkgs)
         val duplicateWaste = duplicates.sumOf { it.size * (it.files.size - 1) }
 
         val cacheBytes = appCaches.sumOf { it.bytes }
-        val categoryList = listOf(
-            StorageCategory(
-                "cache", "应用缓存", "StorageStats 官方统计 · 共 ${appCaches.count { it.bytes > 0 }} 个应用",
-                cacheBytes, appCaches.count { it.bytes > 0 },
-                appCaches.filter { it.bytes > 0 }.map {
-                    StorageItem("", it.bytes, it.label, StorageKind.CACHE, it.pkg)
-                },
-                cleanable = true,
-            ),
-            StorageCategory(
-                "apk", "残留安装包", "未安装或无法解析的 APK",
-                residualApks.sumOf { it.bytes }, residualApks.size,
-                residualApks.sortedByDescending { it.bytes }.take(300),
-            ),
-            StorageCategory(
-                "log", "日志与崩溃转储", "*.log / *.dmp",
-                logs.sumOf { it.size }, logs.size,
-                logs.take(300).map { StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.LOG) },
-            ),
-            StorageCategory(
-                "thumb", "缩略图", "相册/视频缓存缩略图",
-                thumbs.sumOf { it.size }, thumbs.size,
-                thumbs.sortedByDescending { it.size }.take(300).map {
-                    StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.THUMBNAIL)
-                },
-            ),
-            StorageCategory(
-                "old_download", "30 天前的下载", "Download/ 目录",
-                oldDownloads.sumOf { it.size }, oldDownloads.size,
-                oldDownloads.take(300).map {
-                    StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.DOWNLOAD)
-                },
-            ),
-            StorageCategory(
-                "empty", "空文件夹", "可安全移除的占位目录",
-                0, emptyDirs.size, emptyDirs.take(400), cleanable = true,
-            ),
-            StorageCategory(
-                "large", "大型文件（> 50MB）", "自己决定要不要动",
-                large.sumOf { it.bytes }, large.size, large, cleanable = false,
-            ),
-            StorageCategory(
-                "dup", "重复文件（可释放）", "${duplicates.size} 组 · 保留每组一份",
-                duplicateWaste, duplicates.sumOf { it.files.size - 1 },
-                emptyList(), cleanable = true,
-            ),
-        )
+        val categoryList = buildList {
+            add(
+                StorageCategory(
+                    "cache", "应用缓存", "StorageStats 官方统计 · 只清 cache 目录",
+                    cacheBytes, appCaches.count { it.bytes > 0 },
+                    appCaches.filter { it.bytes > 0 }.map {
+                        StorageItem("", it.bytes, it.label, StorageKind.CACHE, it.pkg)
+                    },
+                    cleanable = true,
+                )
+            )
+            add(
+                StorageCategory(
+                    "apk", "安装包（APK）",
+                    "${apkItems.count { !(it.detail?.startsWith("已安装") ?: false) }} 个未安装 · 删除不会卸载应用",
+                    apkItems.sumOf { it.bytes }, apkItems.size,
+                    apkItems.take(300),
+                    requiresConfirm = true,
+                    warning = "安装包属于你的文件。删除后需要重新下载；应用本身不会被卸载。",
+                )
+            )
+            add(
+                StorageCategory(
+                    "log", "日志与崩溃转储", "*.log / *.dmp",
+                    logs.sumOf { it.size }, logs.size,
+                    logs.take(300).map { StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.LOG) },
+                )
+            )
+            add(
+                StorageCategory(
+                    "thumb", "缩略图", "相册/视频缓存缩略图，可安全重建",
+                    thumbs.sumOf { it.size }, thumbs.size,
+                    thumbs.sortedByDescending { it.size }.take(300).map {
+                        StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.THUMBNAIL)
+                    },
+                )
+            )
+            add(
+                StorageCategory(
+                    "old_download", "用户下载（30 天前）", "Download/ 目录 · 可能是模型、素材或离线资源",
+                    oldDownloads.sumOf { it.size }, oldDownloads.size,
+                    oldDownloads.take(300).map {
+                        StorageItem(it.file.absolutePath, it.size, it.file.name, StorageKind.DOWNLOAD)
+                    },
+                    requiresConfirm = true,
+                    warning = "下载目录属于你的文件，可能包含模型、素材、离线包。请逐项确认后再删除。",
+                )
+            )
+            add(
+                StorageCategory(
+                    "empty", "空文件夹", "没有内容的占位目录",
+                    0, emptyDirs.size, emptyDirs.take(400), cleanable = true,
+                )
+            )
+            add(
+                StorageCategory(
+                    "large", "大型文件（> 50MB）", "只读展示，不提供清理入口",
+                    large.sumOf { it.bytes }, large.size, large, cleanable = false,
+                )
+            )
+            add(
+                StorageCategory(
+                    "dup", "重复文件", "${duplicates.size} 组 · 需要你选择保留哪一份",
+                    duplicateWaste, duplicates.sumOf { it.files.size - 1 },
+                    emptyList(), requiresConfirm = true,
+                    warning = "重复文件中可能有照片、视频或模型。默认一份都不选，请逐组确认。",
+                )
+            )
+            if (leftoverItems.isNotEmpty()) {
+                add(
+                    StorageCategory(
+                        "leftover", "卸载残留", "已卸载应用留下的私有数据 · 需 Root",
+                        leftoverBytes, leftoverItems.size,
+                        leftoverItems,
+                        requiresConfirm = true,
+                        warning = "这些是已卸载应用的数据目录，可能包含聊天记录或账号缓存。删除不可恢复。",
+                    )
+                )
+            }
+        }
 
         val dirSlices = topSizes.entries.sortedByDescending { it.value }.take(12)
             .map { Slice(it.key, it.value) }
@@ -279,6 +318,42 @@ class StorageRepository(
         return result.sortedByDescending { it.size * (it.files.size - 1) }
     }
 
+    private fun findLeftovers(installed: Set<String>): Pair<Long, List<StorageItem>> {
+        if (!Shell.rootReady) return 0L to emptyList()
+        val dirs = Shell.run("ls /data/data 2>/dev/null", 20_000).text
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.matches(Regex("[A-Za-z0-9._]{2,120}")) }
+            .filter { it !in installed }
+            .filterNot { it == "android" || it == "misc" || it == "system" || it == "vendor" }
+            .distinct()
+            .take(50)
+            .toList()
+        if (dirs.isEmpty()) return 0L to emptyList()
+        val script = "for p in " + dirs.joinToString(" ") +
+            "; do s=\$(du -sk /data/data/\$p 2>/dev/null | cut -f1); " +
+            "[ -n \"\$s\" ] && echo \"\$p \$s\"; done"
+        val out = Shell.run(script, 90_000).text
+        val items = ArrayList<StorageItem>()
+        for (line in out.lineSequence()) {
+            val parts = line.trim().split(' ')
+            if (parts.size != 2) continue
+            val pkg = parts[0]
+            val kb = parts[1].toLongOrNull() ?: continue
+            if (pkg !in dirs) continue
+            items.add(
+                StorageItem(
+                    path = "/data/data/$pkg",
+                    bytes = kb * 1024,
+                    label = pkg,
+                    kind = StorageKind.LEFTOVER,
+                    detail = "已卸载应用的私有数据目录",
+                )
+            )
+        }
+        return items.sumOf { it.bytes } to items.sortedByDescending { it.bytes }
+    }
+
     private fun hashFile(file: File, limit: Long): String {
         val md = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -311,7 +386,11 @@ class StorageRepository(
         var deleted = 0
         var failed = 0
         val msgs = ArrayList<String>()
-        for (pkg in pkgs) {
+        val targets = pkgs.filterNot { it in prefs.whitelist() }
+        if (targets.isEmpty() && pkgs.isNotEmpty()) {
+            return@withContext CleanResult(0, 0, 0, listOf("目标都在保护名单里，已跳过"))
+        }
+        for (pkg in targets) {
             val before = runCatching {
                 val ai = pm.getApplicationInfo(pkg, 0)
                 stats?.queryStatsForUid(StorageManager.UUID_DEFAULT, ai.uid)?.cacheBytes ?: 0L
@@ -333,10 +412,6 @@ class StorageRepository(
                 failed++
                 msgs.add("$pkg: ${r.text.take(120)}")
             }
-        }
-        if (pkgs.isEmpty()) {
-            val r = Shell.run("pm trim-caches 999G")
-            if (!r.ok) msgs.add(r.text.take(160))
         }
         CleanResult(freed, deleted, failed, msgs)
     }
@@ -376,6 +451,30 @@ class StorageRepository(
             }
             CleanResult(freed, deleted, failed)
         }
+
+    suspend fun deleteLeftovers(items: List<StorageItem>): CleanResult = withContext(Dispatchers.IO) {
+        if (!Shell.rootReady) return@withContext CleanResult(0, 0, 0, listOf("需要 Root"))
+        var freed = 0L
+        var deleted = 0
+        var failed = 0
+        for (item in items) {
+            val pkg = item.path.removePrefix("/data/data/")
+            if (!pkg.matches(Regex("[A-Za-z0-9._]{2,120}"))) {
+                failed++
+                continue
+            }
+            val r = Shell.runAs(
+                Shell.Backend.ROOT,
+                "rm -rf -- /data/data/$pkg /data/user/0/$pkg && echo DELETED",
+                30_000,
+            )
+            if (r.text.contains("DELETED")) {
+                freed += item.bytes
+                deleted++
+            } else failed++
+        }
+        CleanResult(freed, deleted, failed)
+    }
 
     suspend fun deleteDuplicateCopies(groups: List<DuplicateGroup>, keepFirst: Boolean = true): CleanResult =
         withContext(Dispatchers.IO) {

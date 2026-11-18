@@ -18,12 +18,13 @@ import io.github.dryearth.solidbutler.data.AppRepository
 import io.github.dryearth.solidbutler.data.ButlerAction
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
-import io.github.dryearth.solidbutler.data.PerfPreset
 import io.github.dryearth.solidbutler.data.PerformanceRepository
 import io.github.dryearth.solidbutler.data.RiskLevel
 import io.github.dryearth.solidbutler.data.SecurityReport
 import io.github.dryearth.solidbutler.data.SecurityRepository
+import io.github.dryearth.solidbutler.data.DuplicateGroup
 import io.github.dryearth.solidbutler.data.StorageCategory
+import io.github.dryearth.solidbutler.data.StorageItem
 import io.github.dryearth.solidbutler.data.StorageRepository
 import io.github.dryearth.solidbutler.data.StorageReport
 import kotlinx.coroutines.Dispatchers
@@ -138,11 +139,17 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cleanTopCaches() {
         val report = _storage.value.report
-        val targets = report?.appCaches?.take(8)?.map { it.pkg }
+        val targets = report?.appCaches
+            ?.map { it.pkg }
+            ?.filterNot { it in prefs.whitelist() }
+            ?.take(8)
             ?: run {
                 viewModelScope.launch {
                     val caches = withContext(Dispatchers.IO) { storageRepo.collectAppCaches() }
-                    cleanAppCaches(caches.take(8).map { it.pkg }, "缓存最大的 8 个应用")
+                    cleanAppCaches(
+                        caches.map { it.pkg }.filterNot { it in prefs.whitelist() }.take(8),
+                        "缓存最大的 8 个应用",
+                    )
                 }
                 return
             }
@@ -150,14 +157,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteCategory(category: StorageCategory) {
-        if (_storage.value.cleaning) return
+        if (_storage.value.cleaning || category.requiresConfirm) return
         _storage.update { it.copy(cleaning = true) }
         viewModelScope.launch {
             val result = when (category.id) {
-                "dup" -> {
-                    val groups = _storage.value.report?.duplicates.orEmpty()
-                    withContext(Dispatchers.IO) { storageRepo.deleteDuplicateCopies(groups) }
-                }
                 "cache" -> {
                     val pkgs = _storage.value.report?.appCaches?.take(12)?.map { it.pkg }.orEmpty()
                     withContext(Dispatchers.IO) { storageRepo.clearAppCaches(pkgs) }
@@ -177,14 +180,27 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun trimAllCaches() {
+    fun deleteSelectedFiles(
+        category: StorageCategory,
+        items: List<StorageItem>,
+        duplicateGroups: List<DuplicateGroup> = emptyList(),
+    ) {
+        if (_storage.value.cleaning) return
+        if (items.isEmpty() && duplicateGroups.isEmpty()) return
         _storage.update { it.copy(cleaning = true) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { storageRepo.clearAppCaches(emptyList()) }
+            val result = when (category.id) {
+                "dup" -> withContext(Dispatchers.IO) {
+                    storageRepo.deleteDuplicateCopies(duplicateGroups, keepFirst = true)
+                }
+                "leftover" -> withContext(Dispatchers.IO) { storageRepo.deleteLeftovers(items) }
+                else -> withContext(Dispatchers.IO) { storageRepo.deleteItems(items) }
+            }
             _storage.update {
                 it.copy(
                     cleaning = false,
-                    toast = if (result.messages.isEmpty()) "已请求系统回收所有应用缓存" else result.messages.first(),
+                    toast = "${category.title}：释放 ${result.freed.bytes()}，删除 ${result.deleted} 项" +
+                        if (result.failed > 0) "，${result.failed} 项失败" else "",
                 )
             }
             scanStorage()
@@ -420,21 +436,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     charging = it.charging.copy(fastMode = mode),
                     toast = if (ok) "快充模式：${LineageHealth.fastModeLabel(mode)}" else "设置失败",
                 )
-            }
-            refreshPerf()
-        }
-    }
-
-    fun applyPreset(preset: PerfPreset) {
-        viewModelScope.launch {
-            val gov = preset.governors.firstOrNull()
-            if (gov == null) {
-                _perf.update { it.copy(toast = "内核没有可用的 governor") }
-                return@launch
-            }
-            val (ok, msg) = withContext(Dispatchers.IO) { perfRepo.applyGovernor(gov) }
-            _perf.update {
-                it.copy(toast = if (ok) "已切换到${preset.title}（$gov）" else "失败：$msg")
             }
             refreshPerf()
         }
@@ -679,10 +680,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 title = "修改防火墙",
                 detail = "${if (args["blocked"] == "true") "阻断" else "放行"} $name 的联网",
             )
-            "set_performance" -> action.copy(
-                title = "切换性能模式",
-                detail = "预设：${args["preset"] ?: "balanced"}（需要 Root 写 governor）",
-            )
             "open_screen" -> action.copy(title = "打开页面", detail = args["screen"] ?: "首页")
             "list_drain" -> action.copy(title = "查看耗电排行", detail = "读取 UsageStats 与 cpuinfo")
             else -> action.copy(title = action.type, detail = args.entries.joinToString { "${it.key}=${it.value}" })
@@ -750,13 +747,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 val (ok, msg) = withContext(Dispatchers.IO) { securityRepo.applyFirewall(prefs.blockedUids()) }
                 _security.update { it.copy(firewallBlocked = prefs.blockedUids()) }
                 if (ok) "${if (blocked) "已阻断" else "已放行"} ${app.label} 的联网。" else "失败：$msg"
-            }
-            "set_performance" -> {
-                val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
-                val preset = presets.firstOrNull { it.id == args["preset"] } ?: presets.getOrNull(1)
-                val gov = preset?.governors?.firstOrNull() ?: return "内核没有可用的 governor"
-                val (ok, msg) = withContext(Dispatchers.IO) { perfRepo.applyGovernor(gov) }
-                if (ok) "已切换到${preset.title}模式（$gov）。" else "失败：$msg"
             }
             "scan_trackers" -> {
                 val app = args["package"]?.let { resolveApp(it) }
@@ -832,9 +822,8 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 7. {"type":"set_charging_limit","args":{"enabled":"true","limit":"80"}}
 8. {"type":"scan_trackers","args":{"package":"可选"}}
 9. {"type":"firewall","args":{"package":"应用名或包名","blocked":"true"}}
-10. {"type":"set_performance","args":{"preset":"battery|balanced|perf"}}
-11. {"type":"list_drain","args":{}}
-12. {"type":"open_screen","args":{"screen":"home|storage|apps|perf|security"}}
+10. {"type":"list_drain","args":{}}
+11. {"type":"open_screen","args":{"screen":"home|storage|apps|perf|security"}}
 
 输出规则：
 - 只输出一个 JSON 对象，不要 Markdown，不要代码围栏，不要额外文字。

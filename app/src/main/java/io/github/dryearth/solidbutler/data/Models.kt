@@ -4,7 +4,7 @@ import android.graphics.drawable.Drawable
 
 // ---------- Storage ----------
 
-enum class StorageKind { APK, LOG, EMPTY_DIR, DOWNLOAD, THUMBNAIL, LARGE, CACHE, DUPLICATE, OTHER }
+enum class StorageKind { APK, LOG, EMPTY_DIR, DOWNLOAD, THUMBNAIL, LARGE, CACHE, DUPLICATE, LEFTOVER, OTHER }
 
 data class StorageItem(
     val path: String,
@@ -22,6 +22,8 @@ data class StorageCategory(
     val count: Int,
     val items: List<StorageItem> = emptyList(),
     val cleanable: Boolean = true,
+    val requiresConfirm: Boolean = false,
+    val warning: String? = null,
 )
 
 data class DuplicateGroup(
@@ -127,6 +129,7 @@ data class BatterySnapshot(
     val cycles: Int = -1,
     val chargeCounterUah: Long = -1,
     val technology: String = "",
+    val powerW: Float = 0f,
 )
 
 data class PerfSnapshot(
@@ -141,6 +144,9 @@ data class PerfSnapshot(
     val rxBps: Long = 0,
     val txBps: Long = 0,
     val battery: BatterySnapshot = BatterySnapshot(),
+    val npuName: String = "",
+    val npuLoad: Int = -1,
+    val npuFreqMhz: Int = -1,
     val uptimeMs: Long = 0,
     val timestamp: Long = 0,
 )

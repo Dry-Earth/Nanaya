@@ -3,6 +3,7 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,10 +87,11 @@ fun StorageScreen(vm: ButlerViewModel) {
         if (report != null) {
             item { TreemapCard(report) }
             item { ActionRow(vm, report) }
+            item { SafetyNote() }
             item {
                 SectionHeader(
                     "分类",
-                    "点开查看具体文件，再决定删什么",
+                    "缓存类可直接清；用户文件必须逐项选择",
                 )
             }
             items(report.categories) { cat ->
@@ -115,7 +117,9 @@ fun StorageScreen(vm: ButlerViewModel) {
                         },
                     )
                 }
-                items(report.appCaches.take(12)) { cache ->
+                val protectedSet = vm.prefs.whitelist()
+                items(report.appCaches.take(14)) { cache ->
+                    val protected = cache.pkg in protectedSet
                     GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -136,10 +140,14 @@ fun StorageScreen(vm: ButlerViewModel) {
                             Text(
                                 cache.bytes.bytes(),
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Glass.Mint,
+                                color = if (protected) Glass.Faint else Glass.Mint,
                             )
                             Spacer(Modifier.width(8.dp))
-                            Pill("清理", onClick = { vm.cleanAppCaches(listOf(cache.pkg), cache.label) })
+                            if (protected) {
+                                Pill("已保护", color = Glass.Faint)
+                            } else {
+                                Pill("清理", onClick = { vm.cleanAppCaches(listOf(cache.pkg), cache.label) })
+                            }
                         }
                     }
                 }
@@ -170,8 +178,9 @@ fun StorageScreen(vm: ButlerViewModel) {
         CategoryDialog(
             cat = cat,
             duplicates = state.report?.duplicates.orEmpty(),
-            onDelete = {
-                vm.deleteCategory(cat)
+            cleaning = state.cleaning,
+            onDelete = { items, groups ->
+                vm.deleteSelectedFiles(cat, items, groups)
                 selected = null
             },
             onDismiss = { selected = null },
@@ -368,34 +377,45 @@ private fun sliceRects(
 }
 
 @Composable
+private fun SafetyNote() {
+    GlassPanel(tint = Glass.Amber, corner = 14.dp, padding = PaddingValues(12.dp)) {
+        Text("清理规则", style = MaterialTheme.typography.labelLarge, color = Glass.Amber)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "缓存 / 空目录 / 缩略图 / 日志：可以直接清。\n" +
+                "安装包 / 下载 / 重复文件 / 卸载残留：必须逐项勾选，再点一次确认。\n" +
+                "应用数据（账号、设置、模型）：这里没有清理入口。",
+            style = MaterialTheme.typography.bodySmall,
+            color = Glass.Muted,
+        )
+    }
+}
+
+@Composable
 private fun ActionRow(vm: ButlerViewModel, report: StorageReport) {
-    val reclaim = report.categories
-        .filter { it.id in setOf("cache", "apk", "log", "thumb", "old_download", "dup") }
+    val safe = report.categories
+        .filter { it.id in setOf("cache", "log", "thumb", "empty") }
         .sumOf { it.bytes }
+    val userFiles = report.categories.filter { it.requiresConfirm }.sumOf { it.bytes }
+    val protected = vm.prefs.whitelist().size
     GlassPanel {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("可回收", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-                Text(reclaim.bytes(), style = MaterialTheme.typography.headlineMedium, color = Glass.Mint)
-                Text(
-                    "缓存、残留包、日志、缩略图、旧下载与重复项",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Glass.Muted,
-                )
+                Text("安全可清理", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                Text(safe.bytes(), style = MaterialTheme.typography.headlineMedium, color = Glass.Mint)
+                Text("缓存、日志、缩略图、空目录", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
             }
-            ActionButton(
-                "清缓存",
-                Icons.Rounded.CleaningServices,
-                accent = true,
-                onClick = { vm.cleanTopCaches() },
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text("用户文件", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                Text(userFiles.bytes(), style = MaterialTheme.typography.headlineMedium, color = Glass.Amber)
+                Text("需要你逐项确认", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+            }
         }
-        Spacer(Modifier.height(10.dp))
-        ActionButton(
-            "让系统回收全部应用缓存（pm trim-caches）",
-            Icons.Rounded.DeleteSweep,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { vm.trimAllCaches() },
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "保护名单：$protected 个应用。应用数据不会在存储清理里删除。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
         )
     }
 }
@@ -407,10 +427,17 @@ private fun CategoryRow(
     onOpen: () -> Unit,
     onClean: () -> Unit,
 ) {
+    val userFile = cat.requiresConfirm
     GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(cat.title, style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(cat.title, style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                    if (userFile) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("用户文件", style = MaterialTheme.typography.labelSmall, color = Glass.Amber)
+                    }
+                }
                 Text(
                     cat.subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -423,28 +450,38 @@ private fun CategoryRow(
                 Text(
                     if (cat.bytes > 0) cat.bytes.bytes() else "${cat.count} 项",
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (cat.bytes > 0) Glass.Text else Glass.Muted,
+                    color = if (userFile) Glass.Amber else Glass.Text,
                 )
                 if (cat.count > 0 && cat.bytes > 0) {
                     Text("${cat.count} 项", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                 }
             }
-            if (cat.cleanable && cat.count > 0 && cat.id != "dup") {
-                Spacer(Modifier.width(10.dp))
-                Pill(
-                    "清理",
+            Spacer(Modifier.width(10.dp))
+            when {
+                !cat.cleanable -> Pill("只读", color = Glass.Faint)
+                userFile && cat.count > 0 -> Pill(
+                    "查看",
+                    selected = true,
+                    color = Glass.Amber,
+                    onClick = onOpen,
+                )
+                cat.cleanable && cat.count > 0 -> Pill(
+                    if (cleaning) "清理中" else "清理",
                     selected = true,
                     color = Glass.Mint,
                     onClick = onClean,
                 )
+                else -> Pill("无", color = Glass.Faint)
             }
         }
-        if (cat.id == "dup" && cat.count > 0) {
-            Spacer(Modifier.height(8.dp))
+        if (userFile && cat.count > 0) {
+            Spacer(Modifier.height(6.dp))
             Text(
-                "点开查看 ${cat.count} 组重复文件，保留每组第一份",
+                cat.warning ?: "需要逐项选择并二次确认",
                 style = MaterialTheme.typography.labelSmall,
-                color = Glass.Accent,
+                color = Glass.Amber,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -454,10 +491,23 @@ private fun CategoryRow(
 private fun CategoryDialog(
     cat: StorageCategory,
     duplicates: List<DuplicateGroup>,
-    onDelete: () -> Unit,
+    cleaning: Boolean,
+    onDelete: (List<StorageItem>, List<DuplicateGroup>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var confirm by remember { mutableStateOf(false) }
+    var selectedPaths by remember(cat.id) { mutableStateOf(setOf<String>()) }
+    var selectedGroups by remember(cat.id) { mutableStateOf(setOf<Int>()) }
+    var confirm by remember(cat.id) { mutableStateOf(false) }
+    val isDup = cat.id == "dup"
+    val selectedItems = cat.items.filter { it.path.isNotBlank() && it.path in selectedPaths }
+    val selectedDupGroups = duplicates.filterIndexed { i, _ -> i in selectedGroups }
+    val selectedCount = if (isDup) selectedDupGroups.sumOf { it.files.size - 1 } else selectedItems.size
+    val selectedBytes = if (isDup) {
+        selectedDupGroups.sumOf { it.size * (it.files.size - 1) }
+    } else selectedItems.sumOf { it.bytes }
+    val allSelected = if (isDup) selectedGroups.size == duplicates.size && duplicates.isNotEmpty()
+    else cat.items.count { it.path.isNotBlank() } > 0 && selectedPaths.size == cat.items.count { it.path.isNotBlank() }
+
     Dialog(onDismissRequest = onDismiss) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
@@ -467,75 +517,156 @@ private fun CategoryDialog(
             Text(cat.title, style = MaterialTheme.typography.titleLarge, color = Glass.Text)
             Spacer(Modifier.height(4.dp))
             Text(cat.subtitle, style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
-            Spacer(Modifier.height(12.dp))
-            if (cat.id == "dup") {
-                LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(duplicates) { g ->
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                .background(Color(0x07FFFFFF))
-                                .padding(10.dp),
-                        ) {
-                            Text(
-                                "${g.size.bytes()} × ${g.files.size} 份",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Glass.Text,
-                            )
-                            g.files.take(3).forEach {
-                                Text(
-                                    it.substringAfterLast('/'),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Glass.Muted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+            if (cat.warning != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(cat.warning, style = MaterialTheme.typography.bodySmall, color = Glass.Amber)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (isDup) "${duplicates.size} 组重复文件" else "${cat.items.size} 项",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                    modifier = Modifier.weight(1f),
+                )
+                if (cat.cleanable && (isDup || cat.items.any { it.path.isNotBlank() })) {
+                    Text(
+                        if (allSelected) "清空选择" else "全选",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Glass.Accent,
+                        modifier = Modifier.clickable {
+                            if (allSelected) {
+                                selectedPaths = emptySet(); selectedGroups = emptySet()
+                            } else {
+                                selectedPaths = cat.items.filter { it.path.isNotBlank() }.map { it.path }.toSet()
+                                selectedGroups = duplicates.indices.toSet()
                             }
-                            if (g.files.size > 3) {
-                                Text("…还有 ${g.files.size - 3} 个", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                            confirm = false
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(Modifier.heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isDup) {
+                    items(duplicates.size) { index ->
+                        val g = duplicates[index]
+                        SelectRow(
+                            title = "${g.size.bytes()} × ${g.files.size} 份",
+                            subtitle = g.files.joinToString("\n") { it.substringAfterLast('/') }.take(180),
+                            selected = index in selectedGroups,
+                        ) {
+                            selectedGroups = if (index in selectedGroups) selectedGroups - index else selectedGroups + index
+                            confirm = false
+                        }
+                    }
+                } else {
+                    items(cat.items) { item ->
+                        if (item.path.isBlank()) {
+                            ItemRow(item)
+                        } else {
+                            SelectRow(
+                                title = item.label,
+                                subtitle = item.path,
+                                selected = item.path in selectedPaths,
+                            ) {
+                                selectedPaths = if (item.path in selectedPaths) selectedPaths - item.path
+                                else selectedPaths + item.path
+                                confirm = false
                             }
                         }
                     }
                 }
-            } else {
-                LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(cat.items) { item ->
-                        ItemRow(item)
-                    }
-                }
             }
-            Spacer(Modifier.height(14.dp))
+            if (!cat.cleanable) {
+                Spacer(Modifier.height(8.dp))
+                Text("这个分类只用于查看，不提供清理入口。", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+            }
+            Spacer(Modifier.height(12.dp))
+            if (selectedCount > 0 && cat.cleanable) {
+                Text(
+                    "已选 $selectedCount 项 · ${selectedBytes.bytes()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Glass.Text,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             if (confirm) {
                 Text(
-                    if (cat.id == "dup") "将删除每组中除第一份以外的 ${cat.count} 个文件，不可恢复。"
-                    else "将删除 ${cat.count} 项，不可恢复。确认？",
+                    "删除后不可恢复。确认删除选中的 $selectedCount 项？",
                     style = MaterialTheme.typography.bodySmall,
                     color = Glass.Rose,
                 )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("取消", modifier = Modifier.weight(1f), onClick = { confirm = false })
-                    ActionButton(
-                        "确认删除",
-                        accent = true,
-                        modifier = Modifier.weight(1f),
-                        onClick = onDelete,
-                    )
-                }
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("关闭", modifier = Modifier.weight(1f), onClick = onDismiss)
-                    if (cat.count > 0 && cat.id != "large") {
+                Spacer(Modifier.height(8.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton("关闭", modifier = Modifier.weight(1f), onClick = onDismiss)
+                if (cat.cleanable && selectedCount > 0) {
+                    if (!confirm && cat.requiresConfirm) {
                         ActionButton(
-                            "删除 ${if (cat.bytes > 0) cat.bytes.bytes() else "${cat.count} 项"}",
+                            "删除选中",
                             accent = true,
+                            enabled = !cleaning,
                             modifier = Modifier.weight(1f),
                             onClick = { confirm = true },
+                        )
+                    } else {
+                        ActionButton(
+                            if (cat.requiresConfirm) "确认删除" else "删除选中",
+                            accent = true,
+                            enabled = !cleaning,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onDelete(selectedItems, selectedDupGroups) },
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SelectRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+            .background(if (selected) Glass.Accent.copy(alpha = 0.12f) else Color(0x07FFFFFF))
+            .clickable { onClick() }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(if (selected) Glass.Accent else Color.Transparent)
+                .border(1.dp, if (selected) Glass.Accent else Glass.Faint, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Text("✓", style = MaterialTheme.typography.labelSmall, color = Color(0xFF0B1220))
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

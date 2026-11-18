@@ -19,9 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -73,7 +72,7 @@ fun HomeScreen(vm: ButlerViewModel, onOpenTab: (String) -> Unit, onChat: () -> U
         item {
             QuickActions(
                 onScan = { vm.scanStorage(); onOpenTab("storage") },
-                onClean = { vm.cleanTopCaches() },
+                onStorage = { onOpenTab("storage") },
                 onSecurity = { vm.refreshSecurity(); onOpenTab("security") },
                 onChat = onChat,
             )
@@ -143,14 +142,22 @@ private fun Hero(caps: Capabilities, report: StorageReport?, snapshot: PerfSnaps
                 }
                 Spacer(Modifier.height(14.dp))
                 if (report != null) {
-                    val reclaim = reclaimable(report)
+                    val safe = reclaimable(report)
+                    val userFiles = report.categories.filter { it.requiresConfirm }.sumOf { it.bytes }
                     Text(
-                        "可回收 ${reclaim.bytes()}",
+                        "缓存可清理 ${safe.bytes()}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Glass.Mint,
                     )
+                    if (userFiles > 0) {
+                        Text(
+                            "用户文件 ${userFiles.bytes()} · 需要逐项确认",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Amber,
+                        )
+                    }
                     Text(
-                        "共扫描 ${report.fileCount} 个文件",
+                        "共扫描 ${report.fileCount} 个文件 · 应用数据不会被清理",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Muted,
                     )
@@ -187,13 +194,13 @@ private fun Hero(caps: Capabilities, report: StorageReport?, snapshot: PerfSnaps
 @Composable
 private fun QuickActions(
     onScan: () -> Unit,
-    onClean: () -> Unit,
+    onStorage: () -> Unit,
     onSecurity: () -> Unit,
     onChat: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         QuickAction("扫描", Icons.Rounded.Search, Glass.Accent, Modifier.weight(1f), onScan)
-        QuickAction("清理", Icons.Rounded.CleaningServices, Glass.Mint, Modifier.weight(1f), onClean)
+        QuickAction("存储", Icons.Rounded.Storage, Glass.Mint, Modifier.weight(1f), onStorage)
         QuickAction("体检", Icons.Rounded.Shield, Glass.Ice, Modifier.weight(1f), onSecurity)
         QuickAction("管家", Icons.Rounded.AutoAwesome, Glass.Violet, Modifier.weight(1f), onChat)
     }
@@ -391,5 +398,5 @@ private fun MiniStat(label: String, value: String, color: Color, modifier: Modif
 }
 
 private fun reclaimable(report: StorageReport): Long =
-    report.categories.filter { it.id in setOf("cache", "apk", "log", "thumb", "old_download", "dup", "empty") }
+    report.categories.filter { it.id in setOf("cache", "log", "thumb", "empty") }
         .sumOf { it.bytes }

@@ -27,6 +27,7 @@ class PerformanceRepository(private val context: Context) {
         val mi = ActivityManager.MemoryInfo()
         am.getMemoryInfo(mi)
         val (gpuLoad, gpuFreq, gpuMax) = readGpu()
+        val (npuName, npuLoad, npuFreq) = readNpu()
         val temps = readTemps()
         val (rx, tx) = readNetwork()
         val battery = readBattery()
@@ -38,6 +39,9 @@ class PerformanceRepository(private val context: Context) {
             gpuLoad = gpuLoad,
             gpuFreqMhz = gpuFreq,
             gpuMaxMhz = gpuMax,
+            npuName = npuName,
+            npuLoad = npuLoad,
+            npuFreqMhz = npuFreq,
             temps = temps,
             rxBps = rx,
             txBps = tx,
@@ -114,6 +118,37 @@ class PerformanceRepository(private val context: Context) {
             max = (sysLong("/sys/class/misc/mali0/device/max_freq") / 1_000_000L).toInt()
         }
         return Triple(load, freq, max)
+    }
+
+    private fun readNpu(): Triple<String, Int, Int> {
+        val soc = runCatching { Build.SOC_MODEL }.getOrDefault(Build.HARDWARE)
+        val name = when {
+            soc.contains("sm8750", true) || soc.contains("sun", true) -> "Hexagon NPU"
+            soc.contains("mt", true) -> "MediaTek APU"
+            soc.contains("exynos", true) -> "Exynos NPU"
+            soc.isBlank() -> "NPU"
+            else -> "NPU · $soc"
+        }
+        val dirs = runCatching {
+            File("/sys/class/devfreq").listFiles()?.filter { f ->
+                val n = f.name.lowercase(Locale.US)
+                n.contains("cdsp") || n.contains("npu") || n.contains("nsp") || n.contains("apu")
+            }.orEmpty()
+        }.getOrDefault(emptyList())
+        var load = -1
+        var freq = -1
+        for (d in dirs) {
+            for (f in listOf("load", "busy", "utilization", "gpu_busy_percentage")) {
+                val v = sysInt("${d.absolutePath}/$f", -1)
+                if (v in 0..100) { load = v; break }
+            }
+            for (f in listOf("cur_freq", "frequency")) {
+                val v = sysLong("${d.absolutePath}/$f")
+                if (v > 0) { freq = (v / 1_000_000L).toInt(); break }
+            }
+            if (load >= 0 || freq > 0) break
+        }
+        return Triple(name, load, freq)
     }
 
     private fun readTemps(): List<TempReading> {
@@ -193,6 +228,7 @@ class PerformanceRepository(private val context: Context) {
         val current = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
         }.getOrDefault(0L)
+        val power = kotlin.math.abs(current) / 1_000_000f * (voltage / 1000f)
         return BatterySnapshot(
             level = level * 100 / scale.coerceAtLeast(1),
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
@@ -225,6 +261,7 @@ class PerformanceRepository(private val context: Context) {
             cycles = cycles,
             chargeCounterUah = chargeCounter,
             technology = tech,
+            powerW = power,
         )
     }
 

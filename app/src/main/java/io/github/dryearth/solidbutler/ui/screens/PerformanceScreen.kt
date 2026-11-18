@@ -65,7 +65,6 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 @Composable
 fun PerformanceScreen(vm: ButlerViewModel) {
     val perf by vm.perf.collectAsStateWithLifecycle()
-    val caps by vm.caps.collectAsStateWithLifecycle()
     ToastEffect(perf.toast) { vm.clearPerfToast() }
 
     LaunchedEffect(Unit) { vm.refreshDrain() }
@@ -77,11 +76,13 @@ fun PerformanceScreen(vm: ButlerViewModel) {
     ) {
         item { LivePanel(perf) }
         item { CoresPanel(perf) }
+        item { NpuPanel(perf) }
         item { TemperaturePanel(perf) }
-        item { ChargingPanel(vm, perf) }
+        if (perf.charging.supported) {
+            item { ChargingPanel(vm, perf) }
+        }
         item { BatteryPanel(perf) }
         item { MemoryPanel(perf, onTrim = { vm.killBackground() }) }
-        item { PresetPanel(vm, perf, caps.root) }
         item {
             SectionHeader(
                 "24 小时耗电",
@@ -183,6 +184,9 @@ private fun LivePanel(perf: PerfUiState) {
             if (perf.snapshot.gpuFreqMhz > 0) {
                 Pill("GPU ${perf.snapshot.gpuFreqMhz} MHz", color = Glass.Violet)
             }
+            if (perf.snapshot.npuLoad >= 0) {
+                Pill("NPU ${perf.snapshot.npuLoad}%", color = Glass.Ice)
+            }
         }
     }
 }
@@ -255,6 +259,45 @@ private fun TemperaturePanel(perf: PerfUiState) {
 }
 
 @Composable
+private fun NpuPanel(perf: PerfUiState) {
+    val npu = perf.snapshot
+    GlassPanel {
+        SectionHeader(
+            "NPU / 加速器",
+            npu.npuName.ifBlank { "未检测到加速器节点" },
+            trailing = {
+                if (npu.npuFreqMhz > 0) Pill("${npu.npuFreqMhz} MHz", color = Glass.Violet)
+            },
+        )
+        Spacer(Modifier.height(12.dp))
+        if (npu.npuLoad >= 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${npu.npuLoad}%",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Glass.Violet,
+                )
+                Spacer(Modifier.width(12.dp))
+                Meter(npu.npuLoad / 100f, color = Glass.Violet, modifier = Modifier.weight(1f))
+            }
+        } else {
+            Text(
+                "Android 没有统一的 NPU 占用接口；当前只读取到型号，占用率由厂商驱动决定是否开放。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        KeyValueRow("频率", if (npu.npuFreqMhz > 0) "${npu.npuFreqMhz} MHz" else "—")
+        Text(
+            "相机、语音和本地模型会调用 NPU；这里不写任何参数。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
+        )
+    }
+}
+
+@Composable
 private fun ChargingPanel(vm: ButlerViewModel, perf: PerfUiState) {
     val charging = perf.charging
     val context = LocalContext.current
@@ -274,15 +317,6 @@ private fun ChargingPanel(vm: ButlerViewModel, perf: PerfUiState) {
             },
         )
         Spacer(Modifier.height(12.dp))
-        if (!charging.supported) {
-            Text(
-                charging.error ?: "设备内核或 vendor.lineage.health HAL 未实现充电控制。",
-                style = MaterialTheme.typography.bodySmall,
-                color = Glass.Muted,
-            )
-            return@GlassPanel
-        }
-
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Rounded.BatteryChargingFull,
@@ -417,6 +451,11 @@ private fun BatteryPanel(perf: PerfUiState) {
             )
             Spacer(Modifier.height(6.dp))
         }
+        KeyValueRow(
+            if (b.charging) "充电功率" else "放电功率",
+            if (b.powerW > 0f) String.format(java.util.Locale.US, "%.1f W", b.powerW) else "—",
+            color = if (b.charging) Glass.Mint else Glass.Muted,
+        )
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
         KeyValueRow("瞬时电流", if (b.currentUa != 0) "${b.currentUa / 1000} mA" else "—")
@@ -464,67 +503,3 @@ private fun MemoryPanel(perf: PerfUiState, onTrim: () -> Unit) {
     }
 }
 
-@Composable
-private fun PresetPanel(vm: ButlerViewModel, perf: PerfUiState, root: Boolean) {
-    GlassPanel {
-        SectionHeader(
-            "性能模式",
-            if (root) "写入 cpufreq governor" else "需要 Root 才能写入内核参数",
-            trailing = {
-                Pill(perf.governor.ifBlank { "未读取" }, selected = true, color = Glass.Violet)
-            },
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            perf.presets.forEach { preset ->
-                val selected = preset.governors.any { it == perf.governor }
-                GlassPreset(
-                    title = preset.title,
-                    subtitle = preset.governors.firstOrNull() ?: "不可用",
-                    selected = selected,
-                    enabled = root && preset.governors.isNotEmpty(),
-                    modifier = Modifier.weight(1f),
-                    onClick = { vm.applyPreset(preset) },
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "省电/均衡/性能只改 governor，不改电压、不锁频。重启后由系统恢复默认。",
-            style = MaterialTheme.typography.labelSmall,
-            color = Glass.Faint,
-        )
-    }
-}
-
-@Composable
-private fun GlassPreset(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) Glass.Violet.copy(alpha = 0.14f) else Color(0x07FFFFFF))
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 10.dp, vertical = 12.dp),
-    ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) Glass.Text else Glass.Faint,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            subtitle,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) Glass.Violet else Glass.Faint,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}

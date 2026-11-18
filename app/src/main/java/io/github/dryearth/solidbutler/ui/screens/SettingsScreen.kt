@@ -103,6 +103,21 @@ fun SettingsScreen(
             Pill("v${BuildConfig.VERSION_NAME}", color = Glass.Faint)
         }
 
+        SectionHeader("清理保护", "白名单应用不会被批量清缓存")
+        GlassPanel {
+            val protectedCount = vm.prefs.whitelist().size
+            Text(
+                "已保护 $protectedCount 个应用",
+                style = MaterialTheme.typography.titleMedium,
+                color = Glass.Text,
+            )
+            Text(
+                "在「应用 → 应用详情」里加入或移出。模型文件、离线资源、重要设置建议加入保护。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+        }
+
         SectionHeader("AI 管家", "云端 OpenAI 兼容接口 · 不填写则完全离线")
         GlassPanel {
             GlassField("接口地址", base, "https://api.openai.com/v1") { base = it }

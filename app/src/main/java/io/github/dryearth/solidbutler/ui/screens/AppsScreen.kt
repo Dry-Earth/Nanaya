@@ -308,8 +308,20 @@ private fun AppDetailSheet(vm: ButlerViewModel, detail: AppDetail, privileged: B
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Pill(if (detail.backgroundRestricted) "后台受限" else "后台允许", selected = detail.backgroundRestricted, color = Glass.Mint)
                     Pill(if (blocked) "断网" else "联网", selected = blocked, color = Glass.Rose)
-                    if (detail.whitelisted) Pill("清理白名单", selected = true, color = Glass.Accent)
+                    if (detail.whitelisted) Pill("受保护", selected = true, color = Glass.Accent)
                 }
+                Spacer(Modifier.height(8.dp))
+                ActionButton(
+                    if (detail.whitelisted) "移出清理保护名单" else "加入清理保护名单",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { vm.toggleWhitelist(app.pkg, !detail.whitelisted) },
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "受保护的应用不会被批量清缓存；模型、离线资源或重要设置建议加入。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
             }
         }
 

@@ -51,6 +51,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.PerfUiState
 import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
@@ -78,6 +79,7 @@ private val navItems = listOf(
 @Composable
 fun ButlerApp(vm: ButlerViewModel) {
     val caps by vm.caps.collectAsStateWithLifecycle()
+    val perf by vm.perf.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf("home") }
     var chat by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
@@ -113,6 +115,7 @@ fun ButlerApp(vm: ButlerViewModel) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 caps = caps,
+                perf = perf,
                 aiConfigured = vm.aiConfigured,
                 onChat = { chat = true },
                 onSettings = { settings = true },
@@ -152,6 +155,7 @@ fun ButlerApp(vm: ButlerViewModel) {
 @Composable
 private fun TopBar(
     caps: Capabilities,
+    perf: PerfUiState,
     aiConfigured: Boolean,
     onChat: () -> Unit,
     onSettings: () -> Unit,
@@ -193,30 +197,24 @@ private fun TopBar(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val b = perf.snapshot.battery
             Pill(
-                text = if (caps.root) "Root" else "无 Root",
-                selected = caps.root,
-                color = Glass.Mint,
+                text = if (b.level > 0) "${b.level}% ${if (b.charging) "充电中" else "电量"}" else "读取中",
+                selected = b.charging,
+                color = if (b.charging) Glass.Mint else Glass.Accent,
             )
-            Pill(
-                text = when {
-                    caps.shizukuReady -> "Shizuku"
-                    caps.shizukuInstalled -> "Shizuku 待授权"
-                    else -> "无 Shizuku"
-                },
-                selected = caps.shizukuReady,
-                color = Glass.Accent,
-                onClick = onSettings,
-            )
-            if (caps.lineageHealth) {
-                Pill("充电面板", selected = true, color = Glass.Ice)
+            if (perf.snapshot.ramTotal > 0) {
+                val ramPct = (perf.snapshot.ramUsed.toDouble() / perf.snapshot.ramTotal.toDouble() * 100).toInt()
+                Pill("内存 $ramPct%", color = Glass.Ice)
             }
-            Pill(
-                text = if (aiConfigured) "云端 AI" else "AI 未配置",
-                selected = aiConfigured,
-                color = Glass.Violet,
-                onClick = onChat,
-            )
+            if (caps.root) {
+                Pill("Root", selected = true, color = Glass.Mint)
+            } else if (caps.shizukuReady) {
+                Pill("Shizuku", selected = true, color = Glass.Accent)
+            }
+            if (aiConfigured) {
+                Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
+            }
         }
     }
 }
