@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -27,6 +28,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloseFullscreen
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Send
@@ -119,7 +122,19 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         createChannel()
-        startForeground(NOTIFICATION_ID, notification())
+        if (Build.VERSION.SDK_INT >= 34) {
+            val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+            val type = if (mic) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            }
+            startForeground(NOTIFICATION_ID, notification(), type)
+        } else {
+            startForeground(NOTIFICATION_ID, notification())
+        }
         showWindow()
     }
 
@@ -154,14 +169,13 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                     OverlayAssistant(
                         vm = vm,
                         onClose = { stopSelf() },
-                        onExpand = { openFullChat() },
                     )
                 }
             }
         }
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -234,9 +248,9 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 private fun OverlayAssistant(
     vm: ButlerViewModel,
     onClose: () -> Unit,
-    onExpand: () -> Unit,
 ) {
     val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
@@ -276,7 +290,15 @@ private fun OverlayAssistant(
                 }
                 override fun onError(error: Int) {
                     listening = false
-                    voiceStatus = "识别失败：$error"
+                    voiceStatus = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH -> "没有听清，再试一次"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有检测到语音"
+                        SpeechRecognizer.ERROR_NETWORK,
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "语音识别网络错误"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
+                        else -> "识别失败：$error"
+                    }
                     Toast.makeText(context, voiceStatus, Toast.LENGTH_SHORT).show()
                 }
                 override fun onResults(results: Bundle?) {
@@ -284,9 +306,14 @@ private fun OverlayAssistant(
                     val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                     if (!text.isNullOrBlank()) {
-                        input = ""
-                        voiceStatus = null
-                        vm.sendChat(text)
+                        input = text
+                        if (vm.chat.value.modelConfigured) {
+                            input = ""
+                            voiceStatus = null
+                            vm.sendChat(text)
+                        } else {
+                            voiceStatus = "已识别，填入输入框；配置模型后可直接发送"
+                        }
                     }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {
@@ -327,10 +354,17 @@ private fun OverlayAssistant(
         )
     }
 
-    Box(Modifier.fillMaxWidth().imePadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
+    BoxWithConstraints(
+        Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
+                .then(
+                    if (expanded) Modifier.height(maxHeight * 0.92f)
+                    else Modifier.heightIn(max = maxHeight * 0.78f)
+                )
                 .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(shape)
                 .background(
@@ -373,10 +407,10 @@ private fun OverlayAssistant(
                     )
                 }
                 Icon(
-                    Icons.Rounded.OpenInFull,
-                    contentDescription = "展开",
+                    if (expanded) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
+                    contentDescription = if (expanded) "收起" else "展开",
                     tint = Color(0x990B1220),
-                    modifier = Modifier.size(19.dp).clickable { onExpand() },
+                    modifier = Modifier.size(19.dp).clickable { expanded = !expanded },
                 )
                 Spacer(Modifier.width(12.dp))
                 Icon(
@@ -390,7 +424,9 @@ private fun OverlayAssistant(
             if (state.messages.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 LazyColumn(
-                    Modifier.heightIn(max = 330.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .then(if (expanded) Modifier.weight(1f) else Modifier.heightIn(max = 330.dp)),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(state.messages.takeLast(8), key = { it.id }) { msg ->
@@ -480,10 +516,10 @@ private fun OverlayAssistant(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    "展开",
+                    if (expanded) "收起" else "展开",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF33406A),
-                    modifier = Modifier.clickable { onExpand() },
+                    modifier = Modifier.clickable { expanded = !expanded },
                 )
             }
         }
