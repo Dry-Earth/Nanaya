@@ -1,0 +1,86 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          SDK=36
+          if sdkmanager --list 2>/dev/null | grep -q "platforms;android-37"; then
+            SDK=37
+          fi
+          echo "Using compileSdk $SDK"
+          sdkmanager --install "platforms;android-$SDK" "platform-tools" > /dev/null
+          sdkmanager --install "build-tools;36.0.0" > /dev/null 2>&1 || sdkmanager --install "build-tools;35.0.0" > /dev/null
+          echo "BUTLER_COMPILE_SDK=$SDK" >> "$GITHUB_ENV"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing key
+        run: |
+          mkdir -p signing
+          echo "${{ secrets.BUTLER_KEYSTORE_BASE64 }}" | base64 -d > signing/release.jks
+          ls -l signing/release.jks
+
+      - name: Build debug and release
+        env:
+          BUTLER_STORE_FILE: ${{ github.workspace }}/signing/release.jks
+          BUTLER_STORE_PASSWORD: ${{ secrets.BUTLER_STORE_PASSWORD }}
+          BUTLER_KEY_ALIAS: ${{ secrets.BUTLER_KEY_ALIAS }}
+          BUTLER_KEY_PASSWORD: ${{ secrets.BUTLER_KEY_PASSWORD }}
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug assembleRelease \
+            -PbutlerCompileSdk=$BUTLER_COMPILE_SDK \
+            -PbutlerTargetSdk=$BUTLER_COMPILE_SDK 2>&1 | tee build.log
+          if [ "${PIPESTATUS[0]}" != "0" ] && [ "$BUTLER_COMPILE_SDK" = "37" ]; then
+            echo "API 37 build failed, falling back to 36"
+            ./gradlew --no-daemon assembleDebug assembleRelease \
+              -PbutlerCompileSdk=36 -PbutlerTargetSdk=36
+          fi
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: solid-butler-apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Solid Butler build ${{ github.run_number }}
+          body: |
+            守岸人 · LineageOS 24 设备管家
+            commit: ${{ github.sha }}
+          files: app/build/outputs/apk/release/app-release.apk
+          prerelease: true
