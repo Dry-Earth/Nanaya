@@ -39,11 +39,11 @@ fun Int.percentOf(total: Long): Float = if (total <= 0) 0f else (this.toFloat() 
 
 fun safePct(a: Long, b: Long): Float = if (b <= 0) 0f else (a.toDouble() / b.toDouble()).coerceIn(0.0, 1.0).toFloat()
 
-fun StatFs.usedBytes(): Long = (blockCount * blockSize) - (availableBlocks * blockSize)
+fun StatFs.usedBytes(): Long = (blockCountLong * blockSizeLong) - (availableBlocksLong * blockSizeLong)
 
-fun StatFs.totalBytes(): Long = blockCount * blockSize
+fun StatFs.totalBytes(): Long = blockCountLong * blockSizeLong
 
-fun StatFs.freeBytes(): Long = availableBlocks * blockSize
+fun StatFs.freeBytes(): Long = availableBlocksLong * blockSizeLong
 
 fun isExternalManager(): Boolean =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true

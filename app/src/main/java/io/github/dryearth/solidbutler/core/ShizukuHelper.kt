@@ -43,7 +43,7 @@ object ShizukuHelper {
     fun exec(cmd: String, timeoutMs: Long): ShellResult {
         if (!isReady()) return ShellResult(-2, "", "Shizuku 未授权")
         return runCatching {
-            val process = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+            val process = newProcess(arrayOf("sh", "-c", cmd))
             var out = ""
             var err = ""
             val t1 = Thread { out = process.inputStream.bufferedReader().use { it.readText() } }
@@ -57,4 +57,20 @@ object ShizukuHelper {
     }
 
     fun binder(): IBinder? = runCatching { Shizuku.getBinder() }.getOrNull()
+
+    /**
+     * Shizuku.newProcess is marked @RestrictTo in recent api artifacts, so the
+     * Kotlin compiler refuses the direct call. The method itself is public on
+     * the binder side, so invoke it reflectively.
+     */
+    private fun newProcess(cmd: Array<String>): Process {
+        val method = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java,
+        )
+        method.isAccessible = true
+        return method.invoke(null, cmd, null, null) as Process
+    }
 }

@@ -221,7 +221,7 @@ class PerformanceRepository(private val context: Context) {
             },
             tempC = temp,
             voltageMv = voltage,
-            currentUa = current,
+            currentUa = current.toInt(),
             cycles = cycles,
             chargeCounterUah = chargeCounter,
             technology = tech,

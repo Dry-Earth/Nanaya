@@ -24,7 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import androidx.core.util.LruCache
+import android.util.LruCache
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

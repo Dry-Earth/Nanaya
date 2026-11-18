@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import android.os.Environment
 import android.os.storage.StorageManager
-import android.os.storage.StorageStatsManager
+import android.app.usage.StorageStatsManager
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
 import io.github.dryearth.solidbutler.core.bytes

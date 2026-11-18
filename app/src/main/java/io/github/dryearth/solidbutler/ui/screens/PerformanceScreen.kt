@@ -419,7 +419,7 @@ private fun BatteryPanel(perf: PerfUiState) {
         }
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
-        KeyValueRow("瞬时电流", if (b.currentUa != 0L) "${b.currentUa / 1000} mA" else "—")
+        KeyValueRow("瞬时电流", if (b.currentUa != 0) "${b.currentUa / 1000} mA" else "—")
         KeyValueRow("供电", b.plugged)
     }
 }

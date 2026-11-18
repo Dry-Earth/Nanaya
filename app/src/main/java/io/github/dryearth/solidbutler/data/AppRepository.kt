@@ -133,35 +133,42 @@ class AppRepository(
     }
 
     fun bootComponents(pkg: String): List<BootComponent> {
-        @Suppress("DEPRECATION")
-        val info = runCatching {
-            pm.getPackageInfo(pkg, PackageManager.GET_RECEIVERS)
-        }.getOrNull() ?: return emptyList()
-        val bootActions = setOf(
+        val bootActions = listOf(
             "android.intent.action.BOOT_COMPLETED",
             "android.intent.action.QUICKBOOT_POWERON",
             "android.intent.action.LOCKED_BOOT_COMPLETED",
             "android.intent.action.MY_PACKAGE_REPLACED",
             "android.intent.action.CONNECTIVITY_CHANGE",
         )
-        return info.receivers.orEmpty().mapNotNull { receiver ->
-            val actions = receiver.intentFilter?.flatMap { it.actions.orEmpty() }.orEmpty()
-                .filter { it in bootActions }
-                .distinct()
-            if (actions.isEmpty()) return@mapNotNull null
-            val comp = ComponentName(pkg, receiver.name)
+        val found = linkedMapOf<String, MutableList<String>>()
+        for (action in bootActions) {
+            val receivers = runCatching {
+                pm.queryBroadcastReceivers(
+                    android.content.Intent(action).setPackage(pkg),
+                    PackageManager.MATCH_DISABLED_COMPONENTS,
+                )
+            }.getOrDefault(emptyList())
+            for (ri in receivers) {
+                val ai = ri.activityInfo ?: continue
+                if (ai.packageName != pkg) continue
+                found.getOrPut(ai.name) { mutableListOf() }
+                    .add(action.substringAfterLast('.'))
+            }
+        }
+        return found.map { (name, actions) ->
+            val comp = ComponentName(pkg, name)
             val setting = runCatching { pm.getComponentEnabledSetting(comp) }
                 .getOrDefault(PackageManager.COMPONENT_ENABLED_STATE_DEFAULT)
+            val enabled = setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED &&
+                setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
             BootComponent(
                 pkg = pkg,
-                component = receiver.name,
-                shortName = receiver.name.substringAfterLast('.'),
-                actions = actions.map { it.substringAfterLast('.') },
-                enabled = setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED &&
-                    setting != PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER &&
-                    receiver.enabled,
+                component = name,
+                shortName = name.substringAfterLast('.'),
+                actions = actions.distinct(),
+                enabled = enabled,
             )
-        }
+        }.sortedBy { it.shortName }
     }
 
     fun setComponentEnabled(pkg: String, component: String, enabled: Boolean): Pair<Boolean, String> {
