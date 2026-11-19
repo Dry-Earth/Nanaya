@@ -462,6 +462,24 @@ fun AiSettingsScreen(
             }
         }
 
+        SectionHeader("会话", "清理当前对话与图片内存")
+        GlassPanel {
+            Text(
+                "清理只删除当前聊天记录、图片和待确认动作，不影响模型、人设和语音设置。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+            Spacer(Modifier.height(8.dp))
+            ActionButton(
+                "清理会话",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    vm.clearChat()
+                    Toast.makeText(context, "会话已清理", Toast.LENGTH_SHORT).show()
+                },
+            )
+        }
+
         GlassPanel {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(

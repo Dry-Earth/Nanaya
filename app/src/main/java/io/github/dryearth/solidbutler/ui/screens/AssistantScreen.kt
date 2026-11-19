@@ -40,7 +40,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
@@ -117,6 +116,14 @@ fun AssistantScreen(
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     val listState = rememberLazyListState()
     var lastSpokenId by remember { mutableStateOf(state.messages.lastOrNull()?.id ?: 0L) }
+    fun clearConversation() {
+        vm.clearChat()
+        pendingImage = null
+        pendingBase64 = null
+        input = ""
+        lastSpokenId = 0L
+        ttsEngine?.stop()
+    }
 
     ToastEffect(state.toast) { vm.clearChatToast() }
 
@@ -247,12 +254,7 @@ fun AssistantScreen(
             )
             Spacer(Modifier.width(12.dp))
             if (state.messages.isNotEmpty()) {
-                Icon(
-                    Icons.Rounded.DeleteOutline,
-                    contentDescription = "清空",
-                    tint = Glass.Faint,
-                    modifier = Modifier.size(20.dp).clickable { vm.clearChat() },
-                )
+                Pill("清空会话", color = Glass.Faint, onClick = { clearConversation() })
             }
         }
 
