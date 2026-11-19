@@ -109,6 +109,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private var windowManager: WindowManager? = null
     private var view: ComposeView? = null
     private var receiver: android.content.BroadcastReceiver? = null
+    private var voiceBadge: android.view.View? = null
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
@@ -149,6 +150,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     override fun onDestroy() {
         runCatching { receiver?.let { unregisterReceiver(it) } }
         if (active === this) active = null
+        removeVoiceBadge()
         removeWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         store.clear()
@@ -159,8 +161,14 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 when (intent?.action) {
-                    ACTION_VOICE_START -> removeWindow()
-                    ACTION_VOICE_END -> if (view == null) showWindow()
+                    ACTION_VOICE_START -> {
+                        removeWindow()
+                        showVoiceBadge()
+                    }
+                    ACTION_VOICE_END -> {
+                        removeVoiceBadge()
+                        if (view == null) showWindow()
+                    }
                 }
             }
         }
@@ -174,6 +182,42 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             @Suppress("DEPRECATION")
             registerReceiver(receiver, filter)
         }
+    }
+
+    private fun showVoiceBadge() {
+        if (!Settings.canDrawOverlays(this) || voiceBadge != null) return
+        val density = resources.displayMetrics.density
+        val text = android.widget.TextView(this).apply {
+            this.text = "汐在听…"
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 13f
+            gravity = android.view.Gravity.CENTER
+            setPadding((18 * density).toInt(), (10 * density).toInt(), (18 * density).toInt(), (10 * density).toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.parseColor("#CC0B1220"))
+                cornerRadius = 22 * density
+                setStroke((1 * density).toInt(), android.graphics.Color.parseColor("#55FFFFFF"))
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (78 * density).toInt()
+        }
+        runCatching { windowManager?.addView(text, params) }
+        voiceBadge = text
+    }
+
+    private fun removeVoiceBadge() {
+        voiceBadge?.let { runCatching { windowManager?.removeView(it) } }
+        voiceBadge = null
     }
 
     private fun showWindow() {

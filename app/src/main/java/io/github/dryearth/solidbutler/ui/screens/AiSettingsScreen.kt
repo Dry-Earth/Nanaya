@@ -234,6 +234,32 @@ fun AiSettingsScreen(
                 value = ttsOptions.firstOrNull { it.pkg == ttsPkg }?.label ?: "系统默认",
             ) { picker = "tts" }
             Spacer(Modifier.height(10.dp))
+            ActionButton(
+                "打开系统语音输入设置",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    val intents = listOf(
+                        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+                        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+                        Intent(Settings.ACTION_SETTINGS),
+                    )
+                    for (i in intents) {
+                        try {
+                            context.startActivity(i)
+                            break
+                        } catch (_: Exception) {
+                        }
+                    }
+                },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "如果使用 Marmalade STT：先在系统「语音输入」里选它，再用上面的系统识别；Marmalade 是识别服务，不是可嵌入的 SDK。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "自动朗读回复",
