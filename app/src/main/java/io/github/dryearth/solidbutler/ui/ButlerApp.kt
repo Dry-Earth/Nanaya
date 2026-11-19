@@ -127,20 +127,39 @@ fun ButlerApp(
         }
     }
 
+    var foreground by remember { mutableStateOf(true) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
+                    foreground = true
                     vm.refreshCapabilities()
-                    vm.startMonitoring()
                 }
-                Lifecycle.Event.ON_STOP -> vm.stopMonitoring()
+                Lifecycle.Event.ON_STOP -> {
+                    foreground = false
+                    vm.stopMonitoring()
+                }
                 else -> Unit
             }
         }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+
+    val screenKey = when {
+        chat -> "chat"
+        settings -> "settings"
+        aiSettings -> "ai"
+        sub != null -> sub!!
+        else -> tab
+    }
+    LaunchedEffect(screenKey, foreground) {
+        if (foreground && (screenKey == "home" || screenKey == "perf")) {
+            vm.startMonitoring()
+        } else {
+            vm.stopMonitoring()
+        }
     }
 
     Box(Modifier.fillMaxSize()) {

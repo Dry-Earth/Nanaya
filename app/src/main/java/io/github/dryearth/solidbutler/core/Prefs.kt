@@ -56,6 +56,10 @@ class Prefs(context: Context) {
         get() = sp.getString("tts_engine", "") ?: ""
         set(value) = sp.edit().putString("tts_engine", value).apply()
 
+    var perfIntervalMs: Int
+        get() = sp.getInt("perf_interval_ms", 1000)
+        set(value) = sp.edit().putInt("perf_interval_ms", value.coerceIn(500, 5000)).apply()
+
     var wakeSoundUri: String
         get() = sp.getString("wake_sound_uri", "") ?: ""
         set(value) = sp.edit().putString("wake_sound_uri", value).apply()

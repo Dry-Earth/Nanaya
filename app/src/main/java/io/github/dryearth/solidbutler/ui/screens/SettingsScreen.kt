@@ -345,12 +345,12 @@ fun SettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (adbConnected) "已连接 adbd" else "未连接",
+                        if (adbConnected) "无线 ADB 已连接" else "无线 ADB 未连接",
                         style = MaterialTheme.typography.titleMedium,
                         color = if (adbConnected) Glass.Mint else Glass.Text,
                     )
                     Text(
-                        if (adbConnected) "深度操作会优先走无线 ADB" else "权限与 Root 类似，但由系统无线调试授权",
+                        if (adbConnected) "Shell 通道在线，深度操作会优先走无线 ADB" else "权限与 Root 类似，但由系统无线调试授权",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Muted,
                     )
@@ -495,14 +495,6 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = Glass.Faint,
                 )
-                adbMessage?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (adbConnected) Glass.Mint else Glass.Amber,
-                    )
-                }
             }
             if (adbConnected) {
                 Spacer(Modifier.height(8.dp))
@@ -513,13 +505,18 @@ fun SettingsScreen(
                         adbBusy = true
                         adbMessage = "正在测试…"
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) { Shell.run("id", 6_000) }
-                            adbBusy = false
-                            adbMessage = if (result.ok) {
-                                "ADB 正常：${result.text.take(120)}"
-                            } else {
-                                "ADB 测试失败：${result.text.take(180)}"
+                            val result = withContext(Dispatchers.IO) {
+                                Shell.runAs(Shell.Backend.ADB, "id", 6_000)
                             }
+                            adbBusy = false
+                            adbConnected = AdbManager.connected()
+                            val message = if (result.ok) {
+                                "ADB 正常：${result.text.ifBlank { "无输出" }.take(120)}"
+                            } else {
+                                "ADB 测试失败：${result.text.ifBlank { "无输出" }.take(180)}"
+                            }
+                            adbMessage = message
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
                     },
                 )
@@ -532,6 +529,14 @@ fun SettingsScreen(
                         adbConnected = false
                         vm.refreshCapabilities(force = true)
                     },
+                )
+            }
+            adbMessage?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (adbConnected) Glass.Mint else Glass.Amber,
                 )
             }
         }

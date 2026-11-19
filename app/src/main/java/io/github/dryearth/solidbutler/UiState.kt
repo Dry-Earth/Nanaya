@@ -45,6 +45,7 @@ data class PerfUiState(
     val history: List<Triple<Long, Int, Int>> = emptyList(),
     val toast: String? = null,
     val monitoring: Boolean = false,
+    val intervalMs: Int = 1000,
 )
 
 data class SecurityUiState(

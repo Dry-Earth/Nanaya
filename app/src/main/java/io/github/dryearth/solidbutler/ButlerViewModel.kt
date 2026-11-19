@@ -86,6 +86,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     val navigate = _navigate.asStateFlow()
 
     private var monitorJob: Job? = null
+    private var monitorIntervalMs = 0L
     private var booted = false
 
     val aiConfigured: Boolean get() = ai.configured()
@@ -373,27 +374,47 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------- performance ----------------
 
     fun startMonitoring() {
-        if (monitorJob?.isActive == true) return
-        _perf.update { it.copy(monitoring = true) }
+        val interval = prefs.perfIntervalMs.coerceIn(500, 5000).toLong()
+        if (monitorJob?.isActive == true && monitorIntervalMs == interval) return
+        monitorJob?.cancel()
+        monitorIntervalMs = interval
+        _perf.update { it.copy(monitoring = true, intervalMs = interval.toInt()) }
         monitorJob = viewModelScope.launch {
             var tick = 0
+            var lastSlowAt = 0L
+            var lastPrivilegeCheck = 0L
             while (isActive) {
-                if (tick % 15 == 0) {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastPrivilegeCheck >= 30_000) {
+                    lastPrivilegeCheck = now
                     val before = Shell.isPrivileged()
                     Shell.revalidate()
                     if (before != Shell.isPrivileged()) refreshCapabilities()
                 }
-                val slow = tick % 15 == 0
+                val slow = now - lastSlowAt >= 30_000
+                if (slow) lastSlowAt = now
                 refreshPerf(includeProcesses = slow, includeHistory = slow)
                 tick++
-                delay(2000)
+                delay(interval)
             }
+        }
+    }
+
+    fun setPerfInterval(ms: Int) {
+        prefs.perfIntervalMs = ms
+        if (monitorJob?.isActive == true) {
+            monitorJob?.cancel()
+            monitorJob = null
+            startMonitoring()
+        } else {
+            _perf.update { it.copy(intervalMs = prefs.perfIntervalMs) }
         }
     }
 
     fun stopMonitoring() {
         monitorJob?.cancel()
         monitorJob = null
+        monitorIntervalMs = 0L
         _perf.update { it.copy(monitoring = false) }
     }
 

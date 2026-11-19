@@ -78,7 +78,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { LivePanel(perf) }
+        item { LivePanel(perf, vm) }
         item { CoresPanel(perf) }
         item { GpuPanel(perf) }
         item { NpuPanel(perf) }
@@ -154,14 +154,31 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
 }
 
 @Composable
-private fun LivePanel(perf: PerfUiState) {
+private fun LivePanel(perf: PerfUiState, vm: ButlerViewModel) {
     GlassPanel(padding = PaddingValues(18.dp)) {
         SectionHeader(
             "实时性能",
-            "2 秒刷新 · /proc/stat 与 sysfs",
+            "实时刷新 · /proc/stat 与 sysfs",
             trailing = {
                 Pill(if (perf.monitoring) "采集中" else "已暂停", selected = perf.monitoring, color = Glass.Mint)
             },
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(1000 to "1 秒", 2000 to "2 秒", 3000 to "3 秒", 5000 to "5 秒").forEach { (ms, label) ->
+                Pill(
+                    label,
+                    selected = perf.intervalMs == ms,
+                    color = Glass.Accent,
+                    onClick = { vm.setPerfInterval(ms) },
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "当前页面实时刷新；离开性能页或 App 切到后台会自动暂停。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
         )
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.Bottom) {
