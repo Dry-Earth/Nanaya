@@ -59,6 +59,7 @@ import io.github.muntashirakon.adb.AdbStream;
 public final class AdbManager extends AbsAdbConnectionManager {
     private static volatile AdbManager INSTANCE;
     private static volatile String LAST_ERROR = "";
+    private static volatile String LAST_RUN_ERROR = "";
 
     private final PrivateKey privateKey;
     private final Certificate certificate;
@@ -130,6 +131,10 @@ public final class AdbManager extends AbsAdbConnectionManager {
 
     public static String lastError() {
         return LAST_ERROR;
+    }
+
+    public static String lastRunError() {
+        return LAST_RUN_ERROR;
     }
 
     /** Pair with the address/code shown in Wireless debugging. Returns null on success. */
@@ -232,12 +237,16 @@ public final class AdbManager extends AbsAdbConnectionManager {
             }
         });
         try {
-            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            Result result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            LAST_RUN_ERROR = "";
+            return result;
         } catch (TimeoutException e) {
             future.cancel(true);
             close(holder[0]);
+            LAST_RUN_ERROR = "命令超时（" + timeoutMs + "ms）";
             return null;
         } catch (Exception e) {
+            LAST_RUN_ERROR = message(e);
             return null;
         }
     }

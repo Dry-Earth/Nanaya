@@ -56,6 +56,7 @@ import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.AdbManager
 import io.github.dryearth.solidbutler.core.Capabilities
+import io.github.dryearth.solidbutler.core.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -504,6 +505,24 @@ fun SettingsScreen(
                 }
             }
             if (adbConnected) {
+                Spacer(Modifier.height(8.dp))
+                ActionButton(
+                    "测试无线 ADB",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        adbBusy = true
+                        adbMessage = "正在测试…"
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { Shell.run("id", 6_000) }
+                            adbBusy = false
+                            adbMessage = if (result.ok) {
+                                "ADB 正常：${result.text.take(120)}"
+                            } else {
+                                "ADB 测试失败：${result.text.take(180)}"
+                            }
+                        }
+                    },
+                )
                 Spacer(Modifier.height(8.dp))
                 ActionButton(
                     "断开无线 ADB",

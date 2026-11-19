@@ -298,36 +298,40 @@ private fun TemperaturePanel(perf: PerfUiState) {
     GlassPanel {
         SectionHeader("温度", "thermal_zone")
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            perf.snapshot.temps.take(4).forEach { t ->
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x08FFFFFF))
-                        .padding(horizontal = 8.dp, vertical = 9.dp),
-                ) {
-                    Text(
-                        "${t.celsius.toInt()}°",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = when {
-                            t.celsius >= 60 -> Glass.Rose
-                            t.celsius >= 45 -> Glass.Amber
-                            else -> Glass.Text
-                        },
-                    )
-                    Text(t.label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-                    if (t.source.isNotBlank()) {
+        perf.snapshot.temps.chunked(4).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { t ->
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0x08FFFFFF))
+                            .padding(horizontal = 8.dp, vertical = 9.dp),
+                    ) {
                         Text(
-                            t.source,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Faint.copy(alpha = 0.65f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            "${t.celsius.toInt()}°",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = when {
+                                t.celsius >= 60 -> Glass.Rose
+                                t.celsius >= 45 -> Glass.Amber
+                                else -> Glass.Text
+                            },
                         )
+                        Text(t.label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                        if (t.source.isNotBlank()) {
+                            Text(
+                                t.source,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Faint.copy(alpha = 0.65f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
             }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }

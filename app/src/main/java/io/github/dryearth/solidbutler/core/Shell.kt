@@ -70,7 +70,7 @@ object Shell {
             AdbManager.connected() -> {
                 val result = AdbManager.run(cmd, timeoutMs)
                 if (result != null) ShellResult(result.code, result.output)
-                else ShellResult(-1, "", "无线 ADB 执行失败")
+                else ShellResult(-1, "", "无线 ADB 执行失败：" + AdbManager.lastRunError())
             }
             else -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
@@ -83,7 +83,7 @@ object Shell {
             Backend.ADB -> {
                 val result = AdbManager.run(cmd, timeoutMs)
                 if (result != null) ShellResult(result.code, result.output)
-                else ShellResult(-1, "", "无线 ADB 未连接")
+                else ShellResult(-1, "", "无线 ADB 执行失败：" + AdbManager.lastRunError())
             }
             Backend.APP -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }

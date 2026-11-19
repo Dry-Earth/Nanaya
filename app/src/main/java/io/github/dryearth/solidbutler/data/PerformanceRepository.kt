@@ -331,7 +331,7 @@ class PerformanceRepository(private val context: Context) {
             val sorted = values.map { it.first }.sorted()
             val median = sorted[sorted.size / 2]
             TempReading(label, median, values.map { it.second }.distinct().joinToString(" / ").take(40))
-        }.sortedByDescending { it.celsius }.take(8).toMutableList()
+        }.sortedByDescending { it.celsius }.toMutableList()
         if (list.isEmpty()) {
             val b = readBattery()
             if (b.tempC > 0) list.add(TempReading("电池", b.tempC))

@@ -383,7 +383,8 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     Shell.revalidate()
                     if (before != Shell.isPrivileged()) refreshCapabilities()
                 }
-                refreshPerf()
+                val slow = tick % 15 == 0
+                refreshPerf(includeProcesses = slow, includeHistory = slow)
                 tick++
                 delay(2000)
             }
@@ -396,27 +397,36 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         _perf.update { it.copy(monitoring = false) }
     }
 
-    private suspend fun refreshPerf() {
+    private suspend fun refreshPerf(
+        includeProcesses: Boolean = false,
+        includeHistory: Boolean = false,
+    ) {
         val (snap, charging) = withContext(Dispatchers.IO) {
-            perfRepo.snapshot() to LineageHealth.read()
+            perfRepo.snapshot(includeProcesses = includeProcesses) to LineageHealth.read()
         }
         val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
         val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
-        val batteryHistory = withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
+        val batteryHistory = if (includeHistory) {
+            withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
+        } else {
+            null
+        }
         _perf.update {
             val cpuHist = (it.cpuHistory + snap.cpu.loadPct).takeLast(90)
             val ramHist = (it.ramHistory + safePct(snap.ramUsed, snap.ramTotal) * 100f).takeLast(90)
             it.copy(
-                snapshot = snap,
+                snapshot = if (includeProcesses) snap else snap.copy(processes = it.snapshot.processes),
                 charging = charging,
                 cpuHistory = cpuHist,
                 ramHistory = ramHist,
                 governor = governor,
                 presets = presets,
-                history = batteryHistory,
+                history = batteryHistory ?: it.history,
             )
         }
-        withContext(Dispatchers.IO) { perfRepo.recordBattery(snap.battery) }
+        if (includeHistory) {
+            withContext(Dispatchers.IO) { perfRepo.recordBattery(snap.battery) }
+        }
     }
 
     fun refreshDrain() {
