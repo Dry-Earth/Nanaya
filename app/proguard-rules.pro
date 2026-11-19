@@ -16,7 +16,6 @@
 -dontwarn org.conscrypt.**
 -dontwarn javax.naming.**
 -keep class io.github.muntashirakon.adb.** { *; }
--keep class org.conscrypt.** { *; }
 -keep class org.bouncycastle.** { *; }
 -keep class android.sun.security.** { *; }
 -keep class android.sun.misc.** { *; }
