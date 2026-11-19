@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -391,7 +392,12 @@ private fun TopBar(
     onChat: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)) {
+        GlassPanel(
+            modifier = Modifier.fillMaxWidth(),
+            corner = 28.dp,
+            padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -437,6 +443,7 @@ private fun TopBar(
                 Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
             }
         }
+        }
     }
 }
 
@@ -447,23 +454,27 @@ private fun BottomBar(
     backdrop: LayerBackdrop,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
+    Box(
+        modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         GlassPanel(
-            modifier = Modifier.fillMaxWidth(),
-            corner = 24.dp,
-            padding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.height(64.dp),
+            corner = 32.dp,
+            padding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
             backdropOverride = backdrop,
         ) {
             Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                Modifier.fillMaxHeight(),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 navItems.forEach { item ->
                     val selected = current == item.id
                     Column(
                         Modifier
-                            .weight(1f)
+                            .width(58.dp)
+                            .fillMaxHeight()
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onSelect(item.id) }
                             .background(if (selected) Color(0x10FFFFFF) else Color.Transparent)
