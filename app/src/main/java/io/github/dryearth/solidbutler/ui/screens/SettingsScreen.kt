@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -637,11 +638,16 @@ private fun applyIcon(context: android.content.Context, alias: String) {
 
 private fun localWifiIp(context: android.content.Context): String? = runCatching {
     val cm = context.getSystemService(ConnectivityManager::class.java)
-    val network = cm.activeNetwork ?: return@runCatching null
-    val props = cm.getLinkProperties(network) ?: return@runCatching null
-    props.linkAddresses
-        .mapNotNull { it.address.hostAddress }
-        .firstOrNull { it.contains('.') && !it.startsWith("127.") && !it.startsWith("169.254.") }
+    for (network in cm.allNetworks) {
+        val caps = cm.getNetworkCapabilities(network) ?: continue
+        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+        val props = cm.getLinkProperties(network) ?: continue
+        val ip = props.linkAddresses
+            .mapNotNull { it.address.hostAddress }
+            .firstOrNull { it.contains('.') && !it.startsWith("127.") && !it.startsWith("169.254.") }
+        if (ip != null) return@runCatching ip
+    }
+    null
 }.getOrNull()
 
 private fun openFirst(context: android.content.Context, vararg intents: Intent) {
