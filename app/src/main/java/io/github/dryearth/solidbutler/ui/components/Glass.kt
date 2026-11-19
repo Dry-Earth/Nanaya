@@ -232,11 +232,12 @@ fun GlassPanel(
     padding: PaddingValues = PaddingValues(16.dp),
     tint: Color = Color.White,
     opaque: Boolean = false,
+    backdropOverride: LayerBackdrop? = null,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(corner)
-    val backdrop = LocalGlassBackdrop.current
+    val backdrop = backdropOverride ?: LocalGlassBackdrop.current
     Column(
         modifier = modifier
             .shadow(16.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)

@@ -37,7 +37,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -113,6 +115,10 @@ fun ButlerApp(
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
     val glassBackdrop = LocalGlassBackdrop.current
+    val contentBackdrop = rememberLayerBackdrop {
+        drawRect(Glass.Ink)
+        drawContent()
+    }
 
     LaunchedEffect(nav) {
         val target = nav ?: return@LaunchedEffect
@@ -166,10 +172,15 @@ fun ButlerApp(
     }
 
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
-            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
-        }
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(contentBackdrop),
+        ) {
+            Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
+                AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+            }
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 86.dp)) {
             TopBar(
                 caps = caps,
                 perf = perf,
@@ -227,8 +238,14 @@ fun ButlerApp(
                     }
                 }
             }
-            BottomBar(current = tab, onSelect = { sub = null; tab = it })
+            }
         }
+        BottomBar(
+            current = tab,
+            onSelect = { sub = null; tab = it },
+            backdrop = contentBackdrop,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 
     if (chat) {
@@ -424,12 +441,18 @@ private fun TopBar(
 }
 
 @Composable
-private fun BottomBar(current: String, onSelect: (String) -> Unit) {
-    Box(Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
+private fun BottomBar(
+    current: String,
+    onSelect: (String) -> Unit,
+    backdrop: LayerBackdrop,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp)) {
         GlassPanel(
             modifier = Modifier.fillMaxWidth(),
             corner = 24.dp,
             padding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+            backdropOverride = backdrop,
         ) {
             Row(
                 Modifier.fillMaxWidth(),
