@@ -12,18 +12,13 @@ import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.widget.Toast
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +52,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -161,6 +157,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         val wm = getSystemService(WindowManager::class.java)
         windowManager = wm
         val compose = ComposeView(this).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             setViewTreeLifecycleOwner(this@AssistOverlayService)
             setViewTreeSavedStateRegistryOwner(this@AssistOverlayService)
             setViewTreeViewModelStoreOwner(this@AssistOverlayService)
@@ -254,16 +251,32 @@ private fun OverlayAssistant(
     var expanded by remember { mutableStateOf(false) }
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
-    var listening by remember { mutableStateOf(false) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
-    var recognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+    val busStatus by OverlayVoiceBus.status.collectAsState()
+    val busListening by OverlayVoiceBus.listening.collectAsState()
+    val busResult by OverlayVoiceBus.result.collectAsState()
+    val busError by OverlayVoiceBus.error.collectAsState()
     val shape = RoundedCornerShape(30.dp)
 
-    DisposableEffect(Unit) {
-        onDispose { recognizer?.destroy(); recognizer = null }
+    LaunchedEffect(busResult) {
+        val text = busResult ?: return@LaunchedEffect
+        input = text
+        if (vm.chat.value.modelConfigured && text.isNotBlank()) {
+            input = ""
+            vm.sendChat(text)
+        } else if (text.isNotBlank()) {
+            voiceStatus = "已识别，填入输入框"
+        }
+        OverlayVoiceBus.reset()
+    }
+    LaunchedEffect(busError) {
+        val err = busError ?: return@LaunchedEffect
+        voiceStatus = err
+        Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+        OverlayVoiceBus.error.value = null
     }
 
-    fun startListening() {
+    fun startVoice() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -271,88 +284,20 @@ private fun OverlayAssistant(
             Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            voiceStatus = "系统没有语音识别服务"
-            Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
-            return
-        }
-        val engine = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { r ->
-            r.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    listening = true
-                    voiceStatus = "正在聆听…"
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    listening = false
-                    voiceStatus = "正在识别…"
-                }
-                override fun onError(error: Int) {
-                    listening = false
-                    voiceStatus = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "没有听清，再试一次"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有检测到语音"
-                        SpeechRecognizer.ERROR_NETWORK,
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "语音识别网络错误"
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
-                        else -> "识别失败：$error"
-                    }
-                    Toast.makeText(context, voiceStatus, Toast.LENGTH_SHORT).show()
-                }
-                override fun onResults(results: Bundle?) {
-                    listening = false
-                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                    if (!text.isNullOrBlank()) {
-                        input = text
-                        if (vm.chat.value.modelConfigured) {
-                            input = ""
-                            voiceStatus = null
-                            vm.sendChat(text)
-                        } else {
-                            voiceStatus = "已识别，填入输入框；配置模型后可直接发送"
-                        }
-                    }
-                }
-                override fun onPartialResults(partialResults: Bundle?) {
-                    partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()?.let { input = it }
-                }
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            recognizer = r
-            r
-        }
-        listening = !listening
-        if (!listening) {
-            engine.stopListening()
-            voiceStatus = null
-            try {
-                ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
-                    startTone(ToneGenerator.TONE_PROP_BEEP2, 80)
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
-                }
-            } catch (_: Exception) {}
-            return
-        }
-        voiceStatus = "正在开始语音…"
+        voiceStatus = "正在启动语音…"
         try {
             ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
                 startTone(ToneGenerator.TONE_PROP_BEEP, 80)
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
             }
         } catch (_: Exception) {}
-        engine.startListening(
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧")
-            }
-        )
+        val ok = runCatching {
+            context.startActivity(
+                Intent(context, OverlayVoiceActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        }.isSuccess
+        if (!ok) voiceStatus = "无法启动语音识别窗口"
     }
 
     BoxWithConstraints(
@@ -443,12 +388,13 @@ private fun OverlayAssistant(
                 )
             }
 
-            voiceStatus?.let {
+            (busStatus ?: voiceStatus)?.let {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
+                    color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                    maxLines = 1,
                 )
             }
             Spacer(Modifier.height(10.dp))
@@ -473,19 +419,19 @@ private fun OverlayAssistant(
                 Spacer(Modifier.width(6.dp))
                 Box(
                     Modifier.size(36.dp).clip(CircleShape)
-                        .background(if (listening) Color(0x33D85B5B) else Color(0x220B1220))
+                        .background(if (busListening) Color(0x33D85B5B) else Color(0x220B1220))
                         .border(
-                            width = if (listening) 1.5.dp else 0.dp,
-                            color = if (listening) Color(0x99D85B5B) else Color.Transparent,
+                            width = if (busListening) 1.5.dp else 0.dp,
+                            color = if (busListening) Color(0x99D85B5B) else Color.Transparent,
                             shape = CircleShape,
                         )
-                        .clickable { startListening() },
+                        .clickable { startVoice() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Rounded.Mic,
                         contentDescription = "语音输入",
-                        tint = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
+                        tint = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
                         modifier = Modifier.size(17.dp),
                     )
                 }

@@ -1,0 +1,131 @@
+package io.github.dryearth.solidbutler.service
+
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.view.View
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.MutableStateFlow
+
+/** Bridge between the transparent recognition Activity and the overlay window. */
+object OverlayVoiceBus {
+    val result = MutableStateFlow<String?>(null)
+    val error = MutableStateFlow<String?>(null)
+    val listening = MutableStateFlow(false)
+    val status = MutableStateFlow<String?>(null)
+
+    fun reset() {
+        result.value = null
+        error.value = null
+        status.value = null
+    }
+}
+
+/**
+ * SpeechRecognizer needs a visible Activity context on many Android 14+/17
+ * builds. This Activity is fully transparent, so the assistant overlay stays
+ * on screen while listening.
+ */
+class OverlayVoiceActivity : Activity() {
+    private var recognizer: SpeechRecognizer? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(View(this))
+        OverlayVoiceBus.reset()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 91)
+        } else {
+            startRecognition()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 91 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            startRecognition()
+        } else {
+            OverlayVoiceBus.error.value = "麦克风权限被拒绝"
+            finish()
+        }
+    }
+
+    private fun startRecognition() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            OverlayVoiceBus.error.value = "系统没有语音识别服务"
+            finish()
+            return
+        }
+        OverlayVoiceBus.listening.value = true
+        OverlayVoiceBus.status.value = "正在聆听…"
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { r ->
+            r.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    OverlayVoiceBus.listening.value = false
+                    OverlayVoiceBus.status.value = "正在识别…"
+                }
+
+                override fun onError(error: Int) {
+                    OverlayVoiceBus.listening.value = false
+                    OverlayVoiceBus.error.value = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH -> "没有听清，再试一次"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有检测到语音"
+                        SpeechRecognizer.ERROR_NETWORK,
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "语音识别网络错误"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
+                        SpeechRecognizer.ERROR_CLIENT -> "识别客户端异常，请重试"
+                        else -> "识别失败：$error"
+                    }
+                    finish()
+                }
+
+                override fun onResults(results: Bundle?) {
+                    OverlayVoiceBus.listening.value = false
+                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    if (text.isNullOrBlank()) {
+                        OverlayVoiceBus.error.value = "没有识别到文字"
+                    } else {
+                        OverlayVoiceBus.result.value = text
+                        OverlayVoiceBus.status.value = null
+                    }
+                    finish()
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.let { OverlayVoiceBus.status.value = it }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            r.startListening(
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧")
+                }
+            )
+        }
+    }
+
+    override fun onDestroy() {
+        recognizer?.destroy()
+        recognizer = null
+        OverlayVoiceBus.listening.value = false
+        super.onDestroy()
+    }
+}
