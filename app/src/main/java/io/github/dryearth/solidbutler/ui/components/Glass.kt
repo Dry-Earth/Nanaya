@@ -62,6 +62,8 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.lens
+import top.yukonga.miuix.kmp.blur.vibrancy
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -245,16 +247,21 @@ fun GlassPanel(
                         backdrop = backdrop,
                         shape = { shape },
                         effects = {
-                            blur(14.dp.toPx(), 14.dp.toPx())
+                            vibrancy()
+                            blur(10.dp.toPx(), 10.dp.toPx())
+                            lens(
+                                refractionHeight = 22.dp.toPx(),
+                                refractionAmount = 18.dp.toPx(),
+                            )
                         },
-                        onDrawSurface = { drawRect(Color(0x990B0E13)) },
+                        onDrawSurface = { drawRect(Color(0x550B0E13)) },
                     )
                 } else {
                     Modifier
                 },
             )
             // A solid-ish base keeps the background grid from showing through the glass.
-            .background(if (opaque) Color(0xFF0B0E13) else Color(0x330B0E13))
+            .background(if (opaque) Color(0xFF0B0E13) else Color(0x1F0B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(
