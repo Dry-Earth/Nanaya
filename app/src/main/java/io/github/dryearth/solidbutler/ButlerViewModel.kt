@@ -28,6 +28,7 @@ import io.github.dryearth.solidbutler.data.AppRepository
 import io.github.dryearth.solidbutler.data.AutomationRepository
 import io.github.dryearth.solidbutler.data.AutomationRule
 import io.github.dryearth.solidbutler.data.ButlerAction
+import io.github.dryearth.solidbutler.data.ChatImageStore
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.data.PerformanceRepository
@@ -720,10 +721,21 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         _appearance.value = Appearance(style, uri)
     }
 
-    fun sendChat(text: String, imageBase64: String? = null) {
-        val input = text.trim().ifBlank { if (imageBase64 != null) "看看这张图" else "" }
+    fun sendChat(
+        text: String,
+        imagePath: String? = null,
+        imageSendPath: String? = null,
+        imageThumbPath: String? = null,
+    ) {
+        val input = text.trim().ifBlank { if (imageSendPath != null) "看看这张图" else "" }
         if (input.isBlank() || _chat.value.sending) return
-        val user = ChatMessage(role = ChatRole.USER, text = input, imageBase64 = imageBase64)
+        val user = ChatMessage(
+            role = ChatRole.USER,
+            text = input,
+            imagePath = imagePath,
+            imageSendPath = imageSendPath,
+            imageThumbPath = imageThumbPath,
+        )
         _chat.update { it.copy(messages = trimChatImages(it.messages + user), sending = true) }
         viewModelScope.launch {
             runCatching { ai.complete(buildSystemPrompt(), _chat.value.messages) }
@@ -757,12 +769,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Keep only the newest four images so base64 strings cannot grow forever. */
     private fun trimChatImages(messages: List<ChatMessage>): List<ChatMessage> {
-        val keep = messages.filter { it.imageBase64 != null }.takeLast(4).map { it.id }.toSet()
-        val images = messages.count { it.imageBase64 != null }
+        val keep = messages.filter { it.imageSendPath != null }.takeLast(4).map { it.id }.toSet()
+        val images = messages.count { it.imageSendPath != null }
         if (keep.size == images) return messages
         return messages.map { message ->
-            if (message.imageBase64 != null && message.id !in keep) {
-                message.copy(imageBase64 = null)
+            if (message.imageSendPath != null && message.id !in keep) {
+                message.copy(imagePath = null, imageSendPath = null, imageThumbPath = null)
             } else message
         }
     }
@@ -788,7 +800,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         updateMessage(id) { it.copy(actionState = ActionState.REJECTED, actionResult = "已取消") }
     }
 
-    fun clearChat() = _chat.update { it.copy(messages = emptyList(), toast = null) }
+    fun clearChat() {
+        _chat.update { it.copy(messages = emptyList(), toast = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            ChatImageStore.clear(getApplication())
+        }
+    }
 
     fun clearChatToast() = _chat.update { it.copy(toast = null) }
 

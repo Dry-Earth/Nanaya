@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Base64
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
@@ -73,6 +72,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.data.ChatImageStore
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.TtsDefaults
@@ -85,7 +85,6 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 
 @Composable
 fun AssistantScreen(
@@ -101,14 +100,20 @@ fun AssistantScreen(
     var input by rememberSaveable { mutableStateOf("") }
     var speakReplies by rememberSaveable { mutableStateOf(prefs.aiSpeakReplies) }
     var pendingImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var pendingBase64 by remember { mutableStateOf<String?>(null) }
+    var pendingOriginalPath by remember { mutableStateOf<String?>(null) }
+    var pendingSendPath by remember { mutableStateOf<String?>(null) }
+    var pendingThumbPath by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
-                val pair = withContext(Dispatchers.IO) { encodeImage(context, uri) }
-                pendingImage = pair.first
-                pendingBase64 = pair.second
+                val saved = withContext(Dispatchers.IO) { ChatImageStore.save(context, uri) }
+                if (saved != null) {
+                    pendingOriginalPath = saved.originalPath
+                    pendingSendPath = saved.sendPath
+                    pendingThumbPath = saved.thumbPath
+                    pendingImage = withContext(Dispatchers.IO) { decodeFile(saved.thumbPath) }
+                }
             }
         }
     }
@@ -119,7 +124,10 @@ fun AssistantScreen(
     fun clearConversation() {
         vm.clearChat()
         pendingImage = null
-        pendingBase64 = null
+        ChatImageStore.delete(listOf(pendingOriginalPath, pendingSendPath, pendingThumbPath))
+        pendingOriginalPath = null
+        pendingSendPath = null
+        pendingThumbPath = null
         input = ""
         lastSpokenId = 0L
         ttsEngine?.stop()
@@ -344,15 +352,23 @@ fun AssistantScreen(
             imagePreview = pendingImage,
             onValueChange = { input = it },
             onPickImage = { imagePicker.launch("image/*") },
-            onRemoveImage = { pendingImage = null; pendingBase64 = null },
+            onRemoveImage = {
+                pendingImage = null
+                ChatImageStore.delete(listOf(pendingOriginalPath, pendingSendPath, pendingThumbPath))
+                pendingOriginalPath = null
+                pendingSendPath = null
+                pendingThumbPath = null
+            },
             onMic = { requestMic() },
             onSend = {
                 val text = input.trim()
-                if (text.isNotEmpty() || pendingBase64 != null) {
-                    vm.sendChat(text, pendingBase64)
+                if (text.isNotEmpty() || pendingSendPath != null) {
+                    vm.sendChat(text, pendingOriginalPath, pendingSendPath, pendingThumbPath)
                     input = ""
                     pendingImage = null
-                    pendingBase64 = null
+                    pendingOriginalPath = null
+                    pendingSendPath = null
+                    pendingThumbPath = null
                 }
             },
         )
@@ -372,6 +388,13 @@ private fun Suggestion(text: String, onClick: (String) -> Unit) {
         }
     }
 }
+
+private fun decodeFile(path: String): ImageBitmap? = runCatching {
+    val options = BitmapFactory.Options().apply {
+        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+    }
+    BitmapFactory.decodeFile(path, options)?.asImageBitmap()
+}.getOrNull()
 
 @Composable
 private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
@@ -394,23 +417,10 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
         } else {
             Column(Modifier.fillMaxWidth(0.94f)) {
                 GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp)) {
-                    val imageData = msg.imageBase64
-                    if (imageData != null) {
-                        val bmp = remember(imageData) {
-                            runCatching {
-                                val bytes = Base64.decode(imageData, Base64.DEFAULT)
-                                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                                var sample = 1
-                                while (bounds.outWidth / sample > 720 || bounds.outHeight / sample > 720) {
-                                    sample *= 2
-                                }
-                                val options = BitmapFactory.Options().apply {
-                                    inSampleSize = sample
-                                    inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
-                                }
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
-                            }.getOrNull()
+                    val imagePath = msg.imageThumbPath
+                    if (imagePath != null) {
+                        val bmp = remember(imagePath) {
+                            decodeFile(imagePath)
                         }
                         if (bmp != null) {
                             Image(
@@ -618,34 +628,3 @@ private fun Composer(
 }
 
 
-private fun encodeImage(context: android.content.Context, uri: Uri): Pair<ImageBitmap?, String?> {
-    return runCatching {
-        val max = 1024
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        }
-        var sample = 1
-        while (bounds.outWidth / sample > max || bounds.outHeight / sample > max) {
-            sample *= 2
-        }
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        val decoded = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, options)
-        } ?: return null to null
-        val scale = minOf(1f, max.toFloat() / maxOf(decoded.width, decoded.height))
-        val scaled = if (scale < 1f) {
-            android.graphics.Bitmap.createScaledBitmap(
-                decoded,
-                (decoded.width * scale).toInt().coerceAtLeast(1),
-                (decoded.height * scale).toInt().coerceAtLeast(1),
-                true,
-            )
-        } else decoded
-        val out = ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
-        val bytes = out.toByteArray()
-        if (scaled !== decoded) decoded.recycle()
-        (scaled.asImageBitmap()) to Base64.encodeToString(bytes, Base64.NO_WRAP)
-    }.getOrDefault(null to null)
-}

@@ -2,6 +2,7 @@ package io.github.dryearth.solidbutler.ai
 
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.data.ChatMessage
+import io.github.dryearth.solidbutler.data.ChatImageStore
 import io.github.dryearth.solidbutler.data.ChatRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,16 +31,17 @@ class AiClient(private val prefs: Prefs) {
             val messages = JSONArray()
             messages.put(JSONObject().put("role", "system").put("content", system))
             val recent = history.filter { it.role != ChatRole.SYSTEM }.takeLast(14)
-            val imageIds = recent.filter { it.imageBase64 != null }.takeLast(2).map { it.id }.toSet()
+            val imageIds = recent.filter { it.imageSendPath != null }.takeLast(2).map { it.id }.toSet()
             recent.forEach { m ->
                 val role = if (m.role == ChatRole.USER) "user" else "assistant"
-                val content: Any = if (m.imageBase64 != null && m.id in imageIds) {
+                val image = if (m.id in imageIds) ChatImageStore.base64(m.imageSendPath) else null
+                val content: Any = if (image != null) {
                     JSONArray()
                         .put(JSONObject().put("type", "text").put("text", m.text))
                         .put(
                             JSONObject()
                                 .put("type", "image_url")
-                                .put("image_url", JSONObject().put("url", "data:image/jpeg;base64,${m.imageBase64}"))
+                                .put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$image"))
                         )
                 } else {
                     m.text

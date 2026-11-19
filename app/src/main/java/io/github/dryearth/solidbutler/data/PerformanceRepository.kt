@@ -149,10 +149,10 @@ class PerformanceRepository(private val context: Context) {
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
-    fun memoryProcesses(): List<MemProcess> {
+    fun memoryProcesses(force: Boolean = false): List<MemProcess> {
         if (!Shell.isPrivileged()) return emptyList()
         val now = System.currentTimeMillis()
-        if (now - lastMemAt < 15_000 && lastMemList.isNotEmpty()) return lastMemList
+        if (!force && now - lastMemAt < 15_000 && lastMemList.isNotEmpty()) return lastMemList
         lastMemAt = now
 
         // ps is much faster than dumpsys meminfo and works through ADB.

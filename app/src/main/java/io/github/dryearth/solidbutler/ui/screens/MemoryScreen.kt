@@ -49,6 +49,8 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -60,9 +62,19 @@ fun MemoryScreen(onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        snapshot = withContext(Dispatchers.IO) { repo.snapshot(includeProcesses = false) }
-        processes = withContext(Dispatchers.IO) { repo.memoryProcesses() }
-        loading = false
+        // Refresh only while this screen is composed; leaving cancels the loop.
+        while (isActive) {
+            val nextSnapshot = withContext(Dispatchers.IO) {
+                repo.snapshot(includeProcesses = false)
+            }
+            val nextProcesses = withContext(Dispatchers.IO) {
+                repo.memoryProcesses(force = true)
+            }
+            snapshot = nextSnapshot
+            processes = nextProcesses
+            loading = false
+            delay(2_000)
+        }
     }
 
     LazyColumn(
