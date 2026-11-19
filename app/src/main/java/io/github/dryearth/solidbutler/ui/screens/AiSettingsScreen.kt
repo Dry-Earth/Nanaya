@@ -97,6 +97,7 @@ fun AiSettingsScreen(
     var sttPkg by rememberSaveable { mutableStateOf(vm.prefs.sttPackage) }
     var ttsPkg by rememberSaveable { mutableStateOf(vm.prefs.ttsEngine) }
     var speak by rememberSaveable { mutableStateOf(vm.prefs.aiSpeakReplies) }
+    var greetings by rememberSaveable { mutableStateOf(vm.prefs.wakeGreetings) }
     var personaName by rememberSaveable { mutableStateOf(vm.prefs.personaName) }
     var personaPrompt by rememberSaveable { mutableStateOf(vm.prefs.personaPrompt) }
     var userTitle by rememberSaveable { mutableStateOf(vm.prefs.userTitle) }
@@ -267,6 +268,19 @@ fun AiSettingsScreen(
                     onClick = { speak = !speak },
                 )
             }
+            Spacer(Modifier.height(10.dp))
+            AiField(
+                "唤醒开场白",
+                greetings,
+                "我在\n有什么吩咐\n我在，需要我做什么",
+                singleLine = false,
+            ) { greetings = it }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "每行一句，唤醒时随机播放；留空则不播。语速、音调跟随系统 TTS。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
             Spacer(Modifier.height(6.dp))
             Text(
                 "语音识别需要系统识别服务与麦克风权限；TTS 需要系统语音引擎。",
@@ -410,6 +424,7 @@ fun AiSettingsScreen(
                     onClick = {
                         vm.saveAiConfig(base, key, model)
                         vm.saveVoiceConfig(sttPkg, ttsPkg, speak)
+                        vm.prefs.wakeGreetings = greetings
                         vm.savePersona(personaName, personaPrompt, userTitle)
                         vm.prefs.aiThinking = thinking
                         vm.prefs.aiEffort = effort

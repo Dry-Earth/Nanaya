@@ -221,6 +221,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             gravity = Gravity.BOTTOM
             y = 0
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            windowAnimations = 0
         }
         runCatching { wm.addView(compose, params) }
         view = compose
@@ -229,7 +230,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     private fun removeWindow() {
         val v = view ?: return
-        runCatching { windowManager?.removeView(v) }
+        runCatching { windowManager?.removeViewImmediate(v) }
         view = null
     }
 
@@ -280,14 +281,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         }.getOrDefault(false)
     }
 }
-
-private val WakeGreetings = listOf(
-    "我在",
-    "有什么吩咐",
-    "我在，需要我做什么",
-    "听着呢",
-    "来了",
-)
 
 private suspend fun speakAndWait(engine: TextToSpeech, text: String) {
     suspendCancellableCoroutine<Unit> { cont ->
@@ -383,7 +376,7 @@ private fun OverlayAssistant(
         entry.snapTo(0f)
         glow.snapTo(0f)
         launch { dim.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
-        launch { entrance.animateTo(1f, tween(1500, easing = LinearOutSlowInEasing)) }
+        launch { entrance.animateTo(1f, tween(2300, easing = LinearOutSlowInEasing)) }
         launch {
             glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
             glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
@@ -446,6 +439,17 @@ private fun OverlayAssistant(
         }
     }
 
+    var closing by remember { mutableStateOf(false) }
+    val exit = remember { Animatable(0f) }
+    fun dismiss() {
+        if (closing) return
+        closing = true
+        scope.launch {
+            exit.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
+            onClose()
+        }
+    }
+
     LaunchedEffect(autoVoice) {
         if (autoVoice) {
             revealed = false
@@ -455,17 +459,23 @@ private fun OverlayAssistant(
     }
     LaunchedEffect(wakeToken) {
         if (wakeToken == 0) return@LaunchedEffect
-        val phrase = WakeGreetings.random()
-        val ready = withTimeoutOrNull(1400) {
-            while (!ttsReady.value) delay(60)
-            true
-        } == true
-        if (ready) {
-            val engine = ttsRef.value
-            if (engine != null) {
-                val finished = withTimeoutOrNull(2800) { speakAndWait(engine, phrase) }
-                if (finished == null) runCatching { engine.stop() }
-                delay(120)
+        val phrases = vm.prefs.wakeGreetings
+            .lines()
+            .map { it.trim().trim(',', '，', ';', '；') }
+            .filter { it.isNotBlank() }
+        val phrase = phrases.randomOrNull()
+        if (phrase != null) {
+            val ready = withTimeoutOrNull(1800) {
+                while (!ttsReady.value) delay(60)
+                true
+            } == true
+            if (ready) {
+                val engine = ttsRef.value
+                if (engine != null) {
+                    val finished = withTimeoutOrNull(6000) { speakAndWait(engine, phrase) }
+                    if (finished == null) runCatching { engine.stop() }
+                    delay(120)
+                }
             }
         }
         startVoice()
@@ -567,15 +577,15 @@ private fun OverlayAssistant(
                 .align(Alignment.TopCenter)
                 .pointerInput(sheetVisible) {
                     detectTapGestures {
-                        if (sheetVisible) onClose() else revealed = true
+                        if (sheetVisible) dismiss() else revealed = true
                     }
                 },
         )
         WakeAmbient(
             modifier = Modifier.fillMaxSize(),
-            progress = glow.value,
+            progress = glow.value * (1f - exit.value),
             entrance = entrance.value,
-            dim = dim.value,
+            dim = dim.value * (1f - exit.value),
             panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 96.dp.toPx() },
             sheetVisible = sheetVisible,
         )
@@ -586,8 +596,9 @@ private fun OverlayAssistant(
                     .fillMaxWidth()
                     .height(with(density) { panelHeightPx.toDp() })
                     .graphicsLayer {
-                        alpha = sheetEntry.value
-                        translationY = (1f - sheetEntry.value) * 28.dp.toPx()
+                        alpha = sheetEntry.value * (1f - exit.value)
+                        translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
+                            exit.value * 40.dp.toPx()
                     }
                     .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                     .clip(shape)
@@ -674,7 +685,7 @@ private fun OverlayAssistant(
                         Icons.Rounded.Close,
                         contentDescription = "关闭",
                         tint = Color(0x990B1220),
-                        modifier = Modifier.size(19.dp).clickable { onClose() },
+                        modifier = Modifier.size(19.dp).clickable { dismiss() },
                     )
                 }
 
@@ -793,7 +804,7 @@ private fun OverlayAssistant(
                                         ),
                                 )
                             }
-                            onClose()
+                            dismiss()
                         },
                     )
                 }
@@ -803,14 +814,15 @@ private fun OverlayAssistant(
                 status = busStatus ?: voiceStatus,
                 listening = busListening,
                 onOpen = { revealed = true },
-                onClose = onClose,
+                onClose = { dismiss() },
                 onMic = { if (busListening) revealed = true else startVoice() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 18.dp, vertical = 22.dp)
                     .graphicsLayer {
-                        alpha = entry.value
-                        translationY = (1f - entry.value) * 34.dp.toPx()
+                        alpha = entry.value * (1f - exit.value)
+                        translationY = (1f - entry.value) * 34.dp.toPx() +
+                            exit.value * 34.dp.toPx()
                     },
             )
         }
@@ -895,7 +907,7 @@ private fun WakeAmbient(
 
         // 3. Light streak: right edge -> screen centre -> draw a heart.
         if (e > 0.04f) {
-            val travel = ((e - 0.04f) / 0.42f).coerceIn(0f, 1f)
+            val travel = ((e - 0.03f) / 0.47f).coerceIn(0f, 1f)
             val streak = Path().apply {
                 moveTo(w + 2.dp.toPx(), h * 0.44f)
                 quadraticBezierTo(w * 0.80f, h * 0.40f, w * 0.54f, h * 0.44f)
@@ -927,12 +939,12 @@ private fun WakeAmbient(
                 }
             }
 
-            val heartT = ((e - 0.46f) / 0.30f).coerceIn(0f, 1f)
-            val heartFade = if (e <= 0.76f) 1f else ((1f - e) / 0.24f).coerceIn(0f, 1f)
+            val heartT = ((e - 0.50f) / 0.30f).coerceIn(0f, 1f)
+            val heartFade = if (e <= 0.80f) 1f else ((1f - e) / 0.20f).coerceIn(0f, 1f)
             if (heartT > 0f && heartFade > 0f) {
                 val cx = w * 0.5f
                 val cy = h * 0.44f
-                val r = minOf(w, h) * 0.085f
+                val r = minOf(w, h) * 0.12f
                 val heart = heartPath(cx, cy, r)
                 val heartMeasure = PathMeasure().apply { setPath(heart, false) }
                 val heartLength = heartMeasure.length

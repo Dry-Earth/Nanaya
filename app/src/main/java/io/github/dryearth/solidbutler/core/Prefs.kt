@@ -60,6 +60,13 @@ class Prefs(context: Context) {
         get() = sp.getString("tts_engine", "") ?: ""
         set(value) = sp.edit().putString("tts_engine", value).apply()
 
+    var wakeGreetings: String
+        get() = sp.getString(
+            "wake_greetings",
+            "我在\n有什么吩咐\n我在，需要我做什么\n听着呢\n来了",
+        ) ?: ""
+        set(value) = sp.edit().putString("wake_greetings", value).apply()
+
     var iconStyle: String
         get() = sp.getString("icon_style", "xi") ?: "xi"
         set(value) = sp.edit().putString("icon_style", value).apply()
