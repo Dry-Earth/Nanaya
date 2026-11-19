@@ -27,6 +27,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -70,10 +73,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -122,7 +131,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private var windowManager: WindowManager? = null
     private var view: ComposeView? = null
     private var receiver: android.content.BroadcastReceiver? = null
-    private var voiceBadge: android.view.View? = null
     private var autoVoice by mutableStateOf(false)
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
@@ -136,7 +144,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         active = this
-        registerVoiceReceiver()
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
             val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -151,7 +158,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         } else {
             startForeground(NOTIFICATION_ID, notification())
         }
-        showWindow()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -165,68 +171,10 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     override fun onDestroy() {
         runCatching { receiver?.let { unregisterReceiver(it) } }
         if (active === this) active = null
-        removeVoiceBadge()
         removeWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         store.clear()
         super.onDestroy()
-    }
-
-    private fun registerVoiceReceiver() {
-        receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                when (intent?.action) {
-                    ACTION_VOICE_START -> showVoiceBadge()
-                    ACTION_VOICE_END -> removeVoiceBadge()
-                }
-            }
-        }
-        val filter = android.content.IntentFilter().apply {
-            addAction(ACTION_VOICE_START)
-            addAction(ACTION_VOICE_END)
-        }
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(receiver, filter)
-        }
-    }
-
-    private fun showVoiceBadge() {
-        if (!Settings.canDrawOverlays(this) || voiceBadge != null) return
-        val density = resources.displayMetrics.density
-        val text = android.widget.TextView(this).apply {
-            this.text = "汐在听…"
-            setTextColor(android.graphics.Color.WHITE)
-            textSize = 13f
-            gravity = android.view.Gravity.CENTER
-            setPadding((18 * density).toInt(), (10 * density).toInt(), (18 * density).toInt(), (10 * density).toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(android.graphics.Color.parseColor("#CC0B1220"))
-                cornerRadius = 22 * density
-                setStroke((1 * density).toInt(), android.graphics.Color.parseColor("#55FFFFFF"))
-            }
-        }
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (78 * density).toInt()
-        }
-        runCatching { windowManager?.addView(text, params) }
-        voiceBadge = text
-    }
-
-    private fun removeVoiceBadge() {
-        voiceBadge?.let { runCatching { windowManager?.removeView(it) } }
-        voiceBadge = null
     }
 
     private fun showWindow() {
@@ -262,7 +210,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
-            y = (20 * resources.displayMetrics.density).toInt()
+            y = 0
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         runCatching { wm.addView(compose, params) }
@@ -309,8 +257,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         private const val CHANNEL_ID = "xi_assist_overlay"
         private const val NOTIFICATION_ID = 12003
         private const val EXTRA_VOICE = "xi_voice"
-        const val ACTION_VOICE_START = "io.github.dryearth.solidbutler.VOICE_START"
-        const val ACTION_VOICE_END = "io.github.dryearth.solidbutler.VOICE_END"
 
         @Volatile
         var active: AssistOverlayService? = null
@@ -338,39 +284,61 @@ private fun OverlayAssistant(
     val scope = rememberCoroutineScope()
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
+    var revealed by remember { mutableStateOf(!autoVoice) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     val busStatus by OverlayVoiceBus.status.collectAsState()
     val busListening by OverlayVoiceBus.listening.collectAsState()
     val busResult by OverlayVoiceBus.result.collectAsState()
     val busError by OverlayVoiceBus.error.collectAsState()
-    val shape = RoundedCornerShape(30.dp)
+    val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
 
     // Entrance: the panel rises once, the aurora blooms then settles into a
     // quiet halo that breathes with the microphone while listening.
     val entry = remember { Animatable(0f) }
     val glow = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        entry.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+    val dim = remember { Animatable(0f) }
+    val entrance = remember { Animatable(0f) }
+    val sheetEntry = remember { Animatable(0f) }
+    var wakeSerial by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { if (wakeSerial == 0) wakeSerial = 1 }
+    LaunchedEffect(wakeSerial) {
+        if (wakeSerial == 0) return@LaunchedEffect
+        dim.snapTo(0f)
+        entrance.snapTo(0f)
+        entry.snapTo(0f)
+        glow.snapTo(0f)
+        launch { dim.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
+        launch { entrance.animateTo(1f, tween(1500, easing = LinearOutSlowInEasing)) }
+        launch {
+            glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+            glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
+        }
+        kotlinx.coroutines.delay(160)
+        entry.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
     }
-    LaunchedEffect(Unit) {
-        glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
-        glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
+    val sheetVisible = revealed
+    LaunchedEffect(sheetVisible) {
+        if (sheetVisible) {
+            sheetEntry.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+        } else {
+            sheetEntry.snapTo(0f)
+        }
     }
 
     LaunchedEffect(busResult) {
         val text = busResult ?: return@LaunchedEffect
-        input = text
-        if (vm.chat.value.modelConfigured && text.isNotBlank()) {
+        if (text.isNotBlank()) {
             input = ""
+            voiceStatus = null
             vm.sendChat(text)
-        } else if (text.isNotBlank()) {
-            voiceStatus = "已识别，填入输入框"
+            revealed = true
         }
         OverlayVoiceBus.reset()
     }
     LaunchedEffect(busError) {
         val err = busError ?: return@LaunchedEffect
         voiceStatus = err
+        revealed = true
         Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
         OverlayVoiceBus.error.value = null
     }
@@ -380,6 +348,7 @@ private fun OverlayAssistant(
             != PackageManager.PERMISSION_GRANTED
         ) {
             voiceStatus = "麦克风未授权，请先在完整对话里授权"
+            revealed = true
             Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
@@ -396,11 +365,16 @@ private fun OverlayAssistant(
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             )
         }.isSuccess
-        if (!ok) voiceStatus = "无法启动语音识别窗口"
+        if (!ok) {
+            voiceStatus = "无法启动语音识别窗口"
+            revealed = true
+        }
     }
 
     LaunchedEffect(autoVoice) {
         if (autoVoice) {
+            revealed = false
+            wakeSerial++
             onVoiceConsumed()
             startVoice()
         }
@@ -439,6 +413,11 @@ private fun OverlayAssistant(
         }
 
         val panelHeightPx = dragHeight ?: heightAnim.value
+        val dismissHeight = if (sheetVisible) {
+            (maxHeight - with(density) { panelHeightPx.toDp() }).coerceAtLeast(0.dp)
+        } else {
+            maxHeight
+        }
         val dragModifier = Modifier.pointerInput(minPanelPx, maxPanelPx, autoTargetPx) {
             detectVerticalDragGestures(
                 onDragStart = {
@@ -487,247 +466,289 @@ private fun OverlayAssistant(
             )
         }
 
-        WakeGlow(
-            modifier = Modifier.fillMaxSize(),
-            progress = glow.value,
-            panelHeightPx = panelHeightPx,
-        )
-
-        Column(
+        // Tapping the open screen either opens the panel or dismisses the
+        // assistant; the panel itself consumes its own touches.
+        Box(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .height(with(density) { panelHeightPx.toDp() })
-                .graphicsLayer {
-                    alpha = entry.value
-                    translationY = (1f - entry.value) * 34.dp.toPx()
-                    scaleX = 0.98f + 0.02f * entry.value
-                    scaleY = 0.98f + 0.02f * entry.value
-                }
-                .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                .clip(shape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xE6FFFFFF),
-                            Color(0xB8F4F8FF),
-                            Color(0x99E7EEFF),
+                .height(dismissHeight)
+                .align(Alignment.TopCenter)
+                .pointerInput(sheetVisible) {
+                    detectTapGestures {
+                        if (sheetVisible) onClose() else revealed = true
+                    }
+                },
+        )
+        WakeAmbient(
+            modifier = Modifier.fillMaxSize(),
+            progress = glow.value,
+            entrance = entrance.value,
+            dim = dim.value,
+            panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 96.dp.toPx() },
+            sheetVisible = sheetVisible,
+        )
+
+        if (sheetVisible) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(with(density) { panelHeightPx.toDp() })
+                    .graphicsLayer {
+                        alpha = sheetEntry.value
+                        translationY = (1f - sheetEntry.value) * 28.dp.toPx()
+                    }
+                    .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(shape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xE6FFFFFF),
+                                Color(0xB8F4F8FF),
+                                Color(0x99E7EEFF),
+                            )
                         )
                     )
-                )
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF), Color(0x33FFFFFF))
-                    ),
-                    shape,
-                )
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            Box(
-                Modifier.fillMaxWidth().height(18.dp).then(dragModifier),
-                contentAlignment = Alignment.Center,
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF), Color(0x33FFFFFF))
+                        ),
+                        shape,
+                    )
+                    .navigationBarsPadding()
+                    .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
             ) {
                 Box(
-                    Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x330B1220)),
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = dragModifier.fillMaxWidth(),
-            ) {
-                Box(
-                    Modifier.size(32.dp).clip(CircleShape)
-                        .background(Color(0x220B1220)),
+                    Modifier.fillMaxWidth().height(18.dp).then(dragModifier),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFF33406A), modifier = Modifier.size(17.dp))
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        vm.prefs.personaName,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color(0xFF0B1220),
+                    Box(
+                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x330B1220)),
                     )
-                    Text(
-                        when {
-                            busListening -> "正在聆听…"
-                            state.modelConfigured -> "悬浮助手 · 直接对话"
-                            else -> "悬浮助手 · 尚未配置模型"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = dragModifier.fillMaxWidth(),
+                ) {
+                    Box(
+                        Modifier.size(32.dp).clip(CircleShape)
+                            .background(Color(0x220B1220)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFF33406A), modifier = Modifier.size(17.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            vm.prefs.personaName,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color(0xFF0B1220),
+                        )
+                        Text(
+                            when {
+                                busListening -> "正在聆听…"
+                                state.modelConfigured -> "悬浮助手 · 直接对话"
+                                else -> "悬浮助手 · 尚未配置模型"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                        )
+                    }
+                    Icon(
+                        if (panelHeightPx > minPanelPx + with(density) { 24.dp.toPx() }) {
+                            Icons.Rounded.CloseFullscreen
+                        } else {
+                            Icons.Rounded.OpenInFull
                         },
+                        contentDescription = "展开或收起",
+                        tint = Color(0x990B1220),
+                        modifier = Modifier.size(19.dp).clickable {
+                            scope.launch {
+                                val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
+                                val target = if (collapsed) {
+                                    maxOf(autoTargetPx, maxPanelPx * 0.62f)
+                                } else {
+                                    minPanelPx
+                                }
+                                heightAnim.animateTo(
+                                    target.coerceIn(minPanelPx, maxPanelPx),
+                                    spring(dampingRatio = 0.86f, stiffness = 380f),
+                                )
+                            }
+                        },
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "关闭",
+                        tint = Color(0x990B1220),
+                        modifier = Modifier.size(19.dp).clickable { onClose() },
+                    )
+                }
+
+                if (state.messages.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        Column(
+                            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().onSizeChanged { contentHeight = it.height.toFloat() },
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                state.messages.takeLast(8).forEach { msg ->
+                                    OverlayBubble(vm, msg)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "直接说或输入。上拉面板看历史，下拉收回到这里。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0x990B1220),
+                    )
+                }
+
+                (busStatus ?: voiceStatus)?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        it,
                         style = MaterialTheme.typography.labelSmall,
                         color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                        maxLines = 1,
                     )
                 }
-                Icon(
-                    if (panelHeightPx > minPanelPx + with(density) { 24.dp.toPx() }) {
-                        Icons.Rounded.CloseFullscreen
-                    } else {
-                        Icons.Rounded.OpenInFull
-                    },
-                    contentDescription = "展开或收起",
-                    tint = Color(0x990B1220),
-                    modifier = Modifier.size(19.dp).clickable {
-                        scope.launch {
-                            val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
-                            val target = if (collapsed) {
-                                maxOf(autoTargetPx, maxPanelPx * 0.62f)
-                            } else {
-                                minPanelPx
-                            }
-                            heightAnim.animateTo(
-                                target.coerceIn(minPanelPx, maxPanelPx),
-                                spring(dampingRatio = 0.86f, stiffness = 380f),
-                            )
-                        }
-                    },
-                )
-                Spacer(Modifier.width(12.dp))
-                Icon(
-                    Icons.Rounded.Close,
-                    contentDescription = "关闭",
-                    tint = Color(0x990B1220),
-                    modifier = Modifier.size(19.dp).clickable { onClose() },
-                )
-            }
-
-            if (state.messages.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Box(Modifier.fillMaxWidth().weight(1f)) {
-                    Column(
-                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                            .background(Color(0x330B1220))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
-                        Column(
-                            Modifier.fillMaxWidth().onSizeChanged { contentHeight = it.height.toFloat() },
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            state.messages.takeLast(8).forEach { msg ->
-                                OverlayBubble(vm, msg)
-                            }
+                        if (input.isEmpty()) {
+                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x660B1220))
                         }
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "直接说或输入。上拉面板看历史，下拉收回到这里。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0x990B1220),
-                )
-            }
-
-            (busStatus ?: voiceStatus)?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
-                    maxLines = 1,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x330B1220))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    if (input.isEmpty()) {
-                        Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x660B1220))
-                    }
-                    BasicTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        textStyle = TextStyle(color = Color(0xFF0B1220), fontSize = 13.sp),
-                        cursorBrush = SolidColor(Color(0xFF33406A)),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Box(
-                    Modifier.size(36.dp).clip(CircleShape)
-                        .background(if (busListening) Color(0x33D85B5B) else Color(0x220B1220))
-                        .border(
-                            width = if (busListening) 1.5.dp else 0.dp,
-                            color = if (busListening) Color(0x99D85B5B) else Color.Transparent,
-                            shape = CircleShape,
+                        BasicTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            textStyle = TextStyle(color = Color(0xFF0B1220), fontSize = 13.sp),
+                            cursorBrush = SolidColor(Color(0xFF33406A)),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        .clickable { startVoice() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Rounded.Mic,
-                        contentDescription = "语音输入",
-                        tint = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Box(
-                    Modifier.size(36.dp).clip(CircleShape)
-                        .background(if (input.isBlank()) Color(0x220B1220) else Color(0xFF0B1220))
-                        .clickable(enabled = input.isNotBlank()) {
-                            val text = input.trim()
-                            input = ""
-                            if (text.isNotEmpty()) vm.sendChat(text)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Rounded.Send,
-                        contentDescription = "发送",
-                        tint = if (input.isBlank()) Color(0x660B1220) else Color.White,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "上拉展开 · 下拉收起",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0x660B1220),
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "完整对话",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF33406A),
-                    modifier = Modifier.clickable {
-                        runCatching {
-                            context.startActivity(
-                                Intent(context, MainActivity::class.java)
-                                    .putExtra("open_chat", true)
-                                    .addFlags(
-                                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                                            Intent.FLAG_ACTIVITY_CLEAR_TOP,
-                                    ),
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape)
+                            .background(if (busListening) Color(0x33D85B5B) else Color(0x220B1220))
+                            .border(
+                                width = if (busListening) 1.5.dp else 0.dp,
+                                color = if (busListening) Color(0x99D85B5B) else Color.Transparent,
+                                shape = CircleShape,
                             )
-                        }
-                        onClose()
-                    },
-                )
+                            .clickable { startVoice() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Mic,
+                            contentDescription = "语音输入",
+                            tint = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape)
+                            .background(if (input.isBlank()) Color(0x220B1220) else Color(0xFF0B1220))
+                            .clickable(enabled = input.isNotBlank()) {
+                                val text = input.trim()
+                                input = ""
+                                if (text.isNotEmpty()) vm.sendChat(text)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Send,
+                            contentDescription = "发送",
+                            tint = if (input.isBlank()) Color(0x660B1220) else Color.White,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "上拉展开 · 下拉收起",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0x660B1220),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "完整对话",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF33406A),
+                        modifier = Modifier.clickable {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(context, MainActivity::class.java)
+                                        .putExtra("open_chat", true)
+                                        .addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                Intent.FLAG_ACTIVITY_CLEAR_TOP,
+                                        ),
+                                )
+                            }
+                            onClose()
+                        },
+                    )
+                }
             }
+        } else {
+            VoiceCapsule(
+                status = busStatus ?: voiceStatus,
+                listening = busListening,
+                onOpen = { revealed = true },
+                onClose = onClose,
+                onMic = { if (busListening) revealed = true else startVoice() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 18.dp, vertical = 22.dp)
+                    .graphicsLayer {
+                        alpha = entry.value
+                        translationY = (1f - entry.value) * 34.dp.toPx()
+                    },
+            )
         }
     }
 }
 
-/** Aurora drawn behind the panel: blooms on wake and breathes with the mic. */
+/**
+ * Full-screen wake layer, modelled on the Eta assistant: a power-key aurora on
+ * the right edge, a rim that contracts into the real screen edge, a streamer
+ * running to the bottom, then a bottom aurora that breathes with the mic.
+ */
 @Composable
-private fun WakeGlow(
+private fun WakeAmbient(
     modifier: Modifier = Modifier,
     progress: Float,
+    entrance: Float,
+    dim: Float,
     panelHeightPx: Float,
+    sheetVisible: Boolean,
 ) {
     val level by OverlayVoiceBus.level.collectAsState()
     val listening by OverlayVoiceBus.listening.collectAsState()
     val pulse = if (listening) 1f + level * 0.85f else 1f
     Canvas(modifier) {
-        if (progress <= 0.001f) return@Canvas
         val w = size.width
         val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        val scrim = (if (sheetVisible) 0.30f else 0.38f) * dim
+        if (scrim > 0.001f) drawRect(Color.Black.copy(alpha = scrim))
+
         fun bloom(cx: Float, cy: Float, radius: Float, color: Color, alpha: Float) {
             if (alpha <= 0.001f || radius <= 0f) return
             drawCircle(
@@ -744,14 +765,163 @@ private fun WakeGlow(
                 center = Offset(cx, cy),
             )
         }
-        val p = (progress * pulse).coerceAtMost(1.2f)
-        // Center the aurora just above the panel's top edge so it is visible
-        // over the app behind the floating window instead of being covered.
-        val topY = (h - panelHeightPx - 10.dp.toPx()).coerceIn(0f, h)
-        bloom(w * 0.18f, topY, w * 0.46f, Color(0xFF4F8BFF), 0.38f * p)
-        bloom(w * 0.50f, topY - 6.dp.toPx(), w * 0.52f, Color(0xFFA78BFA), 0.34f * p)
-        bloom(w * 0.82f, topY, w * 0.46f, Color(0xFFFF7AC6), 0.32f * p)
-        bloom(w * 0.50f, topY - 26.dp.toPx(), w * 0.40f, Color(0xFFFFE4B5), 0.12f * p)
+
+        val e = entrance.coerceIn(0f, 1f)
+
+        // 1. Power-key aurora entering from the right edge.
+        if (e < 1f) {
+            val fade = 1f - e
+            bloom(w * 1.08f, h * 0.46f, w * (0.55f + 0.22f * e), Color(0xFF93C5FD), 0.55f * fade)
+            bloom(w * 1.12f, h * 0.62f, w * 0.45f, Color(0xFFC4B5FD), 0.42f * fade)
+        }
+
+        // 2. Rim contracts from 16dp outside into the real screen edge.
+        if (e < 0.995f) {
+            val inset = (1f - e) * 16.dp.toPx() + 1.5.dp.toPx()
+            val radius = 30.dp.toPx()
+            drawRoundRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF4F8BFF),
+                        Color(0xFFA78BFA),
+                        Color(0xFFFF7AC6),
+                        Color(0xFFFFE4B5),
+                        Color(0xFF4F8BFF),
+                    ),
+                ),
+                topLeft = Offset(inset, inset),
+                size = Size(
+                    (w - inset * 2f).coerceAtLeast(0f),
+                    (h - inset * 2f).coerceAtLeast(0f),
+                ),
+                cornerRadius = CornerRadius(radius),
+                style = Stroke(width = 2.dp.toPx()),
+                alpha = (1f - e) * 0.9f,
+            )
+        }
+
+        // 3. Streamer: right edge -> bottom edge.
+        if (e > 0.02f && e < 1f) {
+            val path = Path().apply {
+                moveTo(w - 2.dp.toPx(), h * 0.42f)
+                lineTo(w - 2.dp.toPx(), h * 0.80f)
+                quadraticBezierTo(w - 2.dp.toPx(), h - 48.dp.toPx(), w * 0.62f, h - 18.dp.toPx())
+                lineTo(w * 0.48f, h - 6.dp.toPx())
+            }
+            val measure = PathMeasure().apply { setPath(path, false) }
+            val length = measure.length
+            if (length > 1f) {
+                val head = length * e
+                val tail = (head - length * 0.34f).coerceAtLeast(0f)
+                val segment = Path()
+                if (measure.getSegment(tail, head, segment, true)) {
+                    drawPath(
+                        path = segment,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF9DBBFF),
+                                Color(0xFFFFE4B5),
+                            ),
+                        ),
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                        alpha = 1f - e * 0.35f,
+                    )
+                }
+                val point = FloatArray(2)
+                measure.getPosTan(head, point, null)
+                bloom(point[0], point[1], 26.dp.toPx(), Color(0xFFFFF3D6), 0.85f)
+            }
+        }
+
+        // 4. Bottom aurora above the sheet or capsule.
+        val topY = (h - panelHeightPx - 8.dp.toPx()).coerceIn(0f, h)
+        val p = progress.coerceIn(0f, 1f) * pulse
+        bloom(w * 0.18f, topY, w * 0.46f, Color(0xFF4F8BFF), 0.34f * p)
+        bloom(w * 0.50f, topY - 6.dp.toPx(), w * 0.52f, Color(0xFFA78BFA), 0.31f * p)
+        bloom(w * 0.82f, topY, w * 0.46f, Color(0xFFFF7AC6), 0.29f * p)
+        bloom(w * 0.50f, topY - 26.dp.toPx(), w * 0.40f, Color(0xFFFFE4B5), 0.10f * p)
+    }
+}
+
+/** Compact voice-first capsule shown before the conversation sheet opens. */
+@Composable
+private fun VoiceCapsule(
+    status: String?,
+    listening: Boolean,
+    onOpen: () -> Unit,
+    onClose: () -> Unit,
+    onMic: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val level by OverlayVoiceBus.level.collectAsState()
+    val shape = CircleShape
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .shadow(20.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .clip(shape)
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        Color(0xE6FFFFFF),
+                        Color(0xCFF4F8FF),
+                        Color(0xB3E7EEFF),
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.horizontalGradient(listOf(Color(0xFFFFFFFF), Color(0x55FFFFFF))),
+                shape,
+            )
+            .clickable { onOpen() }
+            .padding(start = 10.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .graphicsLayer {
+                    val scale = 1f + if (listening) level * 0.08f else 0f
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(CircleShape)
+                .background(if (listening) Color(0x33D85B5B) else Color(0x220B1220))
+                .clickable { onMic() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Mic,
+                contentDescription = "语音输入",
+                tint = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (listening) "汐在听…" else "轻触打开面板",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Color(0xFF0B1220),
+                maxLines = 1,
+            )
+            Text(
+                status ?: if (listening) "说完会自动发送" else "语音或文字都可以",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (listening) Color(0xFFD85B5B) else Color(0x880B1220),
+                maxLines = 1,
+            )
+        }
+        Icon(
+            Icons.Rounded.Close,
+            contentDescription = "关闭",
+            tint = Color(0x990B1220),
+            modifier = Modifier.size(18.dp).clickable { onClose() },
+        )
+        Spacer(Modifier.width(8.dp))
     }
 }
 

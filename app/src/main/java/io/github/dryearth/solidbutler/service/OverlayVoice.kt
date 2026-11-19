@@ -42,7 +42,6 @@ class OverlayVoiceActivity : Activity() {
         OverlayVoiceBus.reset()
         OverlayVoiceBus.listening.value = true
         OverlayVoiceBus.status.value = "正在聆听…"
-        sendBroadcast(Intent(AssistOverlayService.ACTION_VOICE_START).setPackage(packageName))
 
         if (androidx.core.content.ContextCompat.checkSelfPermission(
                 this, android.Manifest.permission.RECORD_AUDIO,
@@ -87,6 +86,9 @@ class OverlayVoiceActivity : Activity() {
             override fun onResults(results: Bundle?) {
                 if (delivered) return
                 delivered = true
+                OverlayVoiceBus.listening.value = false
+                OverlayVoiceBus.level.value = 0f
+                OverlayVoiceBus.status.value = null
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()?.trim()
                 if (text.isNullOrBlank()) {
@@ -102,6 +104,7 @@ class OverlayVoiceActivity : Activity() {
                 delivered = true
                 OverlayVoiceBus.listening.value = false
                 OverlayVoiceBus.level.value = 0f
+                OverlayVoiceBus.status.value = null
                 OverlayVoiceBus.error.value = when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH,
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有听清，再试一次"
@@ -133,7 +136,7 @@ class OverlayVoiceActivity : Activity() {
         recognizer = null
         OverlayVoiceBus.listening.value = false
         OverlayVoiceBus.level.value = 0f
-        sendBroadcast(Intent(AssistOverlayService.ACTION_VOICE_END).setPackage(packageName))
+        OverlayVoiceBus.status.value = null
         super.onDestroy()
     }
 }
