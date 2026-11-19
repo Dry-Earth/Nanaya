@@ -62,8 +62,8 @@ import io.github.dryearth.solidbutler.ui.theme.Glass
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.blur
-import top.yukonga.miuix.kmp.blur.lens
-import top.yukonga.miuix.kmp.blur.vibrancy
+import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
