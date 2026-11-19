@@ -1,12 +1,16 @@
 package io.github.dryearth.solidbutler.ui.screens
 
 import android.content.ComponentName
+import android.media.RingtoneManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import io.github.dryearth.solidbutler.service.AssistOverlayService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.IntentCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -98,6 +102,33 @@ fun AiSettingsScreen(
     var ttsPkg by rememberSaveable { mutableStateOf(vm.prefs.ttsEngine) }
     var speak by rememberSaveable { mutableStateOf(vm.prefs.aiSpeakReplies) }
     var greetings by rememberSaveable { mutableStateOf(vm.prefs.wakeGreetings) }
+    var wakeSound by rememberSaveable { mutableStateOf(vm.prefs.wakeSoundUri) }
+    var exitSound by rememberSaveable { mutableStateOf(vm.prefs.exitSoundUri) }
+    var soundTarget by remember { mutableStateOf("wake") }
+    val soundPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri = result.data?.let {
+                IntentCompat.getParcelableExtra(it, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            }
+            val value = uri?.toString() ?: ""
+            if (soundTarget == "wake") wakeSound = value else exitSound = value
+        }
+    }
+    fun pickSound(target: String, existing: String) {
+        soundTarget = target
+        val picker = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, Settings.System.DEFAULT_NOTIFICATION_URI)
+            if (existing.isNotBlank()) {
+                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(existing))
+            }
+        }
+        runCatching { soundPicker.launch(picker) }
+    }
     var personaName by rememberSaveable { mutableStateOf(vm.prefs.personaName) }
     var personaPrompt by rememberSaveable { mutableStateOf(vm.prefs.personaPrompt) }
     var userTitle by rememberSaveable { mutableStateOf(vm.prefs.userTitle) }
@@ -234,6 +265,22 @@ fun AiSettingsScreen(
                 title = "文字转语音",
                 value = ttsOptions.firstOrNull { it.pkg == ttsPkg }?.label ?: "系统默认",
             ) { picker = "tts" }
+            Spacer(Modifier.height(8.dp))
+            EngineRow(
+                title = "唤醒音效",
+                value = soundLabel(context, wakeSound),
+            ) { pickSound("wake", wakeSound) }
+            Spacer(Modifier.height(8.dp))
+            EngineRow(
+                title = "退出音效",
+                value = soundLabel(context, exitSound),
+            ) { pickSound("exit", exitSound) }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "从系统提示音里选择；留空则不播放。唤醒音效在悬浮助手出现时播放。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
             val marmalade = remember {
                 runCatching { context.packageManager.getLaunchIntentForPackage("app.marmalade.stt") }.getOrNull()
             }
@@ -328,7 +375,7 @@ fun AiSettingsScreen(
         SectionHeader("系统数字助理", "在系统默认应用页手动选择汐")
         GlassPanel {
             Text(
-                "汐使用 ACTION_ASSIST 的无界面入口唤起悬浮窗，不会把 App 主界面带到前台。更新后请在系统默认应用页重新选择一次汐；之后长按 Home/电源键就能唤起。",
+                "汐使用 ACTION_ASSIST 的无界面入口唤起悬浮窗，不会把 App 主界面带到前台。更新后通常可以直接使用；如果系统提示助理不可用，重新选择一次汐即可。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Muted,
             )
@@ -425,6 +472,8 @@ fun AiSettingsScreen(
                         vm.saveAiConfig(base, key, model)
                         vm.saveVoiceConfig(sttPkg, ttsPkg, speak)
                         vm.prefs.wakeGreetings = greetings
+                        vm.prefs.wakeSoundUri = wakeSound
+                        vm.prefs.exitSoundUri = exitSound
                         vm.savePersona(personaName, personaPrompt, userTitle)
                         vm.prefs.aiThinking = thinking
                         vm.prefs.aiEffort = effort
@@ -545,6 +594,13 @@ private fun EngineChoice(label: String, pkg: String, onClick: () -> Unit) {
         }
         Text("›", style = MaterialTheme.typography.titleLarge, color = Glass.Faint)
     }
+}
+
+private fun soundLabel(context: android.content.Context, uriString: String): String {
+    if (uriString.isBlank()) return "未选择"
+    return runCatching {
+        RingtoneManager.getRingtone(context, Uri.parse(uriString))?.getTitle(context)
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: "系统音效"
 }
 
 @Composable

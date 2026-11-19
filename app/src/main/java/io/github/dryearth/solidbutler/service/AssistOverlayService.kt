@@ -117,9 +117,11 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import io.github.dryearth.solidbutler.core.Prefs
+import io.github.dryearth.solidbutler.core.SystemSounds
 import io.github.dryearth.solidbutler.data.ActionState
+import io.github.dryearth.solidbutler.AppActivity
 import io.github.dryearth.solidbutler.ButlerViewModel
-import io.github.dryearth.solidbutler.MainActivity
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
@@ -178,7 +180,10 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.getBooleanExtra(EXTRA_VOICE, false) == true) autoVoice = true
+        if (intent?.getBooleanExtra(EXTRA_VOICE, false) == true) {
+            autoVoice = true
+            SystemSounds.play(this, Prefs(this).wakeSoundUri)
+        }
         if (view == null) showWindow()
         return START_NOT_STICKY
     }
@@ -193,6 +198,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     override fun onDestroy() {
         runCatching { receiver?.let { unregisterReceiver(it) } }
         if (active === this) active = null
+        SystemSounds.play(this, Prefs(this).exitSoundUri)
         OverlaySpeech.stop()
         removeWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
@@ -256,7 +262,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private fun openFullChat() {
         runCatching {
             startActivity(
-                Intent(this, MainActivity::class.java)
+                Intent(this, AppActivity::class.java)
                     .putExtra("open_chat", true)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             )
@@ -850,7 +856,7 @@ private fun OverlayAssistant(
                         modifier = Modifier.clickable {
                             runCatching {
                                 context.startActivity(
-                                    Intent(context, MainActivity::class.java)
+                                    Intent(context, AppActivity::class.java)
                                         .putExtra("open_chat", true)
                                         .addFlags(
                                             Intent.FLAG_ACTIVITY_NEW_TASK or

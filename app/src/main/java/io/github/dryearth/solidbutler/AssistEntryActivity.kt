@@ -11,7 +11,7 @@ import io.github.dryearth.solidbutler.service.AssistOverlayService
  * finishes without bringing the main app task to the foreground, so waking the
  * assistant does not flash the last page of the app.
  */
-class AssistEntryActivity : Activity() {
+open class AssistEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Settings.canDrawOverlays(this) &&
@@ -21,7 +21,7 @@ class AssistEntryActivity : Activity() {
             return
         }
         startActivity(
-            Intent(this, MainActivity::class.java)
+            Intent(this, AppActivity::class.java)
                 .putExtra("open_chat", true)
                 .addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or

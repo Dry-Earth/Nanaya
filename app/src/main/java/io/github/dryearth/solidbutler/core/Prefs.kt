@@ -56,6 +56,14 @@ class Prefs(context: Context) {
         get() = sp.getString("tts_engine", "") ?: ""
         set(value) = sp.edit().putString("tts_engine", value).apply()
 
+    var wakeSoundUri: String
+        get() = sp.getString("wake_sound_uri", "") ?: ""
+        set(value) = sp.edit().putString("wake_sound_uri", value).apply()
+
+    var exitSoundUri: String
+        get() = sp.getString("exit_sound_uri", "") ?: ""
+        set(value) = sp.edit().putString("exit_sound_uri", value).apply()
+
     var wakeGreetings: String
         get() = sp.getString(
             "wake_greetings",

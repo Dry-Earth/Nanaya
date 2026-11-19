@@ -6,12 +6,12 @@
 
 ```
 ACTION_ASSIST
-  → AssistEntryActivity（无界面入口，不把主任务带到前台）
+  → AssistEntryActivity / MainActivity（两者都是无界面兼容入口）
   → 有悬浮窗权限时启动 AssistOverlayService
-  → 无悬浮窗权限时回退到 MainActivity 的 AssistantScreen
+  → 无悬浮窗权限时回退到 AppActivity 的 AssistantScreen
 ```
 
-数字助理不依赖独立的 `VoiceInteractionService`。`MainActivity` 保持 `singleTask`，悬浮窗展开“完整对话”时通过 `open_chat` 进入 App 内的 AI 对话页。
+数字助理不依赖独立的 `VoiceInteractionService`。`AppActivity` 是完整的主界面；`MainActivity` 只保留为无界面兼容入口。悬浮窗展开“完整对话”时通过 `open_chat` 进入 `AppActivity` 的 AI 对话页。
 
 ## 主要文件
 

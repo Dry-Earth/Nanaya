@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
-import io.github.dryearth.solidbutler.MainActivity
+import io.github.dryearth.solidbutler.AppActivity
 import io.github.dryearth.solidbutler.core.Prefs
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -212,7 +212,7 @@ class DomainFirewallService : VpnService() {
         val pi = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, AppActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, CHANNEL_ID)
