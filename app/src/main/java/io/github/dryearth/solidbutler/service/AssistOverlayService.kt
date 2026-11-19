@@ -896,6 +896,11 @@ private fun OverlayAssistant(
                     },
             )
         }
+        WakeHeartLayer(
+            modifier = Modifier.fillMaxSize(),
+            entrance = entrance.value,
+            layerAlpha = 1f - exit.value,
+        )
     }
 }
 
@@ -975,7 +980,47 @@ private fun WakeAmbient(
             )
         }
 
-        // 3. Edge streamer: top-right -> right edge -> capsule heart, then
+        // 4. Bottom aurora above the sheet or capsule.
+        val topY = (h - panelHeightPx - 8.dp.toPx()).coerceIn(0f, h)
+        val p = progress.coerceIn(0f, 1f) * pulse
+        bloom(w * 0.18f, topY, w * 0.46f, Color(0xFF4F8BFF), 0.34f * p)
+        bloom(w * 0.50f, topY - 6.dp.toPx(), w * 0.52f, Color(0xFFA78BFA), 0.31f * p)
+        bloom(w * 0.82f, topY, w * 0.46f, Color(0xFFFF7AC6), 0.29f * p)
+        bloom(w * 0.50f, topY - 26.dp.toPx(), w * 0.40f, Color(0xFFFFE4B5), 0.10f * p)
+    }
+}
+
+
+/** Streamer and heart are drawn above the capsule so the heart is not hidden. */
+@Composable
+private fun WakeHeartLayer(
+    modifier: Modifier = Modifier,
+    entrance: Float,
+    layerAlpha: Float,
+) {
+    if (entrance <= 0.02f || layerAlpha <= 0.001f) return
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+        fun bloom(cx: Float, cy: Float, radius: Float, color: Color, alpha: Float) {
+            if (alpha <= 0.001f || radius <= 0f) return
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        color.copy(alpha = alpha.coerceAtMost(1f)),
+                        color.copy(alpha = (alpha * 0.38f).coerceAtMost(1f)),
+                        Color.Transparent,
+                    ),
+                    center = Offset(cx, cy),
+                    radius = radius,
+                ),
+                radius = radius,
+                center = Offset(cx, cy),
+            )
+        }
+        val e = entrance.coerceIn(0f, 1f)
+        withTransform({ alpha = layerAlpha }) {
         //    a second streamer leaves the heart for the opposite bottom edge.
         if (e > 0.02f) {
             val heartCy = h - 54.dp.toPx()
@@ -1100,13 +1145,7 @@ private fun WakeAmbient(
             }
         }
 
-        // 4. Bottom aurora above the sheet or capsule.
-        val topY = (h - panelHeightPx - 8.dp.toPx()).coerceIn(0f, h)
-        val p = progress.coerceIn(0f, 1f) * pulse
-        bloom(w * 0.18f, topY, w * 0.46f, Color(0xFF4F8BFF), 0.34f * p)
-        bloom(w * 0.50f, topY - 6.dp.toPx(), w * 0.52f, Color(0xFFA78BFA), 0.31f * p)
-        bloom(w * 0.82f, topY, w * 0.46f, Color(0xFFFF7AC6), 0.29f * p)
-        bloom(w * 0.50f, topY - 26.dp.toPx(), w * 0.40f, Color(0xFFFFE4B5), 0.10f * p)
+        }
     }
 }
 

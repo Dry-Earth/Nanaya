@@ -405,26 +405,26 @@ fun SettingsScreen(
                             val port = adbPort.trim().toIntOrNull()
                             if (port == null || adbCode.trim().length < 6) {
                                 Toast.makeText(context, "请填写正确的端口和 6 位配对码", Toast.LENGTH_SHORT).show()
-                                return@ActionButton
-                            }
-                            adbBusy = true
-                            scope.launch {
-                                val error = withContext(Dispatchers.IO) {
-                                    AdbManager.pairDevice(
-                                        context,
-                                        adbHost.trim().ifBlank { "127.0.0.1" },
-                                        port,
-                                        adbCode.trim(),
-                                    ) ?: AdbManager.connectDevice(context, 8000)
-                                }
-                                adbBusy = false
-                                adbConnected = AdbManager.connected()
-                                if (error == null) {
-                                    Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
-                                    vm.refreshCapabilities(force = true)
-                                    adbExpanded = false
-                                } else {
-                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                            } else {
+                                adbBusy = true
+                                scope.launch {
+                                    val error = withContext(Dispatchers.IO) {
+                                        AdbManager.pairDevice(
+                                            context,
+                                            adbHost.trim().ifBlank { "127.0.0.1" },
+                                            port,
+                                            adbCode.trim(),
+                                        ) ?: AdbManager.connectDevice(context, 8000)
+                                    }
+                                    adbBusy = false
+                                    adbConnected = AdbManager.connected()
+                                    if (error == null) {
+                                        Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
+                                        vm.refreshCapabilities(force = true)
+                                        adbExpanded = false
+                                    } else {
+                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
