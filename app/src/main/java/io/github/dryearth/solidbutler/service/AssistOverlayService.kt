@@ -82,6 +82,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -91,7 +92,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -322,85 +322,6 @@ private suspend fun speakAndWait(engine: TextToSpeech, text: String) {
     }
 }
 
-private fun heartPath(cx: Float, cy: Float, r: Float): Path = Path().apply {
-    moveTo(cx, cy + r * 0.95f)
-    cubicTo(
-        cx - r * 1.35f, cy - r * 0.05f,
-        cx - r * 0.85f, cy - r * 1.05f,
-        cx, cy - r * 0.42f,
-    )
-    cubicTo(
-        cx + r * 0.85f, cy - r * 1.05f,
-        cx + r * 1.35f, cy - r * 0.05f,
-        cx, cy + r * 0.95f,
-    )
-    close()
-}
-
-private val GlassGrainPoints = List(56) { i ->
-    val x = ((i * 37 + 11) % 97) / 97f
-    val y = ((i * 53 + 29) % 89) / 89f
-    Offset(x, y)
-}
-
-/** Frosted liquid-glass surface: translucency, specular sweep and fine grain. */
-private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>): Modifier =
-    this
-        .clip(shape)
-        .background(Brush.linearGradient(colors))
-        .drawBehind {
-            drawRect(
-                Brush.verticalGradient(
-                    0f to Color(0x30FFFFFF),
-                    0.45f to Color(0x0AFFFFFF),
-                    1f to Color(0x24000000),
-                ),
-            )
-            drawRect(
-                Brush.linearGradient(
-                    0f to Color(0x22FFFFFF),
-                    0.40f to Color(0x00FFFFFF),
-                    0.58f to Color(0x12FFFFFF),
-                    1f to Color(0x00FFFFFF),
-                    start = Offset.Zero,
-                    end = Offset(size.width, size.height),
-                ),
-            )
-            GlassGrainPoints.forEach { p ->
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.045f),
-                    radius = 0.65.dp.toPx(),
-                    center = Offset(p.x * size.width, p.y * size.height),
-                )
-            }
-            drawRect(
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, Color(0x1C000000)),
-                    startY = size.height * 0.55f,
-                    endY = size.height,
-                ),
-            )
-        }
-        .border(
-            1.dp,
-            Brush.verticalGradient(
-                listOf(Color(0x99FFFFFF), Color(0x33FFFFFF), Color(0x14FFFFFF)),
-            ),
-            shape,
-        )
-        .drawWithContent {
-            drawContent()
-            val inset = corner.toPx() * 1.1f
-            drawLine(
-                brush = Brush.horizontalGradient(
-                    listOf(Color.Transparent, Color(0x88FFFFFF), Color.Transparent),
-                ),
-                start = Offset(inset, 0.75f),
-                end = Offset(size.width - inset, 0.75f),
-                strokeWidth = 1f,
-            )
-        }
-
 @Composable
 private fun OverlayAssistant(
     vm: ButlerViewModel,
@@ -459,7 +380,7 @@ private fun OverlayAssistant(
         entry.snapTo(0f)
         glow.snapTo(0f)
         launch { dim.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
-        launch { entrance.animateTo(1f, tween(2300, easing = LinearOutSlowInEasing)) }
+        launch { entrance.animateTo(1f, tween(2600, easing = LinearOutSlowInEasing)) }
         launch {
             glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
             glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
@@ -664,7 +585,7 @@ private fun OverlayAssistant(
             progress = glow.value * (1f - exit.value),
             entrance = entrance.value,
             dim = dim.value * (1f - exit.value),
-            panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 96.dp.toPx() },
+            panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 92.dp.toPx() },
             sheetVisible = sheetVisible,
         )
 
@@ -888,7 +809,7 @@ private fun OverlayAssistant(
                 onMic = { if (busListening) revealed = true else startVoice() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 18.dp, vertical = 22.dp)
+                    .padding(horizontal = 18.dp, vertical = 18.dp)
                     .graphicsLayer {
                         alpha = entry.value * (1f - exit.value)
                         translationY = (1f - entry.value) * 34.dp.toPx() +
@@ -896,7 +817,7 @@ private fun OverlayAssistant(
                     },
             )
         }
-        WakeHeartLayer(
+        WakeStreamerLayer(
             modifier = Modifier.fillMaxSize(),
             entrance = entrance.value,
             layerAlpha = 1f - exit.value,
@@ -906,8 +827,8 @@ private fun OverlayAssistant(
 
 /**
  * Full-screen wake layer: a power-key aurora on the right edge, a rim that
- * contracts into the real screen edge, an edge streamer, a heart at the voice
- * capsule, then a bottom aurora that breathes with the microphone.
+ * contracts into the real screen edge, an edge streamer, a colored ribbon around
+ * the voice capsule, then a bottom aurora that breathes with the microphone.
  */
 @Composable
 private fun WakeAmbient(
@@ -991,9 +912,13 @@ private fun WakeAmbient(
 }
 
 
-/** Streamer and heart are drawn above the capsule so the heart is not hidden. */
+/**
+ * Edge streamer + capsule orbit glow + particle burst, drawn above the capsule.
+ * The streamer enters at the capsule's right edge; a colored ribbon then travels
+ * around the capsule outline, throws sparkles, and dissolves.
+ */
 @Composable
-private fun WakeHeartLayer(
+private fun WakeStreamerLayer(
     modifier: Modifier = Modifier,
     entrance: Float,
     layerAlpha: Float,
@@ -1021,128 +946,177 @@ private fun WakeHeartLayer(
             )
         }
         val e = entrance.coerceIn(0f, 1f)
-        // 3. Edge streamer: top-right -> right edge -> capsule heart, then
-        //    a second streamer leaves the heart for the opposite bottom edge.
-        if (e > 0.02f) {
-            val heartCy = h - 54.dp.toPx()
-            val cx = w * 0.5f
-            val travel = ((e - 0.02f) / 0.40f).coerceIn(0f, 1f)
-            val edgePath = Path().apply {
-                moveTo(w - 2.dp.toPx(), 0f)
-                lineTo(w - 2.dp.toPx(), heartCy)
-                quadraticBezierTo(w - 2.dp.toPx(), heartCy, w * 0.72f, heartCy)
-                lineTo(cx, heartCy)
-            }
-            val edgeMeasure = PathMeasure().apply { setPath(edgePath, false) }
-            val edgeLength = edgeMeasure.length
-            if (edgeLength > 1f && travel < 1f) {
-                val head = edgeLength * travel
-                val tail = (head - edgeLength * 0.28f).coerceAtLeast(0f)
-                val segment = Path()
-                if (edgeMeasure.getSegment(tail, head, segment, true)) {
-                    drawPath(
-                        path = segment,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color(0xFF9DBBFF),
-                                Color(0xFFFFE4B5),
-                            ),
+        val capInset = 18.dp.toPx()
+        val capHeight = 56.dp.toPx()
+        val capBottom = h - capInset
+        val capTop = capBottom - capHeight
+        val capLeft = capInset
+        val capRight = w - capInset
+        val capRadius = capHeight / 2f
+        val capCenterX = w * 0.5f
+        val capCenterY = (capTop + capBottom) / 2f
+
+        // 1. Top-right -> right edge -> capsule right edge.
+        val travel = ((e - 0.02f) / 0.40f).coerceIn(0f, 1f)
+        val edgePath = Path().apply {
+            moveTo(w - 2.dp.toPx(), 0f)
+            lineTo(w - 2.dp.toPx(), capCenterY)
+            quadraticBezierTo(w - 2.dp.toPx(), capCenterY, capRight, capCenterY)
+            lineTo(capRight - 1.dp.toPx(), capCenterY)
+        }
+        val edgeMeasure = PathMeasure().apply { setPath(edgePath, false) }
+        val edgeLength = edgeMeasure.length
+        if (edgeLength > 1f && travel < 1f) {
+            val head = edgeLength * travel
+            val tail = (head - edgeLength * 0.26f).coerceAtLeast(0f)
+            val segment = Path()
+            if (edgeMeasure.getSegment(tail, head, segment, true)) {
+                drawPath(
+                    path = segment,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFF8FB7FF),
+                            Color(0xFFC4B5FD),
+                            Color(0xFFFFE4B5),
                         ),
-                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
-                        alpha = (1f - e * 0.20f) * layerAlpha,
+                    ),
+                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = (1f - e * 0.18f) * layerAlpha,
+                )
+            }
+            if (head > 0f) {
+                val point = edgeMeasure.getPosition(head)
+                bloom(point.x, point.y, 32.dp.toPx(), Color(0xFFFFF3D6), 0.9f)
+                // Small sparks trail behind the head.
+                for (i in 1..6) {
+                    val d = (head - i * 15.dp.toPx()).coerceAtLeast(0f)
+                    if (d <= 0f) break
+                    val p = edgeMeasure.getPosition(d)
+                    drawCircle(
+                        color = if (i % 2 == 0) Color(0xFFFF9ECB) else Color(0xFFBFE0FF),
+                        radius = (2.4.dp.toPx()) * (1f - i * 0.11f),
+                        center = Offset(p.x, p.y),
+                        alpha = (0.50f - i * 0.06f).coerceAtLeast(0f) * layerAlpha,
                     )
                 }
-                if (head > 0f) {
-                    val point = edgeMeasure.getPosition(head)
-                    bloom(point.x, point.y, 30.dp.toPx(), Color(0xFFFFF3D6), 0.90f)
-                }
             }
+        }
 
-            // Big heart at the capsule, then scatter.
-            val heartT = ((e - 0.42f) / 0.25f).coerceIn(0f, 1f)
-            val disperse = ((e - 0.67f) / 0.20f).coerceIn(0f, 1f)
-            val heartAlpha = 1f - disperse
-            if (heartT > 0f && heartAlpha > 0f) {
-                val r = 44.dp.toPx()
-                val heart = heartPath(cx, heartCy, r)
-                val heartMeasure = PathMeasure().apply { setPath(heart, false) }
-                val heartLength = heartMeasure.length
-                val part = Path()
-                val scale = 1f + 0.55f * disperse
-                withTransform({ scale(scale, scale, pivot = Offset(cx, heartCy)) }) {
-                    if (heartLength > 1f && heartMeasure.getSegment(0f, heartLength * heartT, part, true)) {
+        // 2. Ribbon travels around the capsule outline.
+        val orbit = ((e - 0.42f) / 0.38f).coerceIn(0f, 1f)
+        if (orbit > 0f) {
+            val capsule = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        capLeft,
+                        capTop,
+                        capRight,
+                        capBottom,
+                        capRadius,
+                        capRadius,
+                    ),
+                )
+            }
+            val measure = PathMeasure().apply { setPath(capsule, false) }
+            val perimeter = measure.length
+            if (perimeter > 1f) {
+                val fade = if (orbit < 0.82f) 1f else (1f - (orbit - 0.82f) / 0.18f).coerceIn(0f, 1f)
+                val ringBrush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color(0xFF4F8BFF),
+                        Color(0xFFA78BFA),
+                        Color(0xFFFF7AC6),
+                        Color(0xFFFFE4B5),
+                        Color(0xFF4F8BFF),
+                    ),
+                    center = Offset(capCenterX, capCenterY),
+                )
+                drawPath(
+                    path = capsule,
+                    brush = ringBrush,
+                    style = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.10f * orbit * fade * layerAlpha,
+                )
+                drawPath(
+                    path = capsule,
+                    brush = ringBrush,
+                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.20f * orbit * fade * layerAlpha,
+                )
+
+                val startOffset = perimeter * 0.25f
+                val head = (startOffset + perimeter * orbit) % perimeter
+                val tailLength = perimeter * 0.30f
+                fun drawSegment(from: Float, to: Float) {
+                    if (to <= from + 0.5f) return
+                    val part = Path()
+                    if (measure.getSegment(from, to, part, true)) {
                         drawPath(
                             path = part,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFFFF7AC6),
-                                    Color(0xFFFF4D8D),
-                                    Color(0xFFFFE4B5),
-                                ),
-                                start = Offset(cx - r, heartCy - r),
-                                end = Offset(cx + r, heartCy + r),
-                            ),
-                            style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Round),
-                            alpha = 0.96f * heartAlpha * layerAlpha,
-                        )
-                    }
-                    drawPath(
-                        path = heart,
-                        color = Color(0xFFFF7AC6),
-                        alpha = 0.10f * heartT * heartAlpha * layerAlpha,
-                    )
-                }
-                bloom(cx, heartCy, r * 3.4f, Color(0xFFFF7AC6), 0.34f * heartT * heartAlpha)
-
-                if (disperse > 0f) {
-                    val count = 16
-                    for (i in 0 until count) {
-                        val angle = i * (2.0 * Math.PI / count) + 0.35
-                        val distance = r * (1.15f + 1.15f * disperse)
-                        val px = cx + cos(angle).toFloat() * distance
-                        val py = heartCy + sin(angle).toFloat() * distance
-                        drawCircle(
-                            color = if (i % 3 == 0) Color(0xFFFFE4B5) else Color(0xFFFF9ECB),
-                            radius = (2.8.dp.toPx()) * (1f - 0.65f * disperse),
-                            center = Offset(px, py),
-                            alpha = 0.64f * (1f - disperse) * layerAlpha,
+                            brush = ringBrush,
+                            style = Stroke(width = 5.5.dp.toPx(), cap = StrokeCap.Round),
+                            alpha = 0.95f * fade * layerAlpha,
                         )
                     }
                 }
+                if (head - tailLength >= 0f) {
+                    drawSegment(head - tailLength, head)
+                } else {
+                    drawSegment(0f, head)
+                    drawSegment(perimeter + (head - tailLength), perimeter)
+                }
+                val point = measure.getPosition(head)
+                bloom(point.x, point.y, 42.dp.toPx(), Color(0xFFFFF3D6), 0.9f * fade)
+                bloom(point.x, point.y, 22.dp.toPx(), Color(0xFFFF9ECB), 0.55f * fade)
             }
+        }
 
-            // Second streamer: from the heart to the opposite bottom edge.
-            val exitT = ((e - 0.78f) / 0.22f).coerceIn(0f, 1f)
-            if (exitT > 0f) {
-                val exitPath = Path().apply {
-                    moveTo(cx, heartCy)
-                    quadraticBezierTo(w * 0.34f, h - 34.dp.toPx(), w * 0.06f, h - 2.dp.toPx())
+        // 3. Particle burst leaves the capsule edge and fades outward.
+        val burst = ((e - 0.80f) / 0.20f).coerceIn(0f, 1f)
+        if (burst > 0f) {
+            val pad = 10.dp.toPx() * burst
+            drawRoundRect(
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color(0xFF4F8BFF),
+                        Color(0xFFA78BFA),
+                        Color(0xFFFF7AC6),
+                        Color(0xFFFFE4B5),
+                        Color(0xFF4F8BFF),
+                    ),
+                    center = Offset(capCenterX, capCenterY),
+                ),
+                topLeft = Offset(capLeft - pad, capTop - pad),
+                size = Size(
+                    (capRight - capLeft + pad * 2f).coerceAtLeast(1f),
+                    (capHeight + pad * 2f).coerceAtLeast(1f),
+                ),
+                cornerRadius = CornerRadius(capRadius + pad),
+                style = Stroke(width = 2.dp.toPx()),
+                alpha = 0.35f * (1f - burst) * layerAlpha,
+            )
+
+            val count = 56
+            val rx = (capRight - capLeft) * 0.5f
+            val ry = capHeight * 0.5f
+            for (i in 0 until count) {
+                val angle = i * (2.0 * Math.PI / count) + 0.17
+                val spread = 1f + 0.10f * burst + 1.55f * burst * (0.35f + 0.65f * ((i % 7) / 6f))
+                val px = capCenterX + cos(angle).toFloat() * rx * spread
+                val py = capCenterY + sin(angle).toFloat() * ry * spread
+                val color = when (i % 4) {
+                    0 -> Color(0xFF8FB7FF)
+                    1 -> Color(0xFFC4B5FD)
+                    2 -> Color(0xFFFF9ECB)
+                    else -> Color(0xFFFFE4B5)
                 }
-                val exitMeasure = PathMeasure().apply { setPath(exitPath, false) }
-                val exitLength = exitMeasure.length
-                if (exitLength > 1f) {
-                    val head = exitLength * exitT
-                    val tail = (head - exitLength * 0.30f).coerceAtLeast(0f)
-                    val segment = Path()
-                    if (exitMeasure.getSegment(tail, head, segment, true)) {
-                        drawPath(
-                            path = segment,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFFFFE4B5),
-                                    Color(0xFFFF7AC6),
-                                    Color(0xFF9DBBFF),
-                                    Color.Transparent,
-                                ),
-                            ),
-                            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
-                            alpha = 0.9f * layerAlpha,
-                        )
-                    }
-                    val point = exitMeasure.getPosition(head)
-                    bloom(point.x, point.y, 28.dp.toPx(), Color(0xFFFFE4B5), 0.75f)
-                }
+                drawCircle(
+                    color = color,
+                    radius = (2.6.dp.toPx()) * (1f - 0.55f * burst),
+                    center = Offset(px, py),
+                    alpha = 0.60f * (1f - burst) * layerAlpha,
+                )
             }
         }
     }
@@ -1163,7 +1137,7 @@ private fun VoiceCapsule(
     Row(
         modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(56.dp)
             .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .frostedGlass(
                 shape = shape,
@@ -1180,7 +1154,7 @@ private fun VoiceCapsule(
     ) {
         Box(
             Modifier
-                .size(46.dp)
+                .size(42.dp)
                 .graphicsLayer {
                     val scale = 1f + if (listening) level * 0.08f else 0f
                     scaleX = scale
@@ -1195,7 +1169,7 @@ private fun VoiceCapsule(
                 Icons.Rounded.Mic,
                 contentDescription = "语音输入",
                 tint = if (listening) Color(0xFFD85B5B) else Color(0x990B1220),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
         Spacer(Modifier.width(12.dp))

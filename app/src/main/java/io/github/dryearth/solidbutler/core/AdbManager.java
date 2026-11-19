@@ -49,6 +49,7 @@ import android.sun.security.x509.X509CertImpl;
 import android.sun.security.x509.X509CertInfo;
 
 import io.github.muntashirakon.adb.AbsAdbConnectionManager;
+import io.github.muntashirakon.adb.AdbPairingRequiredException;
 import io.github.muntashirakon.adb.AdbStream;
 
 /**
@@ -148,8 +149,10 @@ public final class AdbManager extends AbsAdbConnectionManager {
     public static String connectDevice(@NonNull Context context, long timeoutMs) {
         if (!init(context)) return LAST_ERROR;
         try {
-            boolean ok = INSTANCE.autoConnect(context.getApplicationContext(), timeoutMs);
+            boolean ok = INSTANCE.connectTls(context.getApplicationContext(), timeoutMs);
             return ok ? null : "没有找到可连接的无线调试端口";
+        } catch (AdbPairingRequiredException e) {
+            return "还没有完成配对：请先在无线调试里使用配对码配对";
         } catch (Exception e) {
             return message(e);
         }
@@ -164,14 +167,25 @@ public final class AdbManager extends AbsAdbConnectionManager {
         }
     }
 
+    public static final class Result {
+        public final int code;
+        public final String output;
+
+        Result(int code, String output) {
+            this.code = code;
+            this.output = output;
+        }
+    }
+
     /** Execute a shell command through adbd. Returns null when not connected. */
     @Nullable
-    public static String run(String command, long timeoutMs) {
+    public static Result run(String command, long timeoutMs) {
         AdbManager manager = INSTANCE;
         if (manager == null || !manager.isConnected()) return null;
         final AdbStream[] holder = new AdbStream[1];
-        Future<String> future = manager.executor.submit(() -> {
-            AdbStream stream = manager.openStream("shell:" + command);
+        Future<Result> future = manager.executor.submit(() -> {
+            AdbStream stream = manager.openStream(
+                    "shell:" + command + " 2>&1; echo __XI_EXIT:$?");
             holder[0] = stream;
             try (InputStream input = stream.openInputStream()) {
                 ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -180,7 +194,22 @@ public final class AdbManager extends AbsAdbConnectionManager {
                 while ((read = input.read(buffer)) != -1) {
                     output.write(buffer, 0, read);
                 }
-                return output.toString("UTF-8");
+                String raw = output.toString("UTF-8");
+                int marker = raw.lastIndexOf("__XI_EXIT:");
+                int code = 0;
+                String text = raw;
+                if (marker >= 0) {
+                    String tail = raw.substring(marker + "__XI_EXIT:".length()).trim();
+                    int end = 0;
+                    while (end < tail.length() && Character.isDigit(tail.charAt(end))) {
+                        end++;
+                    }
+                    if (end > 0) {
+                        code = Integer.parseInt(tail.substring(0, end));
+                    }
+                    text = raw.substring(0, marker).trim();
+                }
+                return new Result(code, text);
             } finally {
                 try {
                     stream.close();
@@ -193,7 +222,7 @@ public final class AdbManager extends AbsAdbConnectionManager {
         } catch (TimeoutException e) {
             future.cancel(true);
             close(holder[0]);
-            return "";
+            return null;
         } catch (Exception e) {
             return null;
         }

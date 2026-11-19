@@ -68,8 +68,9 @@ object Shell {
         return when {
             rootReady || detectRoot() -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
             AdbManager.connected() -> {
-                val out = AdbManager.run(cmd, timeoutMs)
-                if (out != null) ShellResult(0, out) else ShellResult(-1, "", "无线 ADB 执行失败")
+                val result = AdbManager.run(cmd, timeoutMs)
+                if (result != null) ShellResult(result.code, result.output)
+                else ShellResult(-1, "", "无线 ADB 执行失败")
             }
             else -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
@@ -80,8 +81,9 @@ object Shell {
         return when (backend) {
             Backend.ROOT -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
             Backend.ADB -> {
-                val out = AdbManager.run(cmd, timeoutMs)
-                if (out != null) ShellResult(0, out) else ShellResult(-1, "", "无线 ADB 未连接")
+                val result = AdbManager.run(cmd, timeoutMs)
+                if (result != null) ShellResult(result.code, result.output)
+                else ShellResult(-1, "", "无线 ADB 未连接")
             }
             Backend.APP -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }

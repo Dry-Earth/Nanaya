@@ -3,6 +3,7 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -102,7 +103,7 @@ fun SettingsScreen(
     var adbExpanded by rememberSaveable { mutableStateOf(false) }
     var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
     var adbBusy by remember { mutableStateOf(false) }
-    var adbHost by rememberSaveable { mutableStateOf("127.0.0.1") }
+    var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
     var adbPort by rememberSaveable { mutableStateOf("") }
     var adbCode by rememberSaveable { mutableStateOf("") }
 
@@ -453,7 +454,7 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "配对失败时，把地址改成无线调试页显示的 IP；配对端口每次打开配对页都会变化，连接端口由 mDNS 自动发现。",
+                    "已自动填入本机 Wi-Fi IP；如果配对失败，改成无线调试页显示的 IP。配对端口每次打开配对页都会变化，连接端口由 mDNS 自动发现。",
                     style = MaterialTheme.typography.labelSmall,
                     color = Glass.Faint,
                 )
@@ -633,6 +634,15 @@ private fun applyIcon(context: android.content.Context, alias: String) {
         Toast.makeText(context, "图标已切换，桌面可能需要刷新", Toast.LENGTH_SHORT).show()
     }
 }
+
+private fun localWifiIp(context: android.content.Context): String? = runCatching {
+    val cm = context.getSystemService(ConnectivityManager::class.java)
+    val network = cm.activeNetwork ?: return@runCatching null
+    val props = cm.getLinkProperties(network) ?: return@runCatching null
+    props.linkAddresses
+        .mapNotNull { it.address.hostAddress }
+        .firstOrNull { it.contains('.') && !it.startsWith("127.") && !it.startsWith("169.254.") }
+}.getOrNull()
 
 private fun openFirst(context: android.content.Context, vararg intents: Intent) {
     for (intent in intents) {

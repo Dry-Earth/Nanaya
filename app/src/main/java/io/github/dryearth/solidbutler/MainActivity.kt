@@ -24,6 +24,8 @@ import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 
 class MainActivity : ComponentActivity() {
     private var assistRequest by mutableStateOf(false)
+    private var visible = false
+    private var pendingBack = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,15 +56,42 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        visible = true
+        if (pendingBack) {
+            pendingBack = false
+            window.decorView.postDelayed({ moveTaskToBack(true) }, 80)
+        }
+    }
+
+    override fun onPause() {
+        visible = false
+        super.onPause()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         val isAssist = intent.action == Intent.ACTION_ASSIST
         val openChat = intent.getBooleanExtra("open_chat", false)
         if (isAssist && Settings.canDrawOverlays(this)) {
+            val wasVisible = visible
             if (AssistOverlayService.show(this, voice = true)) {
                 assistRequest = false
-                moveTaskToBack(true)
+                if (!wasVisible) {
+                    // The assist intent brought the app task forward from the
+                    // background. Wait until the service window is attached,
+                    // then put the task back so the user's previous app stays
+                    // behind the overlay instead of seeing 汐's last page.
+                    pendingBack = true
+                    window.decorView.postDelayed({
+                        if (pendingBack) {
+                            pendingBack = false
+                            moveTaskToBack(true)
+                        }
+                    }, 220)
+                }
                 return
             }
         }
