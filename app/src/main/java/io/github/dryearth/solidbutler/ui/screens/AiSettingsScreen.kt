@@ -233,26 +233,21 @@ fun AiSettingsScreen(
                 title = "文字转语音",
                 value = ttsOptions.firstOrNull { it.pkg == ttsPkg }?.label ?: "系统默认",
             ) { picker = "tts" }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val marmalade = remember {
+                runCatching { context.packageManager.getLaunchIntentForPackage("app.marmalade.stt") }.getOrNull()
+            }
+            if (marmalade != null) {
+                Spacer(Modifier.height(10.dp))
                 ActionButton(
-                    "系统语音设置",
-                    modifier = Modifier.weight(1f),
-                    onClick = { openVoiceSettings(context) },
+                    "打开 Marmalade",
+                    accent = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { runCatching { context.startActivity(marmalade) } },
                 )
-                val marmalade = context.packageManager.getLaunchIntentForPackage("app.marmalade.stt")
-                if (marmalade != null) {
-                    ActionButton(
-                        "打开 Marmalade",
-                        accent = true,
-                        modifier = Modifier.weight(1f),
-                        onClick = { runCatching { context.startActivity(marmalade) } },
-                    )
-                }
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "如果使用 Marmalade STT：先在「语言与地区 → 语音 → 语音输入」里选它；汐会直接绑定它的 RecognitionService，不弹出 Marmalade 面板。",
+                "使用 Marmalade STT：手动到「设置 → 系统 → 语言与地区 → 语音 → 语音输入」把它设为识别服务；汐会直接绑定它的 RecognitionService，不弹出识别面板。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -493,34 +488,6 @@ fun AiSettingsScreen(
                 }
             }
         }
-    }
-}
-
-private fun openVoiceSettings(context: android.content.Context) {
-    val intents = mutableListOf(
-        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
-        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$VoiceInputSettingsActivity")),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$SpeechSettingsActivity")),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$LanguageAndRegionSettingsActivity")),
-        Intent(Settings.ACTION_LOCALE_SETTINGS),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageAssistActivity")),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$DefaultAssistSettingsActivity")),
-        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")),
-        Intent("com.android.settings.action.SETTINGS_SEARCH").putExtra("query", "语音输入"),
-    )
-    intents += Intent(Settings.ACTION_SETTINGS)
-    var opened = false
-    for (i in intents) {
-        try {
-            context.startActivity(i)
-            opened = true
-            break
-        } catch (_: Exception) {
-        }
-    }
-    if (!opened) {
-        Toast.makeText(context, "请在系统设置里搜索「语音输入」", Toast.LENGTH_LONG).show()
     }
 }
 
