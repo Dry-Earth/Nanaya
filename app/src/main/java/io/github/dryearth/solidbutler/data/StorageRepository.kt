@@ -393,7 +393,8 @@ class StorageRepository(
                 listOf("没有可清理的应用缓存。请先授予「使用情况访问」，并在应用详情里确认应用有缓存。"),
             )
         }
-        val targets = pkgs.filterNot { it in prefs.whitelist() }
+        val targets = pkgs.filter { Shell.isValidPackage(it) }
+            .filterNot { it in prefs.whitelist() }
         if (targets.isEmpty()) {
             return@withContext CleanResult(0, 0, 0, listOf("目标都在保护名单里，已跳过"))
         }

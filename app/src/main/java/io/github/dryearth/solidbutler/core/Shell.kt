@@ -120,6 +120,15 @@ object Shell {
 
     fun isPrivileged(): Boolean = rootReady || AdbManager.connected()
 
+    /** Values that are interpolated into shell commands must be validated. */
+    fun isValidPackage(pkg: String): Boolean = pkg.matches(Regex("[A-Za-z0-9._]{2,150}"))
+
+    fun isValidComponent(component: String): Boolean =
+        component.matches(Regex("[A-Za-z0-9._$/]{2,220}"))
+
+    fun isStandbyBucket(bucket: String): Boolean =
+        bucket in setOf("active", "working_set", "frequent", "rare", "restricted", "never")
+
     /** Cheap periodic check; avoids keeping stale root/shell state after the user revokes it. */
     fun revalidate() {
         if (rootReady) {

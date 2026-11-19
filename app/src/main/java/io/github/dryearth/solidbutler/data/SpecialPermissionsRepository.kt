@@ -85,6 +85,7 @@ class SpecialPermissionsRepository(
             else -> return false to "这项权限需要在系统设置里关闭"
         }
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val r = Shell.run(cmd)
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "已收回" }
     }

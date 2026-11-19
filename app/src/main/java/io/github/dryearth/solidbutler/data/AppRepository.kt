@@ -109,6 +109,7 @@ class AppRepository(
 
     fun freeze(pkg: String, freeze: Boolean): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val cmd = if (freeze) "pm disable-user --user 0 $pkg" else "pm enable $pkg"
         val r = Shell.run(cmd)
         val ok = r.ok && !r.text.contains("Error", true) && !r.text.contains("Exception", true)
@@ -117,6 +118,7 @@ class AppRepository(
 
     fun uninstallForUser(pkg: String): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val r = Shell.run("pm uninstall --user 0 $pkg")
         val ok = r.text.contains("Success", true)
         return ok to r.text.ifBlank { "失败" }
@@ -124,12 +126,14 @@ class AppRepository(
 
     fun restoreForUser(pkg: String): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val r = Shell.run("cmd package install-existing --user 0 $pkg")
         return r.text.contains("installed", true) to r.text
     }
 
     fun restrictBackground(pkg: String, uid: Int, restrict: Boolean): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val mode = if (restrict) "ignore" else "default"
         val r = Shell.run(
             "appops set $pkg RUN_IN_BACKGROUND $mode; " +
@@ -140,12 +144,14 @@ class AppRepository(
 
     fun restrictWakeLock(pkg: String, restrict: Boolean): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val r = Shell.run("appops set $pkg WAKE_LOCK ${if (restrict) "ignore" else "default"}")
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "完成" }
     }
 
     fun setBatteryUnrestricted(pkg: String, unrestricted: Boolean): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg)) return false to "包名无效"
         val cmd = if (unrestricted) "cmd deviceidle whitelist +$pkg" else "cmd deviceidle whitelist -$pkg"
         val r = Shell.run(cmd)
         return r.ok to r.text.ifBlank { "完成" }
@@ -153,6 +159,9 @@ class AppRepository(
 
     fun revoke(pkg: String, permission: String): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg) || !permission.matches(Regex("android\\.permission\\.[A-Za-z0-9._]+"))) {
+            return false to "包名或权限无效"
+        }
         val r = Shell.run("pm revoke $pkg $permission")
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "已收回" }
     }
@@ -250,12 +259,14 @@ class AppRepository(
 
     fun setStandbyBucket(pkg: String, bucket: String): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg) || !Shell.isStandbyBucket(bucket)) return false to "包名或分组无效"
         val r = Shell.run("am set-standby-bucket $pkg $bucket")
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "已设为 $bucket" }
     }
 
     fun setComponentEnabled(pkg: String, component: String, enabled: Boolean): Pair<Boolean, String> {
         if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.isValidPackage(pkg) || !Shell.isValidComponent(component)) return false to "组件无效"
         val verb = if (enabled) "enable" else "disable"
         val r = Shell.run("pm $verb --user 0 $pkg/$component")
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "完成" }

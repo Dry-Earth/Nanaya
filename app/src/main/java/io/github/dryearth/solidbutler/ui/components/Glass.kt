@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -235,7 +236,30 @@ fun GlassPanel(
                 shape,
             )
             .drawWithContent {
+                // A soft lens highlight sits under the content, then a thin
+                // inner rim gives the glass a beveled, liquid edge.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(Color(0x18FFFFFF), Color.Transparent),
+                        center = Offset(size.width * 0.22f, size.height * 0.10f),
+                        radius = size.width * 0.52f,
+                    ),
+                    radius = size.width * 0.52f,
+                    center = Offset(size.width * 0.22f, size.height * 0.10f),
+                )
                 drawContent()
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0x33FFFFFF), Color(0x08FFFFFF), Color(0x26000000)),
+                    ),
+                    topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                    size = Size(
+                        (size.width - 2.dp.toPx()).coerceAtLeast(0f),
+                        (size.height - 2.dp.toPx()).coerceAtLeast(0f),
+                    ),
+                    cornerRadius = CornerRadius((corner - 1.dp).coerceAtLeast(0.dp).toPx()),
+                    style = Stroke(width = 1.2.dp.toPx()),
+                )
                 // top bevel highlight
                 drawLine(
                     brush = Brush.horizontalGradient(

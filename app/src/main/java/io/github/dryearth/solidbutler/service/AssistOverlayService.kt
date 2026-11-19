@@ -381,6 +381,18 @@ private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>)
         )
         .drawWithContent {
             drawContent()
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    listOf(Color(0x33FFFFFF), Color(0x08FFFFFF), Color(0x26000000)),
+                ),
+                topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                size = Size(
+                    (size.width - 2.dp.toPx()).coerceAtLeast(0f),
+                    (size.height - 2.dp.toPx()).coerceAtLeast(0f),
+                ),
+                cornerRadius = CornerRadius((corner.toPx() - 1.dp.toPx()).coerceAtLeast(0f)),
+                style = Stroke(width = 1.2.dp.toPx()),
+            )
             val inset = corner.toPx() * 1.1f
             drawLine(
                 brush = Brush.horizontalGradient(

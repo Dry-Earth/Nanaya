@@ -471,6 +471,7 @@ class PerformanceRepository(private val context: Context) {
 
     fun applyGovernor(governor: String): Pair<Boolean, String> {
         if (!Shell.rootReady) return false to "需要 Root"
+        if (!governor.matches(Regex("[A-Za-z0-9_-]+"))) return false to "governor 名称无效"
         if (governor !in availableGovernors()) return false to "内核不支持 $governor"
         val cmd = "for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo $governor > \$f 2>/dev/null; done; " +
             "echo -n applied"

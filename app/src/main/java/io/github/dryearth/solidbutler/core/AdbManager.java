@@ -3,6 +3,7 @@ package io.github.dryearth.solidbutler.core;
 import android.content.Context;
 import android.os.Build;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -71,6 +72,7 @@ public final class AdbManager extends AbsAdbConnectionManager {
         PrivateKey loadedKey = readPrivateKey(context);
         Certificate loadedCertificate = readCertificate(context);
         if (loadedKey == null || loadedCertificate == null) {
+            Log.w("AdbManager", "ADB key or certificate missing; generating a new key pair (pairing required)");
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
             generator.initialize(2048, SecureRandom.getInstance("SHA1PRNG"));
             KeyPair pair = generator.generateKeyPair();
@@ -106,6 +108,18 @@ public final class AdbManager extends AbsAdbConnectionManager {
         }
         privateKey = loadedKey;
         certificate = loadedCertificate;
+        if (new File(context.getFilesDir(), "adb_cert.der").exists() == false) {
+            // Migrate an older PEM certificate to DER, which is more robust to parse.
+            runCatchingWriteCertificate(context, loadedCertificate);
+        }
+    }
+
+    private static void runCatchingWriteCertificate(Context context, Certificate certificate) {
+        try {
+            writeCertificate(context, certificate);
+        } catch (Exception e) {
+            Log.w("AdbManager", "Unable to migrate ADB certificate", e);
+        }
     }
 
     public static synchronized boolean init(@NonNull Context context) {
@@ -294,22 +308,30 @@ public final class AdbManager extends AbsAdbConnectionManager {
 
     @Nullable
     private static Certificate readCertificate(Context context) {
-        File file = new File(context.getFilesDir(), "adb_cert.pem");
-        if (!file.exists()) return null;
-        try (InputStream input = new FileInputStream(file)) {
+        File der = new File(context.getFilesDir(), "adb_cert.der");
+        if (der.exists()) {
+            try (InputStream input = new FileInputStream(der)) {
+                return CertificateFactory.getInstance("X.509").generateCertificate(input);
+            } catch (Exception e) {
+                Log.w("AdbManager", "Unable to read ADB DER certificate", e);
+            }
+        }
+        // Migration from the old PEM representation.
+        File pem = new File(context.getFilesDir(), "adb_cert.pem");
+        if (!pem.exists()) return null;
+        try (InputStream input = new FileInputStream(pem)) {
             return CertificateFactory.getInstance("X.509").generateCertificate(input);
         } catch (Exception e) {
+            Log.w("AdbManager", "Unable to read ADB PEM certificate", e);
             return null;
         }
     }
 
     private static void writeCertificate(Context context, Certificate certificate) throws Exception {
-        File file = new File(context.getFilesDir(), "adb_cert.pem");
-        String pem = "-----BEGIN CERTIFICATE-----\n"
-                + Base64.encodeToString(certificate.getEncoded(), Base64.NO_WRAP)
-                + "\n-----END CERTIFICATE-----\n";
+        // Store raw DER; no PEM line wrapping/parser differences between ROMs.
+        File file = new File(context.getFilesDir(), "adb_cert.der");
         try (OutputStream output = new FileOutputStream(file)) {
-            output.write(pem.getBytes(StandardCharsets.UTF_8));
+            output.write(certificate.getEncoded());
         }
     }
 

@@ -902,7 +902,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                         ?: withContext(Dispatchers.IO) { storageRepo.collectAppCaches() }
                     caches.take(8).map { it.pkg }
                 } else {
-                    listOfNotNull(resolveApp(token)?.pkg ?: token.takeIf { it.contains('.') })
+                    listOfNotNull(
+                        resolveApp(token)?.pkg
+                            ?: token.takeIf { Shell.isValidPackage(it) },
+                    )
                 }
                 if (pkgs.isEmpty()) "没有找到可清理的应用。" else {
                     val r = withContext(Dispatchers.IO) { storageRepo.clearAppCaches(pkgs) }
@@ -1056,7 +1059,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun normalizePermission(raw: String): String? {
         if (raw.isBlank()) return null
-        if (raw.startsWith("android.permission.")) return raw
+        if (raw.startsWith("android.permission.") &&
+            raw.matches(Regex("android\\.permission\\.[A-Za-z0-9._]+"))
+        ) return raw
         return when (raw) {
             "相机", "摄像头", "camera" -> "android.permission.CAMERA"
             "麦克风", "录音", "mic", "microphone" -> "android.permission.RECORD_AUDIO"
