@@ -322,6 +322,70 @@ private suspend fun speakAndWait(engine: TextToSpeech, text: String) {
     }
 }
 
+private val GlassGrainPoints = List(56) { i ->
+    val x = ((i * 37 + 11) % 97) / 97f
+    val y = ((i * 53 + 29) % 89) / 89f
+    Offset(x, y)
+}
+
+/** Frosted liquid-glass surface: translucency, specular sweep and fine grain. */
+private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>): Modifier =
+    this
+        .clip(shape)
+        .background(Brush.linearGradient(colors))
+        .drawBehind {
+            drawRect(
+                Brush.verticalGradient(
+                    0f to Color(0x30FFFFFF),
+                    0.45f to Color(0x0AFFFFFF),
+                    1f to Color(0x24000000),
+                ),
+            )
+            drawRect(
+                Brush.linearGradient(
+                    0f to Color(0x22FFFFFF),
+                    0.40f to Color(0x00FFFFFF),
+                    0.58f to Color(0x12FFFFFF),
+                    1f to Color(0x00FFFFFF),
+                    start = Offset.Zero,
+                    end = Offset(size.width, size.height),
+                ),
+            )
+            GlassGrainPoints.forEach { p ->
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.045f),
+                    radius = 0.65.dp.toPx(),
+                    center = Offset(p.x * size.width, p.y * size.height),
+                )
+            }
+            drawRect(
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, Color(0x1C000000)),
+                    startY = size.height * 0.55f,
+                    endY = size.height,
+                ),
+            )
+        }
+        .border(
+            1.dp,
+            Brush.verticalGradient(
+                listOf(Color(0x99FFFFFF), Color(0x33FFFFFF), Color(0x14FFFFFF)),
+            ),
+            shape,
+        )
+        .drawWithContent {
+            drawContent()
+            val inset = corner.toPx() * 1.1f
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    listOf(Color.Transparent, Color(0x88FFFFFF), Color.Transparent),
+                ),
+                start = Offset(inset, 0.75f),
+                end = Offset(size.width - inset, 0.75f),
+                strokeWidth = 1f,
+            )
+        }
+
 @Composable
 private fun OverlayAssistant(
     vm: ButlerViewModel,
