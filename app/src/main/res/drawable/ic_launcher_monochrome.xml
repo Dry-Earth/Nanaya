@@ -4,35 +4,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- glass halo -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#2EDCE6F5"
-        android:strokeWidth="2"
-        android:pathData="M54,20 A34,34 0 1,1 53.9,20" />
-    <!-- accent arc -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#A9C1FF"
-        android:strokeWidth="3"
-        android:strokeLineCap="round"
-        android:pathData="M78,29 A34,34 0 0,1 88,54" />
-    <!-- crescent -->
-    <path
-        android:fillColor="#E8EEF8"
-        android:pathData="M55,33 A21,21 0 1,0 55,75 A15.5,15.5 0 1,1 55,33 Z" />
-    <!-- crystal core -->
-    <path
-        android:fillColor="#A9C1FF"
-        android:pathData="M55,47 L58.5,54 L55,61 L51.5,54 Z" />
-    <!-- status dots -->
-    <path
-        android:fillColor="#6E7A8C"
-        android:pathData="M44,84 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0" />
-    <path
-        android:fillColor="#A9C1FF"
-        android:pathData="M54,84 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0" />
-    <path
-        android:fillColor="#6E7A8C"
-        android:pathData="M64,84 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,22 C36,22 27,37 28,54 C28,70 33,82 37,91 C42,84 44,73 45,63 C47,68 50,71 54,71 C58,71 61,68 63,63 C64,73 66,84 71,91 C75,82 80,70 80,54 C81,37 72,22 54,22 Z M54,30 C63,30 68,38 68,48 C68,58 62,66 54,66 C46,66 40,58 40,48 C40,38 45,30 54,30 Z" />
 </vector>

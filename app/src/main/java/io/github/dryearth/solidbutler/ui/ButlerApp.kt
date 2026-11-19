@@ -268,7 +268,7 @@ fun ButlerApp(
 private fun AiTitle(ready: Boolean) {
     if (!ready) {
         Text(
-            "汐",
+            "Nanaya",
             style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = 1.5.sp),
             color = Glass.Text,
             fontWeight = FontWeight.Light,
@@ -301,7 +301,7 @@ private fun AiTitle(ready: Boolean) {
                 )
             }
             Text(
-                "汐",
+                "Nanaya",
                 style = TextStyle(
                     brush = brush,
                     fontSize = MaterialTheme.typography.headlineLarge.fontSize,

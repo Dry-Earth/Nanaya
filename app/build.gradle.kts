@@ -17,10 +17,10 @@ android {
         applicationId = "io.github.dryearth.solidbutler"
         minSdk = 31
         targetSdk = targetSdkValue
-        versionCode = 41
-        versionName = "0.7.32"
+        versionCode = 42
+        versionName = "0.7.33"
         vectorDrawables { useSupportLibrary = true }
-        resValue("string", "app_name", "汐")
+        resValue("string", "app_name", "Nanaya")
         ndk {
             // Conscrypt/libspake2 ship prebuilt JNI libs. Modern LineageOS 24
             // devices are arm64; keep the APK small by not bundling x86/32-bit.
