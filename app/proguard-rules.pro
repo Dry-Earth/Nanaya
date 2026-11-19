@@ -18,4 +18,5 @@
 -keep class io.github.muntashirakon.adb.** { *; }
 -keep class org.bouncycastle.** { *; }
 -keep class android.sun.security.** { *; }
+-keep class io.github.muntashirakon.crypto.spake2.** { *; }
 -keep class android.sun.misc.** { *; }
