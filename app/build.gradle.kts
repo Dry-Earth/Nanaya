@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.dryearth.solidbutler"
-        minSdk = 31
+        minSdk = 33
         targetSdk = targetSdkValue
         versionCode = 42
         versionName = "0.7.33"
