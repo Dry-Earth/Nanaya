@@ -252,7 +252,7 @@ fun AiSettingsScreen(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "如果使用 Marmalade STT：先在系统「语音输入」里选它，再用上面的系统识别；Marmalade 是识别服务，不是可嵌入的 SDK。",
+                "如果使用 Marmalade STT：先在「语言与地区 → 语音 → 语音输入」里选它；汐会直接绑定它的 RecognitionService，不弹出 Marmalade 面板。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -331,7 +331,7 @@ fun AiSettingsScreen(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "手动路径：设置 → 应用 → 默认应用 → 数字助理（部分 LineageOS 版本叫「助理与语音输入」）。如果按钮打不开，可在系统设置搜索「数字助理」。",
+                "手动路径：设置 → 系统 → 语言与地区 → 语音 → 语音输入；数字助理在设置 → 应用 → 默认应用。不同 LineageOS 版本菜单名略有不同。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -502,6 +502,8 @@ private fun openVoiceSettings(context: android.content.Context) {
         Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
         Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$VoiceInputSettingsActivity")),
         Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$SpeechSettingsActivity")),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$LanguageAndRegionSettingsActivity")),
+        Intent(Settings.ACTION_LOCALE_SETTINGS),
         Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageAssistActivity")),
         Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$DefaultAssistSettingsActivity")),
         Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")),
