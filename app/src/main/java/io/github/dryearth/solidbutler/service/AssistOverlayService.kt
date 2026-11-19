@@ -1004,12 +1004,13 @@ private fun WakeHeartLayer(
         val h = size.height
         if (w <= 0f || h <= 0f) return@Canvas
         fun bloom(cx: Float, cy: Float, radius: Float, color: Color, alpha: Float) {
-            if (alpha <= 0.001f || radius <= 0f) return
+            val a = (alpha * layerAlpha).coerceIn(0f, 1f)
+            if (a <= 0.001f || radius <= 0f) return
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        color.copy(alpha = alpha.coerceAtMost(1f)),
-                        color.copy(alpha = (alpha * 0.38f).coerceAtMost(1f)),
+                        color.copy(alpha = a),
+                        color.copy(alpha = (a * 0.38f).coerceIn(0f, 1f)),
                         Color.Transparent,
                     ),
                     center = Offset(cx, cy),
@@ -1020,7 +1021,7 @@ private fun WakeHeartLayer(
             )
         }
         val e = entrance.coerceIn(0f, 1f)
-        withTransform({ alpha = layerAlpha }) {
+        // 3. Edge streamer: top-right -> right edge -> capsule heart, then
         //    a second streamer leaves the heart for the opposite bottom edge.
         if (e > 0.02f) {
             val heartCy = h - 54.dp.toPx()
@@ -1049,7 +1050,7 @@ private fun WakeHeartLayer(
                             ),
                         ),
                         style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
-                        alpha = 1f - e * 0.20f,
+                        alpha = (1f - e * 0.20f) * layerAlpha,
                     )
                 }
                 if (head > 0f) {
@@ -1083,13 +1084,13 @@ private fun WakeHeartLayer(
                                 end = Offset(cx + r, heartCy + r),
                             ),
                             style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Round),
-                            alpha = 0.96f * heartAlpha,
+                            alpha = 0.96f * heartAlpha * layerAlpha,
                         )
                     }
                     drawPath(
                         path = heart,
                         color = Color(0xFFFF7AC6),
-                        alpha = 0.10f * heartT * heartAlpha,
+                        alpha = 0.10f * heartT * heartAlpha * layerAlpha,
                     )
                 }
                 bloom(cx, heartCy, r * 3.4f, Color(0xFFFF7AC6), 0.34f * heartT * heartAlpha)
@@ -1105,7 +1106,7 @@ private fun WakeHeartLayer(
                             color = if (i % 3 == 0) Color(0xFFFFE4B5) else Color(0xFFFF9ECB),
                             radius = (2.8.dp.toPx()) * (1f - 0.65f * disperse),
                             center = Offset(px, py),
-                            alpha = 0.64f * (1f - disperse),
+                            alpha = 0.64f * (1f - disperse) * layerAlpha,
                         )
                     }
                 }
@@ -1136,15 +1137,13 @@ private fun WakeHeartLayer(
                                 ),
                             ),
                             style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
-                            alpha = 0.9f,
+                            alpha = 0.9f * layerAlpha,
                         )
                     }
                     val point = exitMeasure.getPosition(head)
                     bloom(point.x, point.y, 28.dp.toPx(), Color(0xFFFFE4B5), 0.75f)
                 }
             }
-        }
-
         }
     }
 }
