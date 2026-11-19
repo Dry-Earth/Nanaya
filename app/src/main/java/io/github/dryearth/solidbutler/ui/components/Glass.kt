@@ -60,11 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import top.yukonga.miuix.kmp.blur.Backdrop
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.vibrancy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -210,7 +210,7 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
     }
 }
 
-val LocalGlassBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+val LocalGlassBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 
 @Composable
 fun LiquidGlassHost(content: @Composable () -> Unit) {
@@ -245,7 +245,6 @@ fun GlassPanel(
                         backdrop = backdrop,
                         shape = { shape },
                         effects = {
-                            vibrancy()
                             blur(14.dp.toPx(), 14.dp.toPx())
                         },
                         onDrawSurface = { drawRect(Color(0x990B0E13)) },
