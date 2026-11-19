@@ -183,13 +183,6 @@ fun ButlerApp(
                 AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             }
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            TopBar(
-                caps = caps,
-                perf = perf,
-                aiConfigured = vm.aiConfigured,
-                onChat = { chat = true },
-                onSettings = { settings = true },
-            )
             Box(
                 Modifier.weight(1f).drawWithContent {
                     drawContent()
@@ -251,6 +244,31 @@ fun ButlerApp(
                     }
                 }
             }
+            }
+        }
+        if (sub == null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Glass.Ink.copy(alpha = 0.88f),
+                                Glass.Ink.copy(alpha = 0.48f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    )
+                    .statusBarsPadding(),
+            ) {
+                TopBar(
+                    caps = caps,
+                    perf = perf,
+                    aiConfigured = vm.aiConfigured,
+                    onChat = { chat = true },
+                    onSettings = { settings = true },
+                )
             }
         }
         BottomBar(
