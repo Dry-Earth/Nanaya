@@ -1,81 +1,140 @@
 # 汐 · Solid Butler
 
-> 运行在 **LineageOS 24 / Android 17** 上的本地设备管家。
-> UI 采用 [Solid Glass](https://github.com/deeplethe/solid-glass) 的材质语言：深色中性底、三级玻璃厚度、边缘高光、克制的彩色反馈。
->
-> 应用名与图标来自《鸣潮》的「汐」（官方立绘，版权归库洛游戏），仅作个人非商业使用。
+运行在 **LineageOS 24 / Android 17** 上的本地设备管家与 AI 悬浮助手。
 
-## 能做什么
+汐优先使用系统服务、公开 API 和系统自带命令完成设备操作；只有系统没有提供入口时，才使用 **Root** 或 **无线 ADB**。文件扫描、性能读取、应用管理都在本机完成，不上传文件；AI 只发送你主动输入的对话和完成回答所需的设备上下文。
+
+## 功能
 
 | 模块 | 能力 |
 | --- | --- |
-| **存储** | 深度扫描、分类（缓存 / 残留 APK / 日志 / 缩略图 / 空目录 / 旧下载）、重复文件（大小 → 64KB 局部哈希 → 全量 SHA-256）、目录与类型占用、应用缓存专项 |
-| **应用** | 冻结 / 解冻、为当前用户卸载 / 恢复、后台限制、唤醒锁拦截、电池白名单、自启动组件级开关、危险权限批量收回、应用锁（本地 PIN + 无障碍遮罩） |
-| **性能** | 2 秒实时面板（CPU 各核频率/负载、GPU、RAM、温度、网络速率、电池）、24 小时耗电排行、充电上限 / 定时充电 / 快充模式、电池健康、governor 预设、温和回收后台 |
-| **安全** | 敏感权限聚合、相机/麦克风实时占用、离线追踪 SDK 扫描、侧载与权限组合风险规则、Root 防火墙（iptables 独立链） |
-| **自启** | 开机/网络接收器逐项开关、后台限制、`am set-standby-bucket` 待机分组 |
-| **AI** | OpenAI 兼容接口的云端管家，支持系统语音识别输入与 TTS 播报；所有动作先展示命令与影响，再二次确认 |
-| **LineageOS** | `lineagehealth` 充电控制、`lineagehardware` 硬件特性开关；`livedisplay`/`trust`/`profile` 服务探测；可作为系统数字助理（ACTION_ASSIST） |
-| **规则** | 25% 低电量语音、95% 充满语音、到上限自动限充、锁屏限制后台、连接 Wi-Fi 时限制 |
-| **隐私工具** | 特殊权限总览、通知渠道屏蔽、唤醒/任务审计、崩溃与 ANR、域名 DNS 过滤 |
-| **外观** | 星夜动态星空、极简、自定义模糊背景；AI 就绪时标题有流动渐变与波浪 |
+| **AI 管家** | OpenAI 兼容接口；模型列表拉取；思考模式与强度；图片发送；自定义人设与称呼；对话历史；动作先展示影响再二次确认 |
+| **悬浮助手** | 全屏悬浮窗；唤醒极光与爱心动画；语音胶囊；交互后展开面板；上拉展开、下拉吸附；内容自动生长；液态玻璃外观 |
+| **语音** | 直接绑定系统配置的语音识别服务；识别结果直接发送；系统 TTS 播报回复；唤醒随机开场白且可自定义；语速与音调跟随系统 |
+| **存储** | 深度扫描、缓存 / 残留 APK / 日志 / 缩略图 / 空目录 / 旧下载分类、重复文件、目录与类型占用、应用缓存专项、废纸篓 |
+| **应用** | 冻结 / 解冻、为当前用户卸载 / 恢复、后台限制、唤醒锁拦截、电池白名单、自启动组件开关、危险权限批量收回、应用锁 |
+| **性能** | 2 秒实时面板、CPU 各核频率与负载、GPU、RAM、温度、网络速率、电池、24 小时耗电排行、充电上限 / 定时充电 / 快充模式、电池健康、governor 预设 |
+| **安全** | 敏感权限聚合、相机 / 麦克风实时占用、离线追踪 SDK 扫描、侧载与权限组合风险、UID 级防火墙、通知渠道屏蔽、崩溃与 ANR 查看 |
+| **自动化** | 时间、低电量、充满、开始充电、锁屏、Wi-Fi 连接 / 断开等触发器；语音、通知、限充、限制应用、待机分组、亮度、响铃等动作 |
+| **LineageOS** | `lineagehealth` 充电控制、`lineagehardware` 硬件特性、`livedisplay` / `trust` / `profile` 服务探测；可作为系统数字助理 |
+| **无线 ADB** | 机内完成无线调试配对与连接，不依赖电脑；连接后作为 Shell 后端执行 `pm`、`appops`、`cmd`、`dumpsys` 等命令 |
+| **外观** | 星夜动态星空、极简背景、自定义模糊背景、液态玻璃面板、唤醒光效、自定义图标别名 |
 
-## 为什么是“调用官方接口”
+## AI 管家
 
-已核对 `LineageOS/android_lineage-sdk` 的 `lineage-24.0` 分支：
+### 对话与模型
 
-- **充电控制**：直接调用 `lineagehealth` 系统服务（`IHealthInterface`）：`setChargingControlEnabled/Mode/Limit/StartTime/TargetTime`、`setFastChargeMode`。源码中这些事务没有权限检查，因此**不需要 Root**，也不需要 system 签名。
-- **应用控制**：`pm disable-user`、`pm uninstall --user 0`、`appops set`、`cmd deviceidle whitelist`、`am set-standby-bucket`、`am kill-all`、`dumpsys`。
-- **存储**：`StorageStatsManager.queryStatsForUid`、`StatFs`、`MANAGE_EXTERNAL_STORAGE`、流式 SHA-256。
-- **性能**：`/proc/stat`、`cpufreq`、`thermal_zone`、`ActivityManager.MemoryInfo`、`BatteryManager`、`TrafficStats`、`UsageStatsManager`、`NetworkStatsManager`。
-- **网络防火墙**：内核 netfilter 的独立链 `BUTLER_FW` / `BUTLER_FW6`，只匹配 `--uid-owner`，可整体清空。
+- 支持任意 OpenAI 兼容接口：填写接口地址、API Key、模型名即可。
+- 支持从接口拉取模型列表，也可以手动填写模型名。
+- 支持思考模式与思考强度，具体效果取决于模型服务。
+- 支持发送图片，需要所选模型具备视觉能力。
+- 支持自定义人设、助手名字和对你的称呼。
+- AI 返回的设备动作会先显示命令与影响，确认后才会执行。
 
-特权分级：**无特权** → **Root**。不支持的能力会明确置灰并给出原因，不做假开关。
+### 语音输入与播报
+
+- 读取系统里配置的语音识别服务，直接绑定它的 `RecognitionService`。
+- 不启动系统语音输入页面，也不弹出识别器面板；悬浮窗保持可见。
+- 识别成功后直接发送给模型，不再填入输入框。
+- 系统 TTS 用于播报回复和唤醒开场白；语速、音调、音量跟随系统语音引擎。
+- 唤醒开场白每行一句、随机播放，可在 AI 设置里编辑；留空则不播。
+- 先播完开场白再开始识别，避免把自己的声音录进去。
+
+### 悬浮助手
+
+实现细节见 [`docs/AI.md`](docs/AI.md)。
+
+- 入口：系统数字助理 `ACTION_ASSIST`。
+- 开启后在其他应用上方显示全屏悬浮层。
+- 唤醒时先出现暗场、边框极光、流光和爱心，再显示底部语音胶囊。
+- 只有交互或语音出字后才展开完整面板，不会一唤醒就弹大面板。
+- 面板支持上拉展开、下拉吸附、随内容自动生长，到顶后停在原地。
+- 面板和胶囊使用半透明、镜面高光、磨砂颗粒和边缘折射的液态玻璃表面。
+
+## 无线 ADB
+
+设置 → 特权与访问 → 无线 ADB：
+
+1. 打开系统开发者选项 → 无线调试。
+2. 点「使用配对码配对设备」，记下屏幕上的地址、端口和 6 位配对码。
+3. 回到汐的无线 ADB 面板，填写地址、端口和配对码。
+4. 点「配对并连接」。
+5. 以后只需要点「只连接」；连接端口会通过 mDNS 自动发现。
+
+说明：
+
+- 需要 Wi-Fi 开启。
+- 每次打开配对页，配对端口都会变化。
+- 默认地址为 `127.0.0.1`；如果配对失败，改成系统页面显示的 IP。
+- 配对密钥和证书保存在应用私有目录，配对一次后可重复连接。
+- 无线 ADB 的 Shell 身份是 `shell` 用户，不是 root。`pm`、`appops`、`cmd`、`dumpsys` 等可用；`iptables`、内核 sysfs 等仍需 Root。
+- 不同 ROM 的无线调试实现可能不同，失败时会显示具体原因。
+
+## 权限分级
+
+| 级别 | 用途 |
+| --- | --- |
+| **普通应用权限** | 文件扫描、使用情况、通知读取、无障碍应用锁、悬浮窗 |
+| **无线 ADB** | 应用冻结 / 卸载、AppOps、待机分组、`dumpsys`、部分系统设置 |
+| **Root** | 防火墙、内核参数、底层充电节点、需要写系统分区的操作 |
+
+不支持的能力会明确置灰并说明原因，不做假开关。
 
 ## 构建
 
-APK 由 GitHub Actions 云端编译（固定 keystore 签名）：
-
-```
-Actions → Build APK → 任意一次 run → Artifacts / Releases
-```
-
-本地需要 JDK 17 与 Android SDK：
+需要 JDK 17 与 Android SDK 36：
 
 ```bash
 ./gradlew assembleDebug
-# 可选：-PbutlerCompileSdk=37 -PbutlerTargetSdk=37
 ```
 
-签名参数通过环境变量注入：`BUTLER_STORE_FILE`、`BUTLER_STORE_PASSWORD`、`BUTLER_KEY_ALIAS`、`BUTLER_KEY_PASSWORD`。
+可选参数：
 
-## 安装后要给的权限
+```bash
+./gradlew assembleDebug -PbutlerCompileSdk=37 -PbutlerTargetSdk=37
+```
 
-1. **所有文件访问**：深度扫描。
-2. **使用情况访问**：应用缓存、耗电排行。
-3. **无障碍服务**：应用锁（只读前台包名，不读屏幕内容）。
-4. **Root**：冻结、后台限制、自启动组件、权限收回、防火墙。
+发布签名通过环境变量注入：
+
+```bash
+BUTLER_STORE_FILE
+BUTLER_STORE_PASSWORD
+BUTLER_KEY_ALIAS
+BUTLER_KEY_PASSWORD
+```
+
+## 安装后建议授予
+
+1. **悬浮窗**：悬浮助手。
+2. **麦克风**：语音输入。
+3. **通知**：前台服务、自动化提醒。
+4. **所有文件访问**：深度扫描。
+5. **使用情况访问**：应用缓存与耗电排行。
+6. **无障碍服务**：应用锁，只读当前前台包名。
+7. **Root 或无线 ADB**：应用控制、系统设置与防火墙。
 
 ## 目录
 
 ```
 app/src/main/java/io/github/dryearth/solidbutler/
-├── ai/            OpenAI 兼容客户端
-├── core/          Shell、Capability、LineageHealth、Prefs
-├── data/          存储 / 应用 / 性能 / 安全仓库
-├── service/       应用锁无障碍服务、开机恢复防火墙
-├── ui/            Solid Glass 主题、组件、5 个页面 + AI 对话 + 设置
+├── ai/            OpenAI 兼容客户端与响应解析
+├── core/          Shell、无线 ADB、能力探测、Lineage 服务、偏好设置
+├── data/          存储 / 应用 / 性能 / 安全 / 自动化仓库
+├── service/       悬浮助手、语音、电池守护、应用锁、通知与防火墙服务
+├── ui/            液态玻璃主题、组件、页面与设置
+├── MainActivity.kt
 └── ButlerViewModel.kt
 ```
 
 ## 已知边界
 
-- 应用锁依赖无障碍服务；部分 ROM 会限制后台拉起 Activity，本项目用 `TYPE_ACCESSIBILITY_OVERLAY` 规避。
-- 相机/麦克风实时占用来自 `dumpsys`；历史调用记录属于系统隐私面板的数据，普通应用无法读取，本项目不伪造。
-- 防火墙为 UID 级；域名级过滤（`VpnService`）在后续版本。
-- `pm clear --cache-only` 在部分 ROM 上不可用，会自动回落到 Root 删除 cache 目录。
+- 悬浮窗的“背景模糊”使用半透明、镜面高光和颗粒模拟；跨窗口实时模糊在系统悬浮窗上不稳定，不做假模糊。
+- 相机 / 麦克风实时占用来自 `dumpsys`；历史调用记录属于系统隐私面板，普通应用无法读取。
+- 防火墙为 UID 级；域名级过滤通过 `VpnService` 实现。
+- 应用锁依赖无障碍服务；部分 ROM 会限制后台拉起页面，项目使用无障碍悬浮层规避。
+- `pm clear --cache-only` 在部分 ROM 上不可用，会自动回落到 Root 删除缓存目录。
 - 清理默认不进入废纸篓；删除前有二次确认。
 
 ## 许可
 
-代码以 MIT 发布。Solid Glass 的设计语言来自 [deeplethe/solid-glass](https://github.com/deeplethe/solid-glass)（MIT）。「汐」角色版权归库洛游戏所有，本项目仅为个人非商业使用。
+代码以 MIT 发布。使用的开源组件遵循各自许可证。

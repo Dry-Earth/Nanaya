@@ -12,9 +12,10 @@ import android.speech.RecognitionService
 import android.speech.SpeechRecognizer
 
 /**
- * Same approach as Dry-Earth/AI_Eta: bind the external RecognitionService
- * selected in Settings.Secure.voice_recognition_service (for example
- * Marmalade STT) directly, instead of launching the system speech Activity.
+ * Binds the external RecognitionService selected in
+ * Settings.Secure.voice_recognition_service directly, instead of launching
+ * the system speech Activity. This keeps the overlay visible and avoids a
+ * second speech window.
  */
 object SystemSpeechRecognizer {
 

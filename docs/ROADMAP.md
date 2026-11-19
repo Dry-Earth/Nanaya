@@ -2,12 +2,12 @@
 
 本文记录后续评估项，不代表当前版本已经实现。所有能力优先使用 LineageOS 24 服务或 Android 17 公共 API；只有系统没有提供时才考虑 Root sysfs。
 
-## 参考仓库
+## 接口原则
 
-- `LineageOS/android_kernel_oneplus_sm8750-modules`（lineage-24.0）
-  - `oplus/` 主要是 `hardware/radio`、`kernel`、`secure`、`sensor`，没有现成的调频/温控策略模块。
-- `LineageOS/android_kernel_oneplus_sm8750`（lineage-24.0）
-  - 标准 Android 通用内核结构；用户空间稳定依赖仍是标准 sysfs + LineageOS 服务。
+- 优先使用 LineageOS 24 系统服务与 Android 17 公开 API。
+- 系统没有提供入口时，才评估 Root sysfs 或厂商节点。
+- 只按当前设备实际暴露的接口工作，不做跨机型硬编码。
+- 未确认的能力只在诊断页只读展示，不提供假开关。
 
 ## 优先接口
 
@@ -19,7 +19,7 @@
 ## 候选增强
 
 ### 充电与电池
-- 旁路充电 / 充电分离（若 `oplus_chg` 暴露对应节点）
+- 旁路充电 / 充电分离（若厂商充电驱动暴露对应节点）
 - 充电电流上限、充电温度保护
 - 电池循环/健康趋势的长期图表
 - 充满提醒、低电量提醒（已实现）

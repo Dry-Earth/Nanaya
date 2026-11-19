@@ -905,9 +905,9 @@ private fun OverlayAssistant(
 }
 
 /**
- * Full-screen wake layer, modelled on the Eta assistant: a power-key aurora on
- * the right edge, a rim that contracts into the real screen edge, a streamer
- * running to the bottom, then a bottom aurora that breathes with the mic.
+ * Full-screen wake layer: a power-key aurora on the right edge, a rim that
+ * contracts into the real screen edge, an edge streamer, a heart at the voice
+ * capsule, then a bottom aurora that breathes with the microphone.
  */
 @Composable
 private fun WakeAmbient(

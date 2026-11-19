@@ -335,7 +335,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionHeader("无线 ADB", "不依赖 Shizuku；用系统的无线调试配对")
+        SectionHeader("无线 ADB", "用系统无线调试在机内配对")
         GlassPanel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
