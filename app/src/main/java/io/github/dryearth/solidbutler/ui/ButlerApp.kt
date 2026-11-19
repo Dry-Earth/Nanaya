@@ -181,7 +181,7 @@ fun ButlerApp(
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
                 AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             }
-            Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 86.dp)) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 caps = caps,
                 perf = perf,
@@ -392,12 +392,7 @@ private fun TopBar(
     onChat: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)) {
-        GlassPanel(
-            modifier = Modifier.fillMaxWidth(),
-            corner = 28.dp,
-            padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        ) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -442,7 +437,6 @@ private fun TopBar(
             if (aiConfigured) {
                 Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
             }
-        }
         }
     }
 }
