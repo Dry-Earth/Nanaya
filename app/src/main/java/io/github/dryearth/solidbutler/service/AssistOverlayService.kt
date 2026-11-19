@@ -118,7 +118,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     override fun onCreate() {
         super.onCreate()
-        autoVoice = intent?.getBooleanExtra(EXTRA_VOICE, false) == true
         savedStateController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)

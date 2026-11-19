@@ -80,6 +80,19 @@ fun SettingsScreen(
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     ToastEffect(chat.toast) { vm.clearChatToast() }
     var bgStyle by remember { mutableStateOf(appearance.style) }
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            bgStyle = "image"
+            vm.setBackground("image", uri.toString())
+        }
+    }
     var iconStyle by remember { mutableStateOf(vm.prefs.iconStyle) }
     var lockEnabled by remember { mutableStateOf(vm.prefs.appLockEnabled) }
     var pinDialog by remember { mutableStateOf(false) }
