@@ -10,8 +10,6 @@ import android.provider.Settings
 
 data class Capabilities(
     val root: Boolean = false,
-    val shizukuInstalled: Boolean = false,
-    val shizukuReady: Boolean = false,
     val allFiles: Boolean = false,
     val usageAccess: Boolean = false,
     val batteryUnrestricted: Boolean = false,
@@ -21,20 +19,15 @@ data class Capabilities(
     val android: String = "",
     val backend: String = "普通权限",
 ) {
-    val privileged: Boolean get() = root || shizukuReady
+    val privileged: Boolean get() = root
 }
 
 object CapabilityProbe {
 
     fun probe(context: Context, detectRoot: Boolean = true, forceRoot: Boolean = false): Capabilities {
         val pm = context.packageManager
-        val shizukuInstalled = runCatching {
-            pm.getPackageInfo("rikka.shizuku", 0)
-            true
-        }.getOrDefault(false) || ShizukuHelper.isInstalled()
 
         if (detectRoot) Shell.detectRoot(force = forceRoot)
-        Shell.refreshShizuku()
 
         val usage = runCatching {
             val ops = context.getSystemService(AppOpsManager::class.java)
@@ -63,8 +56,6 @@ object CapabilityProbe {
 
         return Capabilities(
             root = Shell.rootReady,
-            shizukuInstalled = shizukuInstalled,
-            shizukuReady = Shell.shizukuReady,
             allFiles = isExternalManager(),
             usageAccess = usage,
             batteryUnrestricted = batteryUnrestricted,

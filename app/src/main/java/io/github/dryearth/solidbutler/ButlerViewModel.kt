@@ -113,16 +113,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun requestShizuku() {
-        prefs.shizukuAsked = true
-        io.github.dryearth.solidbutler.core.ShizukuHelper.requestPermission()
-    }
-
     fun redetectPrivileges() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 Shell.detectRoot(force = true)
-                io.github.dryearth.solidbutler.core.ShizukuHelper.isReady()
             }
             refreshCapabilities(force = true)
         }
@@ -500,7 +494,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun killBackground() {
         if (!_caps.value.privileged) {
-            _perf.update { it.copy(toast = "回收后台需要 Root 或 Shizuku") }
+            _perf.update { it.copy(toast = "回收后台需要 Root") }
             return
         }
         viewModelScope.launch {
@@ -955,14 +949,14 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(1, 100)
                 val value = percent * 255 / 100
                 val r = withContext(Dispatchers.IO) { Shell.run("settings put system screen_brightness $value") }
-                if (r.ok) "亮度已设为 $percent%。" else "需要 Shizuku 或 Root 才能改系统亮度。"
+                if (r.ok) "亮度已设为 $percent%。" else "需要 Root 才能改系统亮度。"
             }
             "set_screen_timeout" -> {
                 val sec = (args["seconds"]?.toIntOrNull() ?: 60).coerceIn(15, 1800)
                 val r = withContext(Dispatchers.IO) {
                     Shell.run("settings put system screen_off_timeout ${sec * 1000}")
                 }
-                if (r.ok) "息屏时间已设为 $sec 秒。" else "需要 Shizuku 或 Root。"
+                if (r.ok) "息屏时间已设为 $sec 秒。" else "需要 Root。"
             }
             "set_volume" -> {
                 val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(0, 100)
@@ -1058,7 +1052,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         return "电量 $battery%${if (charging) " · 充电中" else ""}；亮度 $brightness/255；" +
             "媒体音量 $volume/$vmax；响铃 $ringer；省电模式 ${pm.isPowerSaveMode}；" +
             "Wi-Fi ${if (wifi) "已连接" else "未连接"}；移动数据 ${if (cell) "已连接" else "未连接"}；" +
-            "勿扰过滤 ${nm.currentInterruptionFilter}；Root=${Shell.rootReady}；Shizuku=${Shell.shizukuReady}"
+            "勿扰过滤 ${nm.currentInterruptionFilter}；Root=${Shell.rootReady}"
     }
 
     private fun openSettingsPage(page: String): String {
@@ -1097,7 +1091,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
 设备状态：
 - 机型：${c.device}，${c.android}
-- 权限：Root=${c.root}，Shizuku=${c.shizukuReady}，所有文件访问=${c.allFiles}，使用情况访问=${c.usageAccess}
+- 权限：Root=${c.root}，所有文件访问=${c.allFiles}，使用情况访问=${c.usageAccess}
 - 充电控制：${if (p.charging.supported) "支持，当前上限 ${p.charging.limit}%，模式 ${LineageHealth.modeLabel(p.charging.mode)}" else "不支持"}
 - LineageOS 硬件接口：${if (io.github.dryearth.solidbutler.core.LineageHardware.bind()) "已连接 lineagehardware" else "未连接"}
 - 电池：${p.snapshot.battery.level}%，${p.snapshot.battery.status}，温度 ${p.snapshot.battery.tempC}℃

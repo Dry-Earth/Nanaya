@@ -53,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.Capabilities
-import io.github.dryearth.solidbutler.core.ShizukuHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -262,12 +261,6 @@ fun SettingsScreen(
                 caps.root,
             )
             DividerLine()
-            Text(
-                "Shizuku 已停用；深度操作使用 KernelSU/Magisk Root。无线 ADB 需要独立的 ADB 客户端，后续接入。",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-            DividerLine()
             SettingRow(
                 "所有文件访问",
                 if (caps.allFiles) "已授予 MANAGE_EXTERNAL_STORAGE" else "深度扫描需要此权限",
@@ -333,46 +326,6 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { vm.redetectPrivileges() },
             )
-        }
-
-        SectionHeader("无线调试 / ADB", "通过 Shizuku 的 UserService 执行 shell")
-        GlassPanel {
-            Text(
-                "Android 11+ 可在开发者选项里开启无线调试并配对，然后用 Shizuku 的无线调试启动服务。汐不保存 ADB 密钥，也不内置 ADB 客户端；shell 权限统一走 Shizuku UserService。",
-                style = MaterialTheme.typography.bodySmall,
-                color = Glass.Muted,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(
-                    "开发者选项",
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-                        }
-                    },
-                )
-                ActionButton(
-                    "无线调试",
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        val wireless = Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS")
-                        if (wireless.resolveActivity(context.packageManager) != null) {
-                            runCatching { context.startActivity(wireless) }
-                        } else {
-                            runCatching {
-                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-                            }
-                        }
-                    },
-                )
-                ActionButton(
-                    "打开 Shizuku",
-                    modifier = Modifier.weight(1f),
-                    onClick = { ShizukuHelper.openManager(context) },
-                )
-            }
         }
 
         SectionHeader("应用锁", "本地 PIN · 不上传")

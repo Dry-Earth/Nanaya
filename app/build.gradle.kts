@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.dryearth.solidbutler"
         minSdk = 31
         targetSdk = targetSdkValue
-        versionCode = 25
-        versionName = "0.7.16"
+        versionCode = 26
+        versionName = "0.7.17"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "汐")
     }
@@ -51,7 +51,6 @@ android {
 
     buildFeatures {
         compose = true
-        aidl = true
         buildConfig = true
     }
 
@@ -89,8 +88,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

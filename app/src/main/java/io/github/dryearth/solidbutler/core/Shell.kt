@@ -18,7 +18,7 @@ data class ShellResult(
 
 /**
  * Single entry point for privileged work.
- * Order: root shell -> Shizuku shell -> app shell.
+ * Order: root shell -> app shell.
  *
  * Everything is executed through the platform's own shell commands
  * (pm / appops / cmd / dumpsys / iptables), not through private hooks.
@@ -26,8 +26,6 @@ data class ShellResult(
 object Shell {
 
     @Volatile var rootReady: Boolean = false
-        private set
-    @Volatile var shizukuReady: Boolean = false
         private set
 
     @Volatile private var rootChecked = false
@@ -66,17 +64,9 @@ object Shell {
         return false
     }
 
-    fun refreshShizuku() {
-        shizukuReady = ShizukuHelper.isReady()
-        if (shizukuReady) ShizukuHelper.ensureBound()
-    }
-
     fun run(cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when {
             rootReady || detectRoot() -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
-            shizukuReady -> runCatching {
-                ShizukuHelper.exec(cmd, timeoutMs)
-            }.getOrElse { exec(arrayOf("sh", "-c", cmd), timeoutMs) }
             else -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
     }
@@ -85,7 +75,6 @@ object Shell {
     fun runAs(backend: Backend, cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when (backend) {
             Backend.ROOT -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
-            Backend.SHIZUKU -> ShizukuHelper.exec(cmd, timeoutMs)
             Backend.APP -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
     }
@@ -105,21 +94,19 @@ object Shell {
         }.getOrElse { ShellResult(-1, "", it.message ?: "exec failed") }
     }
 
-    enum class Backend { ROOT, SHIZUKU, APP }
+    enum class Backend { ROOT, APP }
 
     fun backend(): Backend = when {
         rootReady -> Backend.ROOT
-        shizukuReady -> Backend.SHIZUKU
         else -> Backend.APP
     }
 
     fun backendLabel(): String = when (backend()) {
         Backend.ROOT -> "Root"
-        Backend.SHIZUKU -> "Shizuku"
         Backend.APP -> "普通权限"
     }
 
-    fun isPrivileged(): Boolean = rootReady || shizukuReady
+    fun isPrivileged(): Boolean = rootReady
 
     /** Cheap periodic check; avoids keeping stale root/shell state after the user revokes it. */
     fun revalidate() {
@@ -132,7 +119,6 @@ object Shell {
                 rootChecked = true
             }
         }
-        shizukuReady = ShizukuHelper.isReady()
     }
 
     fun hasLineageHealth(context: Context): Boolean =

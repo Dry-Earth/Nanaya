@@ -45,13 +45,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".service.OverlayVoiceActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:noHistory="true"
-            android:theme="@style/Theme.SolidButler.Transparent" />
-
         <activity-alias
             android:name=".IconXi"
             android:enabled="true"
@@ -88,14 +81,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
-
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:enabled="true"
-            android:exported="true"
-            android:multiprocess="false"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <service
             android:name=".service.BatteryGuardService"

@@ -84,7 +84,7 @@ class SpecialPermissionsRepository(
             "battery" -> "cmd deviceidle whitelist -$pkg"
             else -> return false to "这项权限需要在系统设置里关闭"
         }
-        if (!Shell.isPrivileged()) return false to "需要 Root 或 Shizuku"
+        if (!Shell.isPrivileged()) return false to "需要 Root"
         val r = Shell.run(cmd)
         return (r.ok && !r.text.contains("Error", true)) to r.text.ifBlank { "已收回" }
     }

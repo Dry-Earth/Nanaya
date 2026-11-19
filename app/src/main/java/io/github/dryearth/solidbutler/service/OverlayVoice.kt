@@ -1,15 +1,17 @@
 package io.github.dryearth.solidbutler.service
 
-import android.app.Activity
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.view.View
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Bridge between the system speech UI and the overlay window. */
+/** Bridge between the speech recognizer and the overlay window. */
 object OverlayVoiceBus {
     val result = MutableStateFlow<String?>(null)
     val error = MutableStateFlow<String?>(null)
@@ -27,116 +29,133 @@ object OverlayVoiceBus {
 }
 
 /**
- * Binds the external RecognitionService configured in Android settings
- * (for example Marmalade STT) directly. No speech Activity or system popup
- * is launched, so the overlay stays visible.
+ * Binds the configured external RecognitionService (for example Marmalade)
+ * directly from the overlay service. No Activity is involved, so there is no
+ * secondary window/transition and no system speech sheet.
  */
-class OverlayVoiceActivity : Activity() {
-
+object OverlaySpeech {
     private var recognizer: SpeechRecognizer? = null
     private var delivered = false
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(View(this))
+    fun start(context: Context) {
+        stop()
         OverlayVoiceBus.reset()
         OverlayVoiceBus.listening.value = true
         OverlayVoiceBus.status.value = "正在聆听…"
 
-        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                this, android.Manifest.permission.RECORD_AUDIO,
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        val app = context.applicationContext
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
         ) {
-            OverlayVoiceBus.error.value = "麦克风未授权"
-            finish()
+            fail("麦克风未授权")
             return
         }
 
-        val created = runCatching { SystemSpeechRecognizer.create(this) }.getOrNull()
+        val created = runCatching { SystemSpeechRecognizer.create(app) }.getOrNull()
         if (created == null) {
-            OverlayVoiceBus.error.value = "没有可用的系统语音识别服务"
-            finish()
+            fail("没有可用的系统语音识别服务")
             return
         }
         recognizer = created
-        created.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                OverlayVoiceBus.status.value = "正在聆听…"
-            }
-
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {
-                OverlayVoiceBus.level.value = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
-            }
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {
-                OverlayVoiceBus.listening.value = false
-                OverlayVoiceBus.level.value = 0f
-                OverlayVoiceBus.status.value = "正在识别…"
-            }
-
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()?.takeIf { it.isNotBlank() }
-                    ?.let { OverlayVoiceBus.status.value = it }
-            }
-
-            override fun onResults(results: Bundle?) {
-                if (delivered) return
-                delivered = true
-                OverlayVoiceBus.listening.value = false
-                OverlayVoiceBus.level.value = 0f
-                OverlayVoiceBus.status.value = null
-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()?.trim()
-                if (text.isNullOrBlank()) {
-                    OverlayVoiceBus.error.value = "没有识别到文字"
-                } else {
-                    OverlayVoiceBus.result.value = text
-                }
-                finish()
-            }
-
-            override fun onError(error: Int) {
-                if (delivered) return
-                delivered = true
-                OverlayVoiceBus.listening.value = false
-                OverlayVoiceBus.level.value = 0f
-                OverlayVoiceBus.status.value = null
-                OverlayVoiceBus.error.value = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH,
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有听清，再试一次"
-                    SpeechRecognizer.ERROR_NETWORK,
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "识别服务网络错误"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
-                    SpeechRecognizer.ERROR_CLIENT -> "识别客户端异常，请重试"
-                    else -> "识别失败：$error"
-                }
-                finish()
-            }
-        })
-        created.startListening(
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-            }
-        )
+        delivered = false
+        created.setRecognitionListener(listener)
+        val started = runCatching {
+            created.startListening(
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, app.packageName)
+                },
+            )
+        }.isSuccess
+        if (!started) fail("无法启动语音识别")
     }
 
-    override fun onDestroy() {
+    fun stop() {
         delivered = true
-        recognizer?.setRecognitionListener(null)
-        recognizer?.destroy()
-        recognizer = null
+        release()
         OverlayVoiceBus.listening.value = false
         OverlayVoiceBus.level.value = 0f
         OverlayVoiceBus.status.value = null
-        super.onDestroy()
+    }
+
+    private fun fail(message: String) {
+        OverlayVoiceBus.error.value = message
+        OverlayVoiceBus.listening.value = false
+        OverlayVoiceBus.status.value = null
+        release()
+    }
+
+    private fun release() {
+        val current = recognizer ?: return
+        recognizer = null
+        current.setRecognitionListener(null)
+        runCatching { current.cancel() }
+        runCatching { current.destroy() }
+    }
+
+    private val listener = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {
+            OverlayVoiceBus.status.value = "正在聆听…"
+        }
+
+        override fun onBeginningOfSpeech() {}
+
+        override fun onRmsChanged(rmsdB: Float) {
+            OverlayVoiceBus.level.value = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+        }
+
+        override fun onBufferReceived(buffer: ByteArray?) {}
+
+        override fun onEndOfSpeech() {
+            OverlayVoiceBus.listening.value = false
+            OverlayVoiceBus.level.value = 0f
+            OverlayVoiceBus.status.value = "正在识别…"
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?.let { OverlayVoiceBus.status.value = it }
+        }
+
+        override fun onResults(results: Bundle?) {
+            if (delivered) return
+            delivered = true
+            OverlayVoiceBus.listening.value = false
+            OverlayVoiceBus.level.value = 0f
+            OverlayVoiceBus.status.value = null
+            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()?.trim()
+            if (text.isNullOrBlank()) {
+                OverlayVoiceBus.error.value = "没有识别到文字"
+            } else {
+                OverlayVoiceBus.result.value = text
+            }
+            release()
+        }
+
+        override fun onError(error: Int) {
+            if (delivered) return
+            delivered = true
+            OverlayVoiceBus.listening.value = false
+            OverlayVoiceBus.level.value = 0f
+            OverlayVoiceBus.status.value = null
+            OverlayVoiceBus.error.value = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH,
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有听清，再试一次"
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "识别服务网络错误"
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
+                SpeechRecognizer.ERROR_CLIENT -> "识别客户端异常，请重试"
+                else -> "识别失败：$error"
+            }
+            release()
+        }
     }
 }

@@ -20,10 +20,6 @@ class Prefs(context: Context) {
         get() = sp.getString("ai_model", "gpt-4o-mini") ?: "gpt-4o-mini"
         set(value) = sp.edit().putString("ai_model", value).apply()
 
-    var shizukuAsked: Boolean
-        get() = sp.getBoolean("shizuku_asked", false)
-        set(value) = sp.edit().putBoolean("shizuku_asked", value).apply()
-
     var overlayAssistant: Boolean
         get() = sp.getBoolean("overlay_assistant", false)
         set(value) = sp.edit().putBoolean("overlay_assistant", value).apply()

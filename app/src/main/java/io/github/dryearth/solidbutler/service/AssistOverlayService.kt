@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -76,6 +77,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -86,7 +89,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -96,6 +101,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -119,6 +125,8 @@ import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -177,9 +185,15 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        view?.requestLayout()
+    }
+
     override fun onDestroy() {
         runCatching { receiver?.let { unregisterReceiver(it) } }
         if (active === this) active = null
+        OverlaySpeech.stop()
         removeWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         store.clear()
@@ -215,13 +229,18 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
             y = 0
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             windowAnimations = 0
+            layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0)
         }
         runCatching { wm.addView(compose, params) }
         view = compose
@@ -317,6 +336,70 @@ private fun heartPath(cx: Float, cy: Float, r: Float): Path = Path().apply {
     )
     close()
 }
+
+private val GlassGrainPoints = List(56) { i ->
+    val x = ((i * 37 + 11) % 97) / 97f
+    val y = ((i * 53 + 29) % 89) / 89f
+    Offset(x, y)
+}
+
+/** Frosted liquid-glass surface: translucency, specular sweep and fine grain. */
+private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>): Modifier =
+    this
+        .clip(shape)
+        .background(Brush.linearGradient(colors))
+        .drawBehind {
+            drawRect(
+                Brush.verticalGradient(
+                    0f to Color(0x30FFFFFF),
+                    0.45f to Color(0x0AFFFFFF),
+                    1f to Color(0x24000000),
+                ),
+            )
+            drawRect(
+                Brush.linearGradient(
+                    0f to Color(0x22FFFFFF),
+                    0.40f to Color(0x00FFFFFF),
+                    0.58f to Color(0x12FFFFFF),
+                    1f to Color(0x00FFFFFF),
+                    start = Offset.Zero,
+                    end = Offset(size.width, size.height),
+                ),
+            )
+            GlassGrainPoints.forEach { p ->
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.045f),
+                    radius = 0.65.dp.toPx(),
+                    center = Offset(p.x * size.width, p.y * size.height),
+                )
+            }
+            drawRect(
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, Color(0x1C000000)),
+                    startY = size.height * 0.55f,
+                    endY = size.height,
+                ),
+            )
+        }
+        .border(
+            1.dp,
+            Brush.verticalGradient(
+                listOf(Color(0x99FFFFFF), Color(0x33FFFFFF), Color(0x14FFFFFF)),
+            ),
+            shape,
+        )
+        .drawWithContent {
+            drawContent()
+            val inset = corner.toPx() * 1.1f
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    listOf(Color.Transparent, Color(0x88FFFFFF), Color.Transparent),
+                ),
+                start = Offset(inset, 0.75f),
+                end = Offset(size.width - inset, 0.75f),
+                strokeWidth = 1f,
+            )
+        }
 
 @Composable
 private fun OverlayAssistant(
@@ -427,14 +510,9 @@ private fun OverlayAssistant(
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
             }
         } catch (_: Exception) {}
-        val ok = runCatching {
-            context.startActivity(
-                Intent(context, OverlayVoiceActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            )
-        }.isSuccess
+        val ok = runCatching { OverlaySpeech.start(context) }.isSuccess
         if (!ok) {
-            voiceStatus = "无法启动语音识别窗口"
+            voiceStatus = "无法启动语音识别"
             revealed = true
         }
     }
@@ -600,23 +678,15 @@ private fun OverlayAssistant(
                         translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
                             exit.value * 40.dp.toPx()
                     }
-                    .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                    .clip(shape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xE6FFFFFF),
-                                Color(0xB8F4F8FF),
-                                Color(0x99E7EEFF),
-                            )
-                        )
-                    )
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            listOf(Color(0xFFFFFFFF), Color(0x66FFFFFF), Color(0x33FFFFFF))
+                    .shadow(26.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .frostedGlass(
+                        shape = shape,
+                        corner = 30.dp,
+                        colors = listOf(
+                            Color(0xB8FFFFFF),
+                            Color(0x80F4F8FF),
+                            Color(0x55E7EEFF),
                         ),
-                        shape,
                     )
                     .navigationBarsPadding()
                     .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
@@ -905,13 +975,14 @@ private fun WakeAmbient(
             )
         }
 
-        // 3. Light streak: right edge -> screen centre -> draw a heart.
+        // 3. Light streak: right edge -> the voice capsule centre -> heart.
         if (e > 0.04f) {
-            val travel = ((e - 0.03f) / 0.47f).coerceIn(0f, 1f)
+            val heartCy = h - 54.dp.toPx()
+            val travel = ((e - 0.03f) / 0.43f).coerceIn(0f, 1f)
             val streak = Path().apply {
-                moveTo(w + 2.dp.toPx(), h * 0.44f)
-                quadraticBezierTo(w * 0.80f, h * 0.40f, w * 0.54f, h * 0.44f)
-                lineTo(w * 0.50f, h * 0.44f)
+                moveTo(w + 2.dp.toPx(), heartCy)
+                quadraticBezierTo(w * 0.78f, heartCy - 26.dp.toPx(), w * 0.55f, heartCy)
+                lineTo(w * 0.50f, heartCy)
             }
             val streakMeasure = PathMeasure().apply { setPath(streak, false) }
             val streakLength = streakMeasure.length
@@ -939,38 +1010,59 @@ private fun WakeAmbient(
                 }
             }
 
-            val heartT = ((e - 0.50f) / 0.30f).coerceIn(0f, 1f)
-            val heartFade = if (e <= 0.80f) 1f else ((1f - e) / 0.20f).coerceIn(0f, 1f)
-            if (heartT > 0f && heartFade > 0f) {
+            // The heart is about the size of the capsule, then scatters.
+            val heartT = ((e - 0.46f) / 0.26f).coerceIn(0f, 1f)
+            val disperse = ((e - 0.72f) / 0.28f).coerceIn(0f, 1f)
+            val heartAlpha = 1f - disperse
+            if (heartT > 0f && heartAlpha > 0f) {
                 val cx = w * 0.5f
-                val cy = h * 0.44f
-                val r = minOf(w, h) * 0.12f
-                val heart = heartPath(cx, cy, r)
+                val r = 32.dp.toPx()
+                val heart = heartPath(cx, heartCy, r)
                 val heartMeasure = PathMeasure().apply { setPath(heart, false) }
                 val heartLength = heartMeasure.length
                 val part = Path()
-                if (heartLength > 1f && heartMeasure.getSegment(0f, heartLength * heartT, part, true)) {
-                    drawPath(
-                        path = part,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFFFF7AC6),
-                                Color(0xFFFF4D8D),
-                                Color(0xFFFFE4B5),
+                val scale = 1f + 0.55f * disperse
+                withTransform({ scale(scale, scale, pivot = Offset(cx, heartCy)) }) {
+                    if (heartLength > 1f && heartMeasure.getSegment(0f, heartLength * heartT, part, true)) {
+                        drawPath(
+                            path = part,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFFFF7AC6),
+                                    Color(0xFFFF4D8D),
+                                    Color(0xFFFFE4B5),
+                                ),
+                                start = Offset(cx - r, heartCy - r),
+                                end = Offset(cx + r, heartCy + r),
                             ),
-                            start = Offset(cx - r, cy - r),
-                            end = Offset(cx + r, cy + r),
-                        ),
-                        style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Round),
-                        alpha = 0.96f * heartFade,
+                            style = Stroke(width = 3.2.dp.toPx(), cap = StrokeCap.Round),
+                            alpha = 0.96f * heartAlpha,
+                        )
+                    }
+                    drawPath(
+                        path = heart,
+                        color = Color(0xFFFF7AC6),
+                        alpha = 0.10f * heartT * heartAlpha,
                     )
                 }
-                drawPath(
-                    path = heart,
-                    color = Color(0xFFFF7AC6),
-                    alpha = 0.10f * heartT * heartFade,
-                )
-                bloom(cx, cy - r * 0.2f, r * 3.4f, Color(0xFFFF7AC6), 0.34f * heartT * heartFade)
+                bloom(cx, heartCy, r * 3.6f, Color(0xFFFF7AC6), 0.32f * heartT * heartAlpha)
+
+                // Scatter: small motes drift outward and fade.
+                if (disperse > 0f) {
+                    val count = 14
+                    for (i in 0 until count) {
+                        val angle = i * (2.0 * Math.PI / count) + 0.35
+                        val distance = r * (1.15f + 1.05f * disperse)
+                        val px = cx + cos(angle).toFloat() * distance
+                        val py = heartCy + sin(angle).toFloat() * distance
+                        drawCircle(
+                            color = if (i % 3 == 0) Color(0xFFFFE4B5) else Color(0xFFFF9ECB),
+                            radius = (2.6.dp.toPx()) * (1f - 0.65f * disperse),
+                            center = Offset(px, py),
+                            alpha = 0.62f * (1f - disperse),
+                        )
+                    }
+                }
             }
         }
 
@@ -1000,21 +1092,15 @@ private fun VoiceCapsule(
         modifier
             .fillMaxWidth()
             .height(64.dp)
-            .shadow(12.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-            .clip(shape)
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color(0x99FFFFFF),
-                        Color(0x66F4F8FF),
-                        Color(0x40E7EEFF),
-                    )
-                )
-            )
-            .border(
-                1.dp,
-                Brush.horizontalGradient(listOf(Color(0x66FFFFFF), Color(0x1FFFFFFF))),
-                shape,
+            .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .frostedGlass(
+                shape = shape,
+                corner = 30.dp,
+                colors = listOf(
+                    Color(0x99FFFFFF),
+                    Color(0x66F4F8FF),
+                    Color(0x40E7EEFF),
+                ),
             )
             .clickable { onOpen() }
             .padding(start = 10.dp, end = 8.dp),

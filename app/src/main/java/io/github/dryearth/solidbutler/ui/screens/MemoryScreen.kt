@@ -133,7 +133,7 @@ fun MemoryScreen(onBack: () -> Unit) {
         item {
             SectionHeader(
                 "应用内存占用",
-                if (processes.isEmpty()) "需要 Shizuku/Root 读取 dumpsys meminfo" else "PSS · 降序",
+                if (processes.isEmpty()) "需要 Root 读取 dumpsys meminfo" else "PSS · 降序",
             )
         }
         if (loading) {

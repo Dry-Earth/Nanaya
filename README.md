@@ -30,7 +30,7 @@
 - **性能**：`/proc/stat`、`cpufreq`、`thermal_zone`、`ActivityManager.MemoryInfo`、`BatteryManager`、`TrafficStats`、`UsageStatsManager`、`NetworkStatsManager`。
 - **网络防火墙**：内核 netfilter 的独立链 `BUTLER_FW` / `BUTLER_FW6`，只匹配 `--uid-owner`，可整体清空。
 
-特权分级：**无特权** → **Shizuku（shell）** → **Root**。不支持的能力会明确置灰并给出原因，不做假开关。
+特权分级：**无特权** → **Root**。不支持的能力会明确置灰并给出原因，不做假开关。
 
 ## 构建
 
@@ -54,14 +54,14 @@ Actions → Build APK → 任意一次 run → Artifacts / Releases
 1. **所有文件访问**：深度扫描。
 2. **使用情况访问**：应用缓存、耗电排行。
 3. **无障碍服务**：应用锁（只读前台包名，不读屏幕内容）。
-4. **Shizuku 或 Root**：冻结、后台限制、自启动组件、权限收回、防火墙。
+4. **Root**：冻结、后台限制、自启动组件、权限收回、防火墙。
 
 ## 目录
 
 ```
 app/src/main/java/io/github/dryearth/solidbutler/
 ├── ai/            OpenAI 兼容客户端
-├── core/          Shell、Shizuku、Capability、LineageHealth、Prefs
+├── core/          Shell、Capability、LineageHealth、Prefs
 ├── data/          存储 / 应用 / 性能 / 安全仓库
 ├── service/       应用锁无障碍服务、开机恢复防火墙
 ├── ui/            Solid Glass 主题、组件、5 个页面 + AI 对话 + 设置

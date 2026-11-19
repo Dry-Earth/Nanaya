@@ -1,7 +1,6 @@
 package io.github.dryearth.solidbutler
 
 import android.app.Application
-import io.github.dryearth.solidbutler.core.ShizukuHelper
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.Shell
 import io.github.dryearth.solidbutler.service.BatteryGuardService

@@ -10,12 +10,4 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">#A9C1FF</item>
-    </style>
-    <style name="Theme.SolidButler.Transparent" parent="@android:style/Theme.Translucent.NoTitleBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowDisablePreview">true</item>
-        <item name="android:windowAnimationStyle">@null</item>
-    </style>
-</resources>
+    </style></resources>
