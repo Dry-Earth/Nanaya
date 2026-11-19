@@ -210,8 +210,15 @@ public final class AdbManager extends AbsAdbConnectionManager {
                 ByteArrayOutputStream output = new ByteArrayOutputStream();
                 byte[] buffer = new byte[4096];
                 int read;
-                while ((read = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, read);
+                try {
+                    while ((read = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, read);
+                    }
+                } catch (IOException e) {
+                    // libadb can surface a remote CLSE as "Stream closed" even
+                    // after the WRTE payload has been queued. Treat it as EOF.
+                    String msg = e.getMessage();
+                    if (msg == null || !msg.contains("Stream closed")) throw e;
                 }
                 String raw = output.toString("UTF-8");
                 int marker = raw.lastIndexOf("__XI_EXIT:");
@@ -227,6 +234,9 @@ public final class AdbManager extends AbsAdbConnectionManager {
                         code = Integer.parseInt(tail.substring(0, end));
                     }
                     text = raw.substring(0, marker).trim();
+                } else if (text.trim().isEmpty()) {
+                    LAST_RUN_ERROR = "ADB 流提前关闭，没有返回输出";
+                    return null;
                 }
                 return new Result(code, text);
             } finally {
