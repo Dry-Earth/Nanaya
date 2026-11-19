@@ -9,3 +9,13 @@
 # Keep line numbers for readable crash reports
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Wireless ADB (libadb / conscrypt / spake2 / sun-security)
+-dontwarn com.android.org.conscrypt.**
+-dontwarn org.apache.harmony.**
+-dontwarn org.conscrypt.**
+-keep class io.github.muntashirakon.adb.** { *; }
+-keep class org.conscrypt.** { *; }
+-keep class org.bouncycastle.** { *; }
+-keep class android.sun.security.** { *; }
+-keep class android.sun.misc.** { *; }
