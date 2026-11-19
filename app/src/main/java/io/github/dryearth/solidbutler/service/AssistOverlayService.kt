@@ -427,7 +427,7 @@ private fun OverlayAssistant(
         val engine = TextToSpeech(
             context,
             { status -> ttsReady.value = status == TextToSpeech.SUCCESS },
-            vm.prefs.ttsEngine.takeIf { it.isNotBlank() } ?: TtsDefaults.defaultEngine(),
+            vm.prefs.ttsEngine.takeIf { it.isNotBlank() },
         )
         ttsRef.value = engine
         onDispose {

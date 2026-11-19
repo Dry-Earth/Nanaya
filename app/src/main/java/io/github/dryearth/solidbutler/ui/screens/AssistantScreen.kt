@@ -124,7 +124,7 @@ fun AssistantScreen(
         val engine = TextToSpeech(
             context,
             { status -> ttsReady = status == TextToSpeech.SUCCESS },
-            prefs.ttsEngine.takeIf { it.isNotBlank() } ?: TtsDefaults.defaultEngine(),
+            prefs.ttsEngine.takeIf { it.isNotBlank() },
         )
         ttsEngine = engine
         onDispose {
