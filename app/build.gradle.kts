@@ -57,6 +57,7 @@ android {
         compose = true
         aidl = true
         buildConfig = true
+        resValues = true
     }
 
     compileOptions {
