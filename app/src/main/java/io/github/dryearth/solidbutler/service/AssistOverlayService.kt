@@ -176,14 +176,12 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
             y = (20 * resources.displayMetrics.density).toInt()
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-            if (Build.VERSION.SDK_INT >= 31) blurBehindRadius = 70
         }
         runCatching { wm.addView(compose, params) }
         view = compose
