@@ -15,6 +15,8 @@ import android.media.ToneGenerator
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
 import android.view.Gravity
 import android.view.WindowManager
@@ -61,6 +63,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -114,7 +117,12 @@ import io.github.dryearth.solidbutler.MainActivity
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
+import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * Floating assistant. The window is a real application overlay, so it can
@@ -273,6 +281,50 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     }
 }
 
+private val WakeGreetings = listOf(
+    "我在",
+    "有什么吩咐",
+    "我在，需要我做什么",
+    "听着呢",
+    "来了",
+)
+
+private suspend fun speakAndWait(engine: TextToSpeech, text: String) {
+    suspendCancellableCoroutine<Unit> { cont ->
+        val id = "xi-wake-${System.nanoTime()}"
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+
+            override fun onDone(utteranceId: String?) {
+                if (cont.isActive) cont.resume(Unit)
+            }
+
+            override fun onError(utteranceId: String?) {
+                if (cont.isActive) cont.resume(Unit)
+            }
+        })
+        val result = runCatching {
+            engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+        }.getOrDefault(TextToSpeech.ERROR)
+        if (result != TextToSpeech.SUCCESS && cont.isActive) cont.resume(Unit)
+    }
+}
+
+private fun heartPath(cx: Float, cy: Float, r: Float): Path = Path().apply {
+    moveTo(cx, cy + r * 0.95f)
+    cubicTo(
+        cx - r * 1.35f, cy - r * 0.05f,
+        cx - r * 0.85f, cy - r * 1.05f,
+        cx, cy - r * 0.42f,
+    )
+    cubicTo(
+        cx + r * 0.85f, cy - r * 1.05f,
+        cx + r * 1.35f, cy - r * 0.05f,
+        cx, cy + r * 0.95f,
+    )
+    close()
+}
+
 @Composable
 private fun OverlayAssistant(
     vm: ButlerViewModel,
@@ -301,6 +353,28 @@ private fun OverlayAssistant(
     val entrance = remember { Animatable(0f) }
     val sheetEntry = remember { Animatable(0f) }
     var wakeSerial by remember { mutableIntStateOf(0) }
+    var wakeToken by remember { mutableIntStateOf(0) }
+    val ttsRef = remember { mutableStateOf<TextToSpeech?>(null) }
+    val ttsReady = remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        val engine = TextToSpeech(
+            context,
+            { status -> ttsReady.value = status == TextToSpeech.SUCCESS },
+            vm.prefs.ttsEngine.takeIf { it.isNotBlank() },
+        )
+        ttsRef.value = engine
+        onDispose {
+            runCatching { engine.stop() }
+            runCatching { engine.shutdown() }
+            ttsRef.value = null
+            ttsReady.value = false
+        }
+    }
+    LaunchedEffect(ttsReady.value) {
+        if (ttsReady.value) {
+            runCatching { ttsRef.value?.language = Locale.SIMPLIFIED_CHINESE }
+        }
+    }
     LaunchedEffect(Unit) { if (wakeSerial == 0) wakeSerial = 1 }
     LaunchedEffect(wakeSerial) {
         if (wakeSerial == 0) return@LaunchedEffect
@@ -376,9 +450,26 @@ private fun OverlayAssistant(
         if (autoVoice) {
             revealed = false
             wakeSerial++
-            onVoiceConsumed()
-            startVoice()
+            wakeToken++
         }
+    }
+    LaunchedEffect(wakeToken) {
+        if (wakeToken == 0) return@LaunchedEffect
+        val phrase = WakeGreetings.random()
+        val ready = withTimeoutOrNull(1400) {
+            while (!ttsReady.value) delay(60)
+            true
+        } == true
+        if (ready) {
+            val engine = ttsRef.value
+            if (engine != null) {
+                val finished = withTimeoutOrNull(2800) { speakAndWait(engine, phrase) }
+                if (finished == null) runCatching { engine.stop() }
+                delay(120)
+            }
+        }
+        startVoice()
+        onVoiceConsumed()
     }
 
     BoxWithConstraints(
@@ -697,7 +788,8 @@ private fun OverlayAssistant(
                                         .putExtra("open_chat", true)
                                         .addFlags(
                                             Intent.FLAG_ACTIVITY_NEW_TASK or
-                                                Intent.FLAG_ACTIVITY_CLEAR_TOP,
+                                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                                Intent.FLAG_ACTIVITY_SINGLE_TOP,
                                         ),
                                 )
                             }
@@ -801,21 +893,21 @@ private fun WakeAmbient(
             )
         }
 
-        // 3. Streamer: right edge -> bottom edge.
-        if (e > 0.02f && e < 1f) {
-            val path = Path().apply {
-                moveTo(w - 2.dp.toPx(), h * 0.42f)
-                lineTo(w - 2.dp.toPx(), h * 0.80f)
-                quadraticBezierTo(w - 2.dp.toPx(), h - 48.dp.toPx(), w * 0.62f, h - 18.dp.toPx())
-                lineTo(w * 0.48f, h - 6.dp.toPx())
+        // 3. Light streak: right edge -> screen centre -> draw a heart.
+        if (e > 0.04f) {
+            val travel = ((e - 0.04f) / 0.42f).coerceIn(0f, 1f)
+            val streak = Path().apply {
+                moveTo(w + 2.dp.toPx(), h * 0.44f)
+                quadraticBezierTo(w * 0.80f, h * 0.40f, w * 0.54f, h * 0.44f)
+                lineTo(w * 0.50f, h * 0.44f)
             }
-            val measure = PathMeasure().apply { setPath(path, false) }
-            val length = measure.length
-            if (length > 1f) {
-                val head = length * e
-                val tail = (head - length * 0.34f).coerceAtLeast(0f)
+            val streakMeasure = PathMeasure().apply { setPath(streak, false) }
+            val streakLength = streakMeasure.length
+            if (streakLength > 1f && travel < 1f) {
+                val head = streakLength * travel
+                val tail = (head - streakLength * 0.34f).coerceAtLeast(0f)
                 val segment = Path()
-                if (measure.getSegment(tail, head, segment, true)) {
+                if (streakMeasure.getSegment(tail, head, segment, true)) {
                     drawPath(
                         path = segment,
                         brush = Brush.linearGradient(
@@ -826,11 +918,47 @@ private fun WakeAmbient(
                             ),
                         ),
                         style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
-                        alpha = 1f - e * 0.35f,
+                        alpha = 1f - e * 0.20f,
                     )
                 }
-                val point = measure.getPosition(head)
-                bloom(point.x, point.y, 26.dp.toPx(), Color(0xFFFFF3D6), 0.85f)
+                if (head > 0f) {
+                    val point = streakMeasure.getPosition(head)
+                    bloom(point.x, point.y, 28.dp.toPx(), Color(0xFFFFF3D6), 0.88f)
+                }
+            }
+
+            val heartT = ((e - 0.46f) / 0.30f).coerceIn(0f, 1f)
+            val heartFade = if (e <= 0.76f) 1f else ((1f - e) / 0.24f).coerceIn(0f, 1f)
+            if (heartT > 0f && heartFade > 0f) {
+                val cx = w * 0.5f
+                val cy = h * 0.44f
+                val r = minOf(w, h) * 0.085f
+                val heart = heartPath(cx, cy, r)
+                val heartMeasure = PathMeasure().apply { setPath(heart, false) }
+                val heartLength = heartMeasure.length
+                val part = Path()
+                if (heartLength > 1f && heartMeasure.getSegment(0f, heartLength * heartT, part, true)) {
+                    drawPath(
+                        path = part,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFFFF7AC6),
+                                Color(0xFFFF4D8D),
+                                Color(0xFFFFE4B5),
+                            ),
+                            start = Offset(cx - r, cy - r),
+                            end = Offset(cx + r, cy + r),
+                        ),
+                        style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Round),
+                        alpha = 0.96f * heartFade,
+                    )
+                }
+                drawPath(
+                    path = heart,
+                    color = Color(0xFFFF7AC6),
+                    alpha = 0.10f * heartT * heartFade,
+                )
+                bloom(cx, cy - r * 0.2f, r * 3.4f, Color(0xFFFF7AC6), 0.34f * heartT * heartFade)
             }
         }
 
@@ -860,20 +988,20 @@ private fun VoiceCapsule(
         modifier
             .fillMaxWidth()
             .height(64.dp)
-            .shadow(20.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .shadow(12.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
             .background(
                 Brush.horizontalGradient(
                     listOf(
-                        Color(0xE6FFFFFF),
-                        Color(0xCFF4F8FF),
-                        Color(0xB3E7EEFF),
+                        Color(0x99FFFFFF),
+                        Color(0x66F4F8FF),
+                        Color(0x40E7EEFF),
                     )
                 )
             )
             .border(
                 1.dp,
-                Brush.horizontalGradient(listOf(Color(0xFFFFFFFF), Color(0x55FFFFFF))),
+                Brush.horizontalGradient(listOf(Color(0x66FFFFFF), Color(0x1FFFFFFF))),
                 shape,
             )
             .clickable { onOpen() }

@@ -104,7 +104,7 @@ fun ButlerApp(
     val perf by vm.perf.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf("home") }
     var chat by rememberSaveable { mutableStateOf(startWithChat) }
-    var autoVoice by remember { mutableStateOf(startWithChat) }
+    var autoVoice by remember { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var aiSettings by rememberSaveable { mutableStateOf(false) }
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,7 +123,6 @@ fun ButlerApp(
     LaunchedEffect(startWithChat) {
         if (startWithChat) {
             chat = true
-            autoVoice = true
             onStartChatConsumed()
         }
     }
