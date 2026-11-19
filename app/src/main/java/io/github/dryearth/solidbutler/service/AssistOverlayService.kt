@@ -107,6 +107,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private val vm by lazy { ButlerViewModel(application) }
     private var windowManager: WindowManager? = null
     private var view: ComposeView? = null
+    private var receiver: android.content.BroadcastReceiver? = null
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
@@ -118,6 +119,8 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        active = this
+        registerVoiceReceiver()
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
             val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -143,10 +146,33 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        runCatching { receiver?.let { unregisterReceiver(it) } }
+        if (active === this) active = null
         removeWindow()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         store.clear()
         super.onDestroy()
+    }
+
+    private fun registerVoiceReceiver() {
+        receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                when (intent?.action) {
+                    ACTION_VOICE_START -> removeWindow()
+                    ACTION_VOICE_END -> if (view == null) showWindow()
+                }
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction(ACTION_VOICE_START)
+            addAction(ACTION_VOICE_END)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(receiver, filter)
+        }
     }
 
     private fun showWindow() {
@@ -230,6 +256,12 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     companion object {
         private const val CHANNEL_ID = "xi_assist_overlay"
         private const val NOTIFICATION_ID = 12003
+        const val ACTION_VOICE_START = "io.github.dryearth.solidbutler.VOICE_START"
+        const val ACTION_VOICE_END = "io.github.dryearth.solidbutler.VOICE_END"
+
+        @Volatile
+        var active: AssistOverlayService? = null
+            private set
 
         fun show(context: android.content.Context): Boolean = runCatching {
             val intent = Intent(context, AssistOverlayService::class.java)

@@ -485,7 +485,11 @@ private fun EngineRow(title: String, value: String, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Pill("选择", color = Glass.Accent, onClick = onClick)
+        ActionButton(
+            if (value == "系统默认") "选择" else "更换",
+            accent = value == "系统默认",
+            onClick = onClick,
+        )
     }
 }
 

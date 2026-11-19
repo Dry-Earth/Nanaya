@@ -39,6 +39,9 @@ class OverlayVoiceActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(View(this))
         OverlayVoiceBus.reset()
+        sendBroadcast(
+            Intent(AssistOverlayService.ACTION_VOICE_START).setPackage(packageName)
+        )
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -126,6 +129,9 @@ class OverlayVoiceActivity : Activity() {
         recognizer?.destroy()
         recognizer = null
         OverlayVoiceBus.listening.value = false
+        sendBroadcast(
+            Intent(AssistOverlayService.ACTION_VOICE_END).setPackage(packageName)
+        )
         super.onDestroy()
     }
 }
