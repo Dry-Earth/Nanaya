@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val compileSdkValue = (findProperty("butlerCompileSdk") as String?)?.toIntOrNull() ?: 36
+val compileSdkValue = (findProperty("butlerCompileSdk") as String?)?.toIntOrNull() ?: 37
 val targetSdkValue = (findProperty("butlerTargetSdk") as String?)?.toIntOrNull() ?: compileSdkValue
 
 android {
