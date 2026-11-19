@@ -19,9 +19,15 @@ import android.widget.Toast
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,16 +38,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
@@ -56,18 +61,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +104,7 @@ import io.github.dryearth.solidbutler.MainActivity
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
+import kotlinx.coroutines.launch
 
 /**
  * Floating assistant. The window is a real application overlay, so it can
@@ -255,10 +268,6 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         runCatching { wm.addView(compose, params) }
         view = compose
         compose.requestFocus()
-        compose.post {
-            getSystemService(InputMethodManager::class.java)
-                ?.showSoftInput(compose, InputMethodManager.SHOW_IMPLICIT)
-        }
     }
 
     private fun removeWindow() {
@@ -325,7 +334,8 @@ private fun OverlayAssistant(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
@@ -334,6 +344,18 @@ private fun OverlayAssistant(
     val busResult by OverlayVoiceBus.result.collectAsState()
     val busError by OverlayVoiceBus.error.collectAsState()
     val shape = RoundedCornerShape(30.dp)
+
+    // Entrance: the panel rises once, the aurora blooms then settles into a
+    // quiet halo that breathes with the microphone while listening.
+    val entry = remember { Animatable(0f) }
+    val glow = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        entry.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+    }
+    LaunchedEffect(Unit) {
+        glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+        glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
+    }
 
     LaunchedEffect(busResult) {
         val text = busResult ?: return@LaunchedEffect
@@ -385,16 +407,103 @@ private fun OverlayAssistant(
     }
 
     BoxWithConstraints(
-        Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxSize().imePadding(),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        val maxPanelPx = with(density) { maxHeight.toPx() } * 0.92f
+        val minPanelPx = with(density) { 232.dp.toPx() }.coerceAtMost(maxPanelPx)
+        val heightAnim = remember { Animatable(0f) }
+        var dragHeight by remember { mutableStateOf<Float?>(null) }
+        var dragStart by remember { mutableFloatStateOf(0f) }
+        var dragDelta by remember { mutableFloatStateOf(0f) }
+        var contentHeight by remember { mutableFloatStateOf(0f) }
+        var autoSuppressed by remember { mutableStateOf(false) }
+
+        LaunchedEffect(minPanelPx) {
+            if (heightAnim.value <= 0.5f) heightAnim.snapTo(minPanelPx)
+        }
+        val autoTargetPx = (minPanelPx + contentHeight).coerceIn(minPanelPx, maxPanelPx)
+        LaunchedEffect(autoTargetPx, autoSuppressed) {
+            if (!autoSuppressed && dragHeight == null && autoTargetPx > heightAnim.value + 0.5f) {
+                heightAnim.animateTo(
+                    autoTargetPx,
+                    spring(dampingRatio = 0.9f, stiffness = 320f),
+                )
+            }
+        }
+        LaunchedEffect(state.messages.size) {
+            autoSuppressed = false
+        }
+        LaunchedEffect(state.messages.isEmpty()) {
+            if (state.messages.isEmpty()) contentHeight = 0f
+        }
+
+        val panelHeightPx = dragHeight ?: heightAnim.value
+        val dragModifier = Modifier.pointerInput(minPanelPx, maxPanelPx, autoTargetPx) {
+            detectVerticalDragGestures(
+                onDragStart = {
+                    dragStart = heightAnim.value
+                    dragDelta = 0f
+                },
+                onVerticalDrag = { change, amount ->
+                    change.consume()
+                    dragDelta += amount
+                    dragHeight = (dragStart - dragDelta).coerceIn(minPanelPx, maxPanelPx)
+                },
+                onDragEnd = {
+                    val released = dragHeight ?: heightAnim.value
+                    dragHeight = null
+                    val step = with(density) { 42.dp.toPx() }
+                    val anchors = listOf(
+                        minPanelPx,
+                        autoTargetPx.coerceIn(minPanelPx, maxPanelPx),
+                        maxPanelPx,
+                    ).distinct().sorted()
+                    val target = when {
+                        dragDelta > step -> minPanelPx
+                        dragDelta < -step -> anchors.firstOrNull { it > released + 1f } ?: maxPanelPx
+                        else -> anchors.minByOrNull { kotlin.math.abs(it - released) } ?: released
+                    }
+                    if (dragDelta > step) autoSuppressed = true
+                    scope.launch {
+                        heightAnim.snapTo(released)
+                        heightAnim.animateTo(
+                            target,
+                            spring(dampingRatio = 0.86f, stiffness = 380f),
+                        )
+                    }
+                },
+                onDragCancel = {
+                    val released = dragHeight ?: heightAnim.value
+                    dragHeight = null
+                    scope.launch {
+                        heightAnim.snapTo(released)
+                        heightAnim.animateTo(
+                            autoTargetPx,
+                            spring(dampingRatio = 0.9f, stiffness = 320f),
+                        )
+                    }
+                },
+            )
+        }
+
+        WakeGlow(
+            modifier = Modifier.fillMaxSize(),
+            progress = glow.value,
+            panelHeightPx = panelHeightPx,
+        )
+
         Column(
             Modifier
                 .fillMaxWidth()
-                .then(
-                    if (expanded) Modifier.height(maxHeight * 0.92f)
-                    else Modifier.heightIn(max = maxHeight * 0.78f)
-                )
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .height(with(density) { panelHeightPx.toDp() })
+                .graphicsLayer {
+                    alpha = entry.value
+                    translationY = (1f - entry.value) * 34.dp.toPx()
+                    scaleX = 0.98f + 0.02f * entry.value
+                    scaleY = 0.98f + 0.02f * entry.value
+                }
                 .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(shape)
                 .background(
@@ -413,9 +522,20 @@ private fun OverlayAssistant(
                     ),
                     shape,
                 )
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.fillMaxWidth().height(18.dp).then(dragModifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x330B1220)),
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = dragModifier.fillMaxWidth(),
+            ) {
                 Box(
                     Modifier.size(32.dp).clip(CircleShape)
                         .background(Color(0x220B1220)),
@@ -431,16 +551,37 @@ private fun OverlayAssistant(
                         color = Color(0xFF0B1220),
                     )
                     Text(
-                        if (state.modelConfigured) "悬浮助手 · 直接对话" else "悬浮助手 · 尚未配置模型",
+                        when {
+                            busListening -> "正在聆听…"
+                            state.modelConfigured -> "悬浮助手 · 直接对话"
+                            else -> "悬浮助手 · 尚未配置模型"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0x990B1220),
+                        color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
                     )
                 }
                 Icon(
-                    if (expanded) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
-                    contentDescription = if (expanded) "收起" else "展开",
+                    if (panelHeightPx > minPanelPx + with(density) { 24.dp.toPx() }) {
+                        Icons.Rounded.CloseFullscreen
+                    } else {
+                        Icons.Rounded.OpenInFull
+                    },
+                    contentDescription = "展开或收起",
                     tint = Color(0x990B1220),
-                    modifier = Modifier.size(19.dp).clickable { expanded = !expanded },
+                    modifier = Modifier.size(19.dp).clickable {
+                        scope.launch {
+                            val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
+                            val target = if (collapsed) {
+                                maxOf(autoTargetPx, maxPanelPx * 0.62f)
+                            } else {
+                                minPanelPx
+                            }
+                            heightAnim.animateTo(
+                                target.coerceIn(minPanelPx, maxPanelPx),
+                                spring(dampingRatio = 0.86f, stiffness = 380f),
+                            )
+                        }
+                    },
                 )
                 Spacer(Modifier.width(12.dp))
                 Icon(
@@ -452,21 +593,25 @@ private fun OverlayAssistant(
             }
 
             if (state.messages.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                LazyColumn(
-                    Modifier
-                        .fillMaxWidth()
-                        .then(if (expanded) Modifier.weight(1f) else Modifier.heightIn(max = 330.dp)),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.messages.takeLast(8), key = { it.id }) { msg ->
-                        OverlayBubble(vm, msg)
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    Column(
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().onSizeChanged { contentHeight = it.height.toFloat() },
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            state.messages.takeLast(8).forEach { msg ->
+                                OverlayBubble(vm, msg)
+                            }
+                        }
                     }
                 }
             } else {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "直接说或输入。要语音、操作确认和完整历史时点右上角展开。",
+                    "直接说或输入。上拉面板看历史，下拉收回到这里。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0x990B1220),
                 )
@@ -541,19 +686,72 @@ private fun OverlayAssistant(
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "点展开进入完整对话 / 语音",
+                    "上拉展开 · 下拉收起",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0x660B1220),
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    if (expanded) "收起" else "展开",
+                    "完整对话",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF33406A),
-                    modifier = Modifier.clickable { expanded = !expanded },
+                    modifier = Modifier.clickable {
+                        runCatching {
+                            context.startActivity(
+                                Intent(context, MainActivity::class.java)
+                                    .putExtra("open_chat", true)
+                                    .addFlags(
+                                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                                            Intent.FLAG_ACTIVITY_CLEAR_TOP,
+                                    ),
+                            )
+                        }
+                        onClose()
+                    },
                 )
             }
         }
+    }
+}
+
+/** Aurora drawn behind the panel: blooms on wake and breathes with the mic. */
+@Composable
+private fun WakeGlow(
+    modifier: Modifier = Modifier,
+    progress: Float,
+    panelHeightPx: Float,
+) {
+    val level by OverlayVoiceBus.level.collectAsState()
+    val listening by OverlayVoiceBus.listening.collectAsState()
+    val pulse = if (listening) 1f + level * 0.85f else 1f
+    Canvas(modifier) {
+        if (progress <= 0.001f) return@Canvas
+        val w = size.width
+        val h = size.height
+        fun bloom(cx: Float, cy: Float, radius: Float, color: Color, alpha: Float) {
+            if (alpha <= 0.001f || radius <= 0f) return
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        color.copy(alpha = alpha.coerceAtMost(1f)),
+                        color.copy(alpha = (alpha * 0.38f).coerceAtMost(1f)),
+                        Color.Transparent,
+                    ),
+                    center = Offset(cx, cy),
+                    radius = radius,
+                ),
+                radius = radius,
+                center = Offset(cx, cy),
+            )
+        }
+        val p = (progress * pulse).coerceAtMost(1.2f)
+        // Center the aurora just above the panel's top edge so it is visible
+        // over the app behind the floating window instead of being covered.
+        val topY = (h - panelHeightPx - 10.dp.toPx()).coerceIn(0f, h)
+        bloom(w * 0.18f, topY, w * 0.46f, Color(0xFF4F8BFF), 0.38f * p)
+        bloom(w * 0.50f, topY - 6.dp.toPx(), w * 0.52f, Color(0xFFA78BFA), 0.34f * p)
+        bloom(w * 0.82f, topY, w * 0.46f, Color(0xFFFF7AC6), 0.32f * p)
+        bloom(w * 0.50f, topY - 26.dp.toPx(), w * 0.40f, Color(0xFFFFE4B5), 0.12f * p)
     }
 }
 

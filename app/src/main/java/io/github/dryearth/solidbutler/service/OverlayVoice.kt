@@ -15,11 +15,14 @@ object OverlayVoiceBus {
     val error = MutableStateFlow<String?>(null)
     val listening = MutableStateFlow(false)
     val status = MutableStateFlow<String?>(null)
+    /** Normalized 0..1 microphone level, used by the wake glow. */
+    val level = MutableStateFlow(0f)
 
     fun reset() {
         result.value = null
         error.value = null
         status.value = null
+        level.value = 0f
     }
 }
 
@@ -63,10 +66,13 @@ class OverlayVoiceActivity : Activity() {
             }
 
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                OverlayVoiceBus.level.value = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+            }
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {
                 OverlayVoiceBus.listening.value = false
+                OverlayVoiceBus.level.value = 0f
                 OverlayVoiceBus.status.value = "正在识别…"
             }
 
@@ -95,6 +101,7 @@ class OverlayVoiceActivity : Activity() {
                 if (delivered) return
                 delivered = true
                 OverlayVoiceBus.listening.value = false
+                OverlayVoiceBus.level.value = 0f
                 OverlayVoiceBus.error.value = when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH,
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有听清，再试一次"
@@ -125,6 +132,7 @@ class OverlayVoiceActivity : Activity() {
         recognizer?.destroy()
         recognizer = null
         OverlayVoiceBus.listening.value = false
+        OverlayVoiceBus.level.value = 0f
         sendBroadcast(Intent(AssistOverlayService.ACTION_VOICE_END).setPackage(packageName))
         super.onDestroy()
     }
