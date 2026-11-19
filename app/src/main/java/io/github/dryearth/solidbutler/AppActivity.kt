@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.dryearth.solidbutler.ui.ButlerApp
+import io.github.dryearth.solidbutler.ui.components.LiquidGlassHost
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 
@@ -33,13 +34,15 @@ class AppActivity : ComponentActivity() {
         )
         setContent {
             SolidButlerTheme {
-                val vm: ButlerViewModel = viewModel()
-                Box(Modifier.fillMaxSize().background(Glass.Ink)) {
-                    ButlerApp(
-                        vm = vm,
-                        startWithChat = assistRequest,
-                        onStartChatConsumed = { assistRequest = false },
-                    )
+                LiquidGlassHost {
+                    val vm: ButlerViewModel = viewModel()
+                    Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+                        ButlerApp(
+                            vm = vm,
+                            startWithChat = assistRequest,
+                            onStartChatConsumed = { assistRequest = false },
+                        )
+                    }
                 }
             }
         }

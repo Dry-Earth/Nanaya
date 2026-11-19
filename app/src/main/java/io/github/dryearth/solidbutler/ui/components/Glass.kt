@@ -30,6 +30,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +59,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import top.yukonga.miuix.kmp.blur.Backdrop
+import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.drawBackdrop
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.vibrancy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -202,6 +210,19 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
     }
 }
 
+val LocalGlassBackdrop = staticCompositionLocalOf<Backdrop?> { null }
+
+@Composable
+fun LiquidGlassHost(content: @Composable () -> Unit) {
+    val backdrop = rememberLayerBackdrop {
+        drawRect(Glass.Ink)
+        drawContent()
+    }
+    CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
+        content()
+    }
+}
+
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
@@ -213,12 +234,28 @@ fun GlassPanel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(corner)
+    val backdrop = LocalGlassBackdrop.current
     Column(
         modifier = modifier
             .shadow(16.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
+            .then(
+                if (backdrop != null && !opaque) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            vibrancy()
+                            blur(14.dp.toPx(), 14.dp.toPx())
+                        },
+                        onDrawSurface = { drawRect(Color(0x990B0E13)) },
+                    )
+                } else {
+                    Modifier
+                },
+            )
             // A solid-ish base keeps the background grid from showing through the glass.
-            .background(if (opaque) Color(0xFF0B0E13) else Color(0xDE0B0E13))
+            .background(if (opaque) Color(0xFF0B0E13) else Color(0x330B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(

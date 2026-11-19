@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -62,6 +63,7 @@ import io.github.dryearth.solidbutler.PerfUiState
 import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
+import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
@@ -110,6 +112,7 @@ fun ButlerApp(
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
+    val glassBackdrop = LocalGlassBackdrop.current
 
     LaunchedEffect(nav) {
         val target = nav ?: return@LaunchedEffect
@@ -163,7 +166,9 @@ fun ButlerApp(
     }
 
     Box(Modifier.fillMaxSize()) {
-        AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+        Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+        }
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 caps = caps,
@@ -228,7 +233,9 @@ fun ButlerApp(
 
     if (chat) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+            Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+        }
             AssistantScreen(
                 vm = vm,
                 autoListen = autoVoice,
@@ -240,7 +247,9 @@ fun ButlerApp(
     }
     if (settings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+            Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+        }
             SettingsScreen(
                 vm = vm,
                 caps = caps,
@@ -254,7 +263,9 @@ fun ButlerApp(
     }
     if (aiSettings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+            Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+        }
             AiSettingsScreen(
                 vm = vm,
                 onBack = { aiSettings = false },
