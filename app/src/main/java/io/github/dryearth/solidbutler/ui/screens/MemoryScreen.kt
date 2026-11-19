@@ -60,7 +60,7 @@ fun MemoryScreen(onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        snapshot = withContext(Dispatchers.IO) { repo.snapshot() }
+        snapshot = withContext(Dispatchers.IO) { repo.snapshot(includeProcesses = false) }
         processes = withContext(Dispatchers.IO) { repo.memoryProcesses() }
         loading = false
     }
@@ -133,7 +133,7 @@ fun MemoryScreen(onBack: () -> Unit) {
         item {
             SectionHeader(
                 "应用内存占用",
-                if (processes.isEmpty()) "需要 Root 或无线 ADB 读取 dumpsys meminfo" else "PSS · 降序",
+                if (processes.isEmpty()) "需要 Root 或无线 ADB 读取进程内存" else "内存占用 · 降序",
             )
         }
         if (loading) {

@@ -245,7 +245,7 @@ private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
     GlassPanel(padding = PaddingValues(14.dp)) {
         SectionHeader(
             "进程与内存",
-            if (snapshot.processes.isEmpty()) "需要 Root 或无线 ADB 读取 dumpsys" else "按 CPU/PSS 排序 · 10 秒刷新",
+            if (snapshot.processes.isEmpty()) "需要 Root 或无线 ADB 读取 dumpsys" else "按 CPU/内存排序 · 10 秒刷新",
             trailing = {
                 Text(
                     "内存详情",

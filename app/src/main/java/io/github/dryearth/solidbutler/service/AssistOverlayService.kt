@@ -119,13 +119,13 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.SystemSounds
+import io.github.dryearth.solidbutler.core.TtsDefaults
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.AppActivity
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
-import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -427,7 +427,7 @@ private fun OverlayAssistant(
         val engine = TextToSpeech(
             context,
             { status -> ttsReady.value = status == TextToSpeech.SUCCESS },
-            vm.prefs.ttsEngine.takeIf { it.isNotBlank() },
+            vm.prefs.ttsEngine.takeIf { it.isNotBlank() } ?: TtsDefaults.defaultEngine(),
         )
         ttsRef.value = engine
         onDispose {
@@ -439,7 +439,7 @@ private fun OverlayAssistant(
     }
     LaunchedEffect(ttsReady.value) {
         if (ttsReady.value) {
-            runCatching { ttsRef.value?.language = Locale.SIMPLIFIED_CHINESE }
+            ttsRef.value?.let { TtsDefaults.apply(context, it) }
         }
     }
     LaunchedEffect(Unit) { if (wakeSerial == 0) wakeSerial = 1 }
@@ -534,11 +534,13 @@ private fun OverlayAssistant(
             .filter { it.isNotBlank() }
         val phrase = phrases.randomOrNull()
         if (phrase != null) {
-            val ready = withTimeoutOrNull(1800) {
+            // Give the system engine time to initialise after the wake sound.
+            val ready = withTimeoutOrNull(4000) {
                 while (!ttsReady.value) delay(60)
                 true
             } == true
             if (ready) {
+                if (vm.prefs.wakeSoundUri.isNotBlank()) delay(450)
                 val engine = ttsRef.value
                 if (engine != null) {
                     val finished = withTimeoutOrNull(6000) { speakAndWait(engine, phrase) }

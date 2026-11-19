@@ -22,8 +22,10 @@ class PerformanceRepository(private val context: Context) {
     private var prevNetTs = 0L
     private var lastProcAt = 0L
     private var lastProcList: List<ProcLoad> = emptyList()
+    private var lastMemAt = 0L
+    private var lastMemList: List<MemProcess> = emptyList()
 
-    fun snapshot(): PerfSnapshot {
+    fun snapshot(includeProcesses: Boolean = true): PerfSnapshot {
         val cpu = readCpu()
         val am = context.getSystemService(ActivityManager::class.java)
         val mi = ActivityManager.MemoryInfo()
@@ -55,7 +57,7 @@ class PerformanceRepository(private val context: Context) {
             vulkanVersion = vulkanVersion(),
             socModel = runCatching { Build.SOC_MODEL }.getOrDefault(Build.HARDWARE),
             minFreqsKhz = cpu.minFreqsKhz,
-            processes = readProcesses(),
+            processes = if (includeProcesses) readProcesses() else emptyList(),
             storageUsed = storage.second,
             storageTotal = storage.first,
             cachedBytes = cached,
@@ -141,7 +143,7 @@ class PerformanceRepository(private val context: Context) {
         val name = readText("$kgsl/gpu_model")
             ?: readText("$kgsl/devfreq/name")
             ?: readText("/sys/class/kgsl/kgsl-3d0/device/gpu_model")
-            ?: ""
+            ?: runCatching { Build.SOC_MODEL }.getOrDefault("")
         return Quad(load, freq, max, name)
     }
 
@@ -149,13 +151,43 @@ class PerformanceRepository(private val context: Context) {
 
     fun memoryProcesses(): List<MemProcess> {
         if (!Shell.isPrivileged()) return emptyList()
-        val text = Shell.run("dumpsys meminfo", 25_000).text
-        val regex = Regex("""^\s*([\d,]+)K:\s+([^\s(]+)\s+\(pid""")
+        val now = System.currentTimeMillis()
+        if (now - lastMemAt < 15_000 && lastMemList.isNotEmpty()) return lastMemList
+        lastMemAt = now
+
+        // ps is much faster than dumpsys meminfo and works through ADB.
+        val ps = Shell.run("ps -A -o PID,RSS,NAME", 8_000)
+        val fromPs = parsePs(ps.text)
+        if (fromPs.isNotEmpty()) {
+            lastMemList = fromPs
+            return fromPs
+        }
+
+        // Fallback for ROMs whose ps lacks -o.
+        val text = Shell.run("dumpsys meminfo", 45_000).text
+        lastMemList = parseMeminfo(text)
+        return lastMemList
+    }
+
+    private fun parsePs(text: String): List<MemProcess> {
+        val regex = Regex("""^\s*(\d+)\s+(\d+)\s+(\S.*)$""")
         return text.lineSequence().mapNotNull { line ->
+            if (line.contains("PID") && line.contains("RSS")) return@mapNotNull null
             val m = regex.find(line) ?: return@mapNotNull null
+            val rss = m.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+            val name = m.groupValues[3].trim()
+            if (rss <= 0 || name.isBlank()) return@mapNotNull null
+            MemProcess(name, rss)
+        }.distinctBy { it.name }.sortedByDescending { it.pssKb }.take(40).toList()
+    }
+
+    private fun parseMeminfo(text: String): List<MemProcess> {
+        val withPid = Regex("""^\s*([\d,]+)K:\s+(.+?)\s+\(pid\s+\d+.*$""")
+        val plain = Regex("""^\s*([\d,]+)K:\s+(\S+).*$""")
+        return text.lineSequence().mapNotNull { line ->
+            val m = withPid.find(line) ?: plain.find(line) ?: return@mapNotNull null
             val pss = m.groupValues[1].replace(",", "").toLongOrNull() ?: return@mapNotNull null
-            val name = m.groupValues[2]
-            MemProcess(name, pss)
+            MemProcess(m.groupValues[2].trim(), pss)
         }.distinctBy { it.name }.sortedByDescending { it.pssKb }.take(40).toList()
     }
 
@@ -314,14 +346,23 @@ class PerformanceRepository(private val context: Context) {
     private fun friendlyTemp(type: String): String {
         val t = type.lowercase(Locale.US)
         return when {
-            t.contains("battery") || t.contains("batt") -> "电池"
-            t.contains("gpu") -> "GPU"
-            t.contains("cpu") || t.contains("ap") || t.contains("soc") || t.contains("cluster") -> "CPU"
-            t.contains("skin") || t.contains("shell") -> "机身"
-            t.contains("charger") || t.contains("usb") -> "充电"
-            t.contains("wifi") || t.contains("wlan") -> "WiFi"
-            t.contains("modem") || t.contains("pa") -> "基带"
-            else -> type.take(12)
+            t.contains("battery") || t.contains("batt") || t.contains("bms") -> "电池"
+            t.contains("gpu") || t.contains("kgsl") || t.contains("mali") || t.contains("adreno") -> "GPU"
+            t.contains("cpu") || t.contains("ap") || t.contains("soc") || t.contains("cluster") ||
+                t.contains("core") || t.contains("little") || t.contains("big") ||
+                t.contains("mid") || t.contains("gold") || t.contains("silver") -> "CPU"
+            t.contains("skin") || t.contains("shell") || t.contains("frame") -> "机身"
+            t.contains("charger") || t.contains("usb") || t.contains("vbus") ||
+                t.contains("pmic") || t.contains("power") -> "电源"
+            t.contains("wifi") || t.contains("wlan") || t.contains("wcn") -> "WiFi"
+            t.contains("modem") || t.contains("pa") || t.contains("rf") -> "基带"
+            t.contains("display") || t.contains("panel") || t.contains("lcd") -> "屏幕"
+            t.contains("camera") || t.contains("cam") -> "相机"
+            t.contains("npu") || t.contains("cdsp") || t.contains("nsp") || t.contains("apu") -> "NPU"
+            t.contains("ambient") -> "环境"
+            t.contains("quiet") || t.contains("xo") || t.contains("sys") ||
+                t.contains("tsens") || t.contains("therm") -> "主板"
+            else -> "其他"
         }
     }
 

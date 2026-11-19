@@ -17,10 +17,15 @@ android {
         applicationId = "io.github.dryearth.solidbutler"
         minSdk = 31
         targetSdk = targetSdkValue
-        versionCode = 33
-        versionName = "0.7.24"
+        versionCode = 34
+        versionName = "0.7.25"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "汐")
+        ndk {
+            // Conscrypt/libspake2 ship prebuilt JNI libs. Modern LineageOS 24
+            // devices are arm64; keep the APK small by not bundling x86/32-bit.
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     signingConfigs {

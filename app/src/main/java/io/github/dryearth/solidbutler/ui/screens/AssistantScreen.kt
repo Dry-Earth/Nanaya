@@ -76,6 +76,7 @@ import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.core.Prefs
+import io.github.dryearth.solidbutler.core.TtsDefaults
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
@@ -86,7 +87,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.util.Locale
 
 @Composable
 fun AssistantScreen(
@@ -124,7 +124,7 @@ fun AssistantScreen(
         val engine = TextToSpeech(
             context,
             { status -> ttsReady = status == TextToSpeech.SUCCESS },
-            prefs.ttsEngine.takeIf { it.isNotBlank() },
+            prefs.ttsEngine.takeIf { it.isNotBlank() } ?: TtsDefaults.defaultEngine(),
         )
         ttsEngine = engine
         onDispose {
@@ -135,7 +135,7 @@ fun AssistantScreen(
     }
     LaunchedEffect(ttsReady) {
         if (ttsReady) {
-            runCatching { ttsEngine?.language = Locale.SIMPLIFIED_CHINESE }
+            ttsEngine?.let { TtsDefaults.apply(context, it) }
         }
     }
     LaunchedEffect(state.messages.size, speakReplies, ttsReady) {

@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -82,7 +81,7 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
             Image(
                 bitmap = bitmap!!,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize().blur(28.dp).alpha(0.52f),
+                modifier = Modifier.fillMaxSize().alpha(0.92f),
                 contentScale = ContentScale.Crop,
             )
         }
@@ -117,9 +116,9 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
             drawRect(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.55f else 1f),
-                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.62f else 1f),
-                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.75f else 1f),
+                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.26f else 1f),
+                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.34f else 1f),
+                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.48f else 1f),
                     )
                 )
             )

@@ -80,6 +80,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
     ) {
         item { LivePanel(perf) }
         item { CoresPanel(perf) }
+        item { GpuPanel(perf) }
         item { NpuPanel(perf) }
         item { TemperaturePanel(perf) }
         if (perf.charging.supported) {
@@ -244,6 +245,49 @@ private fun CoresPanel(perf: PerfUiState) {
                 )
             }
             Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+@Composable
+private fun GpuPanel(perf: PerfUiState) {
+    val s = perf.snapshot
+    if (s.gpuLoad < 0 && s.gpuFreqMhz <= 0 && s.gpuMaxMhz <= 0 && s.gpuName.isBlank()) return
+    GlassPanel {
+        SectionHeader("GPU", s.gpuName.ifBlank { "图形处理器" })
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            BigNumber(
+                if (s.gpuLoad >= 0) s.gpuLoad.toString() else "—",
+                if (s.gpuLoad >= 0) "%" else "",
+                "GPU 负载",
+                color = Glass.Violet,
+            )
+            Spacer(Modifier.weight(1f))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    if (s.gpuFreqMhz > 0) "${s.gpuFreqMhz} MHz" else "频率未知",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Glass.Text,
+                )
+                if (s.gpuMaxMhz > 0) {
+                    Text(
+                        "最高 ${s.gpuMaxMhz} MHz",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Muted,
+                    )
+                }
+            }
+        }
+        if (s.gpuLoad >= 0) {
+            Spacer(Modifier.height(10.dp))
+            Meter(s.gpuLoad / 100f, color = Glass.Violet)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (s.glEsVersion.isNotBlank()) Pill("GLES ${s.glEsVersion}", color = Glass.Ice)
+            if (s.vulkanVersion.isNotBlank()) Pill("Vulkan ${s.vulkanVersion}", color = Glass.Mint)
+            if (s.socModel.isNotBlank()) Pill(s.socModel, color = Glass.Faint)
         }
     }
 }
