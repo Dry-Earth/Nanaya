@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
             intent?.getBooleanExtra("open_chat", false) == true
         val prefs = Prefs(this)
         if (isAssist && prefs.overlayAssistant && Settings.canDrawOverlays(this)) {
-            if (AssistOverlayService.show(this)) {
+            if (AssistOverlayService.show(this, voice = true)) {
                 finish()
                 return
             }
@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
             intent.getBooleanExtra("open_chat", false)
         val prefs = Prefs(this)
         if (isAssist && prefs.overlayAssistant && Settings.canDrawOverlays(this)) {
-            if (AssistOverlayService.show(this)) {
+            if (AssistOverlayService.show(this, voice = true)) {
                 assistRequest = false
                 moveTaskToBack(true)
                 return

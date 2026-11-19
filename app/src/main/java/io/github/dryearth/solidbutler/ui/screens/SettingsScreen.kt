@@ -3,12 +3,10 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,16 +44,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.ShortcutInfoCompat
-import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -89,35 +81,6 @@ fun SettingsScreen(
     ToastEffect(chat.toast) { vm.clearChatToast() }
     var bgStyle by remember { mutableStateOf(appearance.style) }
     var iconStyle by remember { mutableStateOf(vm.prefs.iconStyle) }
-    var customIconUri by remember { mutableStateOf(vm.prefs.customIconUri) }
-    val customIconPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
-            vm.prefs.customIconUri = uri.toString()
-            customIconUri = uri.toString()
-            Toast.makeText(context, "自定义图片已保存，可添加到桌面", Toast.LENGTH_SHORT).show()
-        }
-    }
-    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
-            bgStyle = "image"
-            vm.setBackground("image", uri.toString())
-        }
-    }
-
     var lockEnabled by remember { mutableStateOf(vm.prefs.appLockEnabled) }
     var pinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
@@ -238,46 +201,10 @@ fun SettingsScreen(
                 Pill("狐耳", selected = iconStyle == "fox", color = Glass.Mint) {
                     iconStyle = "fox"; vm.prefs.iconStyle = "fox"; applyIcon(context, "IconFox")
                 }
-                Pill("自定义图片", selected = false, color = Glass.Accent) {
-                    customIconPicker.launch(arrayOf("image/*"))
-                }
-            }
-            if (customIconUri.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, customIconUri) {
-                    value = withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(Uri.parse(customIconUri))?.use {
-                                BitmapFactory.decodeStream(it)?.asImageBitmap()
-                            }
-                        }.getOrNull()
-                    }
-                }
-                preview?.let {
-                    Image(
-                        it,
-                        contentDescription = "自定义图标预览",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(64.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                ActionButton(
-                    "添加到桌面（自定义图标）",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        val ok = pinCustomIcon(context, customIconUri)
-                        Toast.makeText(
-                            context,
-                            if (ok) "已请求添加桌面快捷方式" else "当前桌面不支持固定快捷方式",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    },
-                )
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "红耳/狐耳为代码绘制的矢量图标；自定义图片因 Android 限制不能直接替换应用抽屉图标，会用于桌面快捷方式。",
+                "红耳/狐耳为代码绘制的矢量图标；Android 不允许运行时替换应用抽屉图标。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -322,37 +249,11 @@ fun SettingsScreen(
                 caps.root,
             )
             DividerLine()
-            SettingRow(
-                "Shizuku",
-                when {
-                    caps.shizukuReady -> "已授权，以 shell 身份执行官方命令"
-                    caps.shizukuInstalled -> "已安装，尚未授权"
-                    else -> "未安装"
-                },
-                if (caps.shizukuReady) "已授权" else if (caps.shizukuInstalled) "去授权" else "未安装",
-                caps.shizukuReady,
-            ) {
-                if (caps.shizukuInstalled) {
-                    vm.requestShizuku()
-                    io.github.dryearth.solidbutler.core.ShizukuHelper.openManager(context)
-                }
-            }
-            DividerLine()
-            SettingRow(
-                "Shizuku 执行测试",
-                "运行 id，确认 shell 身份是否真的可用",
-                "测试",
-                false,
-            ) {
-                scope.launch {
-                    val r = withContext(Dispatchers.IO) { ShizukuHelper.exec("id", 5_000) }
-                    Toast.makeText(
-                        context,
-                        if (r.ok) "Shizuku shell: ${r.text.take(120)}" else "失败: ${r.text.take(160)}",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            }
+            Text(
+                "Shizuku 已停用；深度操作使用 KernelSU/Magisk Root。无线 ADB 需要独立的 ADB 客户端，后续接入。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
             DividerLine()
             SettingRow(
                 "所有文件访问",
@@ -621,26 +522,6 @@ private fun applyIcon(context: android.content.Context, alias: String) {
         }
         Toast.makeText(context, "图标已切换，桌面可能需要刷新", Toast.LENGTH_SHORT).show()
     }
-}
-
-private fun pinCustomIcon(context: android.content.Context, uri: String): Boolean {
-    return runCatching {
-        val bitmap = context.contentResolver.openInputStream(Uri.parse(uri))?.use {
-            BitmapFactory.decodeStream(it)
-        } ?: return false
-        val icon = IconCompat.createWithAdaptiveBitmap(bitmap)
-        val shortcut = ShortcutInfoCompat.Builder(context, "xi_custom_icon")
-            .setShortLabel("汐")
-            .setLongLabel("汐 · 自定义图标")
-            .setIcon(icon)
-            .setIntent(
-                Intent(context, io.github.dryearth.solidbutler.MainActivity::class.java)
-                    .setAction(Intent.ACTION_VIEW)
-            )
-            .build()
-        ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
-        true
-    }.getOrDefault(false)
 }
 
 private fun openFirst(context: android.content.Context, vararg intents: Intent) {

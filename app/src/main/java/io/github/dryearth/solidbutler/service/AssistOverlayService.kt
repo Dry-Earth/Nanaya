@@ -110,6 +110,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private var view: ComposeView? = null
     private var receiver: android.content.BroadcastReceiver? = null
     private var voiceBadge: android.view.View? = null
+    private var autoVoice by mutableStateOf(false)
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
@@ -117,6 +118,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     override fun onCreate() {
         super.onCreate()
+        autoVoice = intent?.getBooleanExtra(EXTRA_VOICE, false) == true
         savedStateController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -141,6 +143,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.getBooleanExtra(EXTRA_VOICE, false) == true) autoVoice = true
         if (view == null) showWindow()
         return START_NOT_STICKY
     }
@@ -237,6 +240,8 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                 SolidButlerTheme {
                     OverlayAssistant(
                         vm = vm,
+                        autoVoice = autoVoice,
+                        onVoiceConsumed = { autoVoice = false },
                         onClose = { stopSelf() },
                     )
                 }
@@ -301,6 +306,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     companion object {
         private const val CHANNEL_ID = "xi_assist_overlay"
         private const val NOTIFICATION_ID = 12003
+        private const val EXTRA_VOICE = "xi_voice"
         const val ACTION_VOICE_START = "io.github.dryearth.solidbutler.VOICE_START"
         const val ACTION_VOICE_END = "io.github.dryearth.solidbutler.VOICE_END"
 
@@ -308,8 +314,9 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         var active: AssistOverlayService? = null
             private set
 
-        fun show(context: android.content.Context): Boolean = runCatching {
+        fun show(context: android.content.Context, voice: Boolean = false): Boolean = runCatching {
             val intent = Intent(context, AssistOverlayService::class.java)
+                .putExtra(EXTRA_VOICE, voice)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
             else context.startService(intent)
             true
@@ -320,6 +327,8 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 @Composable
 private fun OverlayAssistant(
     vm: ButlerViewModel,
+    autoVoice: Boolean,
+    onVoiceConsumed: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -373,6 +382,13 @@ private fun OverlayAssistant(
             )
         }.isSuccess
         if (!ok) voiceStatus = "无法启动语音识别窗口"
+    }
+
+    LaunchedEffect(autoVoice) {
+        if (autoVoice) {
+            onVoiceConsumed()
+            startVoice()
+        }
     }
 
     BoxWithConstraints(

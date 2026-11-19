@@ -234,24 +234,22 @@ fun AiSettingsScreen(
                 value = ttsOptions.firstOrNull { it.pkg == ttsPkg }?.label ?: "系统默认",
             ) { picker = "tts" }
             Spacer(Modifier.height(10.dp))
-            ActionButton(
-                "打开系统语音输入设置",
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    val intents = listOf(
-                        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
-                        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
-                        Intent(Settings.ACTION_SETTINGS),
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    "系统语音设置",
+                    modifier = Modifier.weight(1f),
+                    onClick = { openVoiceSettings(context) },
+                )
+                val marmalade = context.packageManager.getLaunchIntentForPackage("app.marmalade.stt")
+                if (marmalade != null) {
+                    ActionButton(
+                        "打开 Marmalade",
+                        accent = true,
+                        modifier = Modifier.weight(1f),
+                        onClick = { runCatching { context.startActivity(marmalade) } },
                     )
-                    for (i in intents) {
-                        try {
-                            context.startActivity(i)
-                            break
-                        } catch (_: Exception) {
-                        }
-                    }
-                },
-            )
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 "如果使用 Marmalade STT：先在系统「语音输入」里选它，再用上面的系统识别；Marmalade 是识别服务，不是可嵌入的 SDK。",
@@ -498,6 +496,32 @@ fun AiSettingsScreen(
     }
 }
 
+private fun openVoiceSettings(context: android.content.Context) {
+    val intents = mutableListOf(
+        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
+        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$VoiceInputSettingsActivity")),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$SpeechSettingsActivity")),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageAssistActivity")),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$DefaultAssistSettingsActivity")),
+        Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")),
+        Intent("com.android.settings.action.SETTINGS_SEARCH").putExtra("query", "语音输入"),
+    )
+    intents += Intent(Settings.ACTION_SETTINGS)
+    var opened = false
+    for (i in intents) {
+        try {
+            context.startActivity(i)
+            opened = true
+            break
+        } catch (_: Exception) {
+        }
+    }
+    if (!opened) {
+        Toast.makeText(context, "请在系统设置里搜索「语音输入」", Toast.LENGTH_LONG).show()
+    }
+}
+
 @Composable
 private fun EngineRow(title: String, value: String, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -511,9 +535,10 @@ private fun EngineRow(title: String, value: String, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        ActionButton(
+        Pill(
             if (value == "系统默认") "选择" else "更换",
-            accent = value == "系统默认",
+            selected = true,
+            color = Glass.Accent,
             onClick = onClick,
         )
     }
