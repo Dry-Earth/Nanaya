@@ -232,6 +232,7 @@ fun GlassPanel(
     padding: PaddingValues = PaddingValues(16.dp),
     tint: Color = Color.White,
     opaque: Boolean = false,
+    strongGlass: Boolean = false,
     backdropOverride: LayerBackdrop? = null,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
@@ -249,20 +250,25 @@ fun GlassPanel(
                         shape = { shape },
                         effects = {
                             vibrancy()
-                            blur(10.dp.toPx(), 10.dp.toPx())
+                            blur(
+                                if (strongGlass) 7.dp.toPx() else 10.dp.toPx(),
+                                if (strongGlass) 7.dp.toPx() else 10.dp.toPx(),
+                            )
                             lens(
-                                refractionHeight = 22.dp.toPx(),
-                                refractionAmount = 18.dp.toPx(),
+                                refractionHeight = if (strongGlass) 30.dp.toPx() else 22.dp.toPx(),
+                                refractionAmount = if (strongGlass) 26.dp.toPx() else 18.dp.toPx(),
                             )
                         },
-                        onDrawSurface = { drawRect(Color(0x550B0E13)) },
+                        onDrawSurface = {
+                            drawRect(Color(if (strongGlass) 0x330B0E13 else 0x550B0E13))
+                        },
                     )
                 } else {
                     Modifier
                 },
             )
             // A solid-ish base keeps the background grid from showing through the glass.
-            .background(if (opaque) Color(0xFF0B0E13) else Color(0x1F0B0E13))
+            .background(if (opaque) Color(0xFF0B0E13) else if (strongGlass) Color(0x100B0E13) else Color(0x1F0B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(

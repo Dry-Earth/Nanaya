@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -189,7 +190,18 @@ fun ButlerApp(
                 onChat = { chat = true },
                 onSettings = { settings = true },
             )
-            Box(Modifier.weight(1f)) {
+            Box(
+                Modifier.weight(1f).drawWithContent {
+                    drawContent()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Glass.Ink.copy(alpha = 0.58f), Color.Transparent),
+                            startY = 0f,
+                            endY = 22.dp.toPx(),
+                        ),
+                    )
+                },
+            ) {
                 if (sub == "autostart") {
                     AutostartScreen(vm, onBack = { sub = null }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
@@ -339,7 +351,7 @@ private fun AiTitle(ready: Boolean) {
                 ),
             )
         }
-        Canvas(Modifier.width(58.dp).height(7.dp)) {
+        Canvas(Modifier.width(64.dp).height(7.dp)) {
             val path = Path()
             for (i in 0..80) {
                 val t = i / 80f
@@ -453,9 +465,10 @@ private fun BottomBar(
         contentAlignment = Alignment.Center,
     ) {
         GlassPanel(
-            modifier = Modifier.height(64.dp),
-            corner = 32.dp,
+            modifier = Modifier.height(66.dp),
+            corner = 33.dp,
             padding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+            strongGlass = true,
             backdropOverride = backdrop,
         ) {
             Row(
@@ -467,7 +480,7 @@ private fun BottomBar(
                     val selected = current == item.id
                     Column(
                         Modifier
-                            .width(58.dp)
+                            .width(64.dp)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onSelect(item.id) }
