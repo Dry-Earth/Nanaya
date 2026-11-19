@@ -397,7 +397,17 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
                         val bmp = remember(imageData) {
                             runCatching {
                                 val bytes = Base64.decode(imageData, Base64.DEFAULT)
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                                var sample = 1
+                                while (bounds.outWidth / sample > 720 || bounds.outHeight / sample > 720) {
+                                    sample *= 2
+                                }
+                                val options = BitmapFactory.Options().apply {
+                                    inSampleSize = sample
+                                    inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                                }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
                             }.getOrNull()
                         }
                         if (bmp != null) {
@@ -608,22 +618,32 @@ private fun Composer(
 
 private fun encodeImage(context: android.content.Context, uri: Uri): Pair<ImageBitmap?, String?> {
     return runCatching {
-        val original = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it)
-        } ?: return null to null
         val max = 1024
-        val scale = minOf(1f, max.toFloat() / maxOf(original.width, original.height))
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        var sample = 1
+        while (bounds.outWidth / sample > max || bounds.outHeight / sample > max) {
+            sample *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        val decoded = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null to null
+        val scale = minOf(1f, max.toFloat() / maxOf(decoded.width, decoded.height))
         val scaled = if (scale < 1f) {
             android.graphics.Bitmap.createScaledBitmap(
-                original,
-                (original.width * scale).toInt().coerceAtLeast(1),
-                (original.height * scale).toInt().coerceAtLeast(1),
+                decoded,
+                (decoded.width * scale).toInt().coerceAtLeast(1),
+                (decoded.height * scale).toInt().coerceAtLeast(1),
                 true,
             )
-        } else original
+        } else decoded
         val out = ByteArrayOutputStream()
         scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
         val bytes = out.toByteArray()
+        if (scaled !== decoded) decoded.recycle()
         (scaled.asImageBitmap()) to Base64.encodeToString(bytes, Base64.NO_WRAP)
     }.getOrDefault(null to null)
 }

@@ -68,8 +68,23 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
         value = if (style == "image" && imageUri.isNotBlank()) {
             withContext(Dispatchers.IO) {
                 runCatching {
-                    context.contentResolver.openInputStream(Uri.parse(imageUri))?.use {
-                        BitmapFactory.decodeStream(it)?.asImageBitmap()
+                    val resolver = context.contentResolver
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    resolver.openInputStream(Uri.parse(imageUri))?.use {
+                        BitmapFactory.decodeStream(it, null, bounds)
+                    }
+                    val maxW = context.resources.displayMetrics.widthPixels.coerceAtMost(1440)
+                    val maxH = context.resources.displayMetrics.heightPixels.coerceAtMost(2560)
+                    var sample = 1
+                    while (bounds.outWidth / sample > maxW || bounds.outHeight / sample > maxH) {
+                        sample *= 2
+                    }
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = sample
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    }
+                    resolver.openInputStream(Uri.parse(imageUri))?.use {
+                        BitmapFactory.decodeStream(it, null, options)?.asImageBitmap()
                     }
                 }.getOrNull()
             }

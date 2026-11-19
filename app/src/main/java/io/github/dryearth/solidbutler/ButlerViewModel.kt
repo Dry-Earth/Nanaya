@@ -724,7 +724,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val input = text.trim().ifBlank { if (imageBase64 != null) "看看这张图" else "" }
         if (input.isBlank() || _chat.value.sending) return
         val user = ChatMessage(role = ChatRole.USER, text = input, imageBase64 = imageBase64)
-        _chat.update { it.copy(messages = it.messages + user, sending = true) }
+        _chat.update { it.copy(messages = trimChatImages(it.messages + user), sending = true) }
         viewModelScope.launch {
             runCatching { ai.complete(buildSystemPrompt(), _chat.value.messages) }
                 .onSuccess { raw ->
@@ -732,12 +732,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     _chat.update {
                         it.copy(
                             sending = false,
-                            messages = it.messages + ChatMessage(
+                            messages = trimChatImages(it.messages + ChatMessage(
                                 role = ChatRole.ASSISTANT,
                                 text = reply,
                                 action = action,
                                 actionState = if (action != null) ActionState.PENDING else ActionState.NONE,
-                            ),
+                            )),
                         )
                     }
                 }
@@ -745,13 +745,25 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     _chat.update {
                         it.copy(
                             sending = false,
-                            messages = it.messages + ChatMessage(
+                            messages = trimChatImages(it.messages + ChatMessage(
                                 role = ChatRole.ASSISTANT,
                                 text = "调用模型失败：${e.message}",
-                            ),
+                            )),
                         )
                     }
                 }
+        }
+    }
+
+    /** Keep only the newest four images so base64 strings cannot grow forever. */
+    private fun trimChatImages(messages: List<ChatMessage>): List<ChatMessage> {
+        val keep = messages.filter { it.imageBase64 != null }.takeLast(4).map { it.id }.toSet()
+        val images = messages.count { it.imageBase64 != null }
+        if (keep.size == images) return messages
+        return messages.map { message ->
+            if (message.imageBase64 != null && message.id !in keep) {
+                message.copy(imageBase64 = null)
+            } else message
         }
     }
 
