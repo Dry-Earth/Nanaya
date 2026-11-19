@@ -163,14 +163,8 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 when (intent?.action) {
-                    ACTION_VOICE_START -> {
-                        removeWindow()
-                        showVoiceBadge()
-                    }
-                    ACTION_VOICE_END -> {
-                        removeVoiceBadge()
-                        if (view == null) showWindow()
-                    }
+                    ACTION_VOICE_START -> showVoiceBadge()
+                    ACTION_VOICE_END -> removeVoiceBadge()
                 }
             }
         }

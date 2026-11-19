@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.service.AssistOverlayService
 import io.github.dryearth.solidbutler.ui.ButlerApp
 import io.github.dryearth.solidbutler.ui.theme.Glass
@@ -28,16 +27,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val isAssist = intent?.action == Intent.ACTION_ASSIST ||
-            intent?.getBooleanExtra("open_chat", false) == true
-        val prefs = Prefs(this)
-        if (isAssist && prefs.overlayAssistant && Settings.canDrawOverlays(this)) {
+        val isAssist = intent?.action == Intent.ACTION_ASSIST
+        val openChat = intent?.getBooleanExtra("open_chat", false) == true
+        if (isAssist && Settings.canDrawOverlays(this)) {
             if (AssistOverlayService.show(this, voice = true)) {
                 finish()
                 return
             }
         }
-        assistRequest = isAssist
+        assistRequest = isAssist || openChat
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
             navigationBarStyle = SystemBarStyle.dark(Color.Transparent.toArgb()),
@@ -59,16 +57,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val isAssist = intent.action == Intent.ACTION_ASSIST ||
-            intent.getBooleanExtra("open_chat", false)
-        val prefs = Prefs(this)
-        if (isAssist && prefs.overlayAssistant && Settings.canDrawOverlays(this)) {
+        val isAssist = intent.action == Intent.ACTION_ASSIST
+        val openChat = intent.getBooleanExtra("open_chat", false)
+        if (isAssist && Settings.canDrawOverlays(this)) {
             if (AssistOverlayService.show(this, voice = true)) {
                 assistRequest = false
                 moveTaskToBack(true)
                 return
             }
         }
-        if (isAssist) assistRequest = true
+        if (isAssist || openChat) assistRequest = true
     }
 }
