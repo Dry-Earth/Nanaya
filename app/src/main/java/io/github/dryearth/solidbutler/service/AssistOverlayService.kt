@@ -21,6 +21,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -828,9 +829,8 @@ private fun WakeAmbient(
                         alpha = 1f - e * 0.35f,
                     )
                 }
-                val point = FloatArray(2)
-                measure.getPosTan(head, point, null)
-                bloom(point[0], point[1], 26.dp.toPx(), Color(0xFFFFF3D6), 0.85f)
+                val point = measure.getPosition(head)
+                bloom(point.x, point.y, 26.dp.toPx(), Color(0xFFFFF3D6), 0.85f)
             }
         }
 
