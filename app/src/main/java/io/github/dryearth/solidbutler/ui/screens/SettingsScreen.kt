@@ -107,6 +107,8 @@ fun SettingsScreen(
     var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
     var adbPort by rememberSaveable { mutableStateOf("") }
     var adbCode by rememberSaveable { mutableStateOf("") }
+    var adbConnectPort by rememberSaveable { mutableStateOf("") }
+    var adbMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier
@@ -390,12 +392,19 @@ fun SettingsScreen(
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
-                        AdbField("配对端口", adbPort, "例如 37123", numeric = true) { adbPort = it }
+                        AdbField("配对端口", adbPort, "配对弹窗里的端口", numeric = true) { adbPort = it }
                     }
                     Box(Modifier.weight(1f)) {
                         AdbField("配对码", adbCode, "6 位数字", numeric = true) { adbCode = it }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                AdbField(
+                    "连接端口（可选）",
+                    adbConnectPort,
+                    "无线调试首页 IP:端口 里的端口",
+                    numeric = true,
+                ) { adbConnectPort = it }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ActionButton(
@@ -409,23 +418,39 @@ fun SettingsScreen(
                                 Toast.makeText(context, "请填写正确的端口和 6 位配对码", Toast.LENGTH_SHORT).show()
                             } else {
                                 adbBusy = true
+                                adbMessage = "正在配对…"
                                 scope.launch {
-                                    val error = withContext(Dispatchers.IO) {
-                                        AdbManager.pairDevice(
-                                            context,
-                                            adbHost.trim().ifBlank { "127.0.0.1" },
-                                            port,
-                                            adbCode.trim(),
-                                        ) ?: AdbManager.connectDevice(context, 8000)
+                                    val host = adbHost.trim().ifBlank { "127.0.0.1" }
+                                    val pairError = withContext(Dispatchers.IO) {
+                                        AdbManager.pairDevice(context, host, port, adbCode.trim())
+                                    }
+                                    if (pairError != null) {
+                                        adbBusy = false
+                                        val message = "配对失败：$pairError"
+                                        adbMessage = message
+                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                        return@launch
+                                    }
+                                    adbMessage = "配对成功，正在连接…"
+                                    val connectPort = adbConnectPort.trim().toIntOrNull()
+                                    val connectError = withContext(Dispatchers.IO) {
+                                        if (connectPort != null) {
+                                            AdbManager.connectDirect(context, host, connectPort)
+                                        } else {
+                                            AdbManager.connectDevice(context, 8000)
+                                        }
                                     }
                                     adbBusy = false
                                     adbConnected = AdbManager.connected()
-                                    if (error == null) {
-                                        Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
+                                    if (connectError == null) {
+                                        adbMessage = "配对并连接成功"
+                                        Toast.makeText(context, "配对并连接成功", Toast.LENGTH_SHORT).show()
                                         vm.refreshCapabilities(force = true)
                                         adbExpanded = false
                                     } else {
-                                        Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                        val message = "配对成功，但连接失败：$connectError。请关闭系统配对弹窗，把无线调试首页的端口填到「连接端口」，再点「只连接」。"
+                                        adbMessage = message
+                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                     }
                                 }
                             }
@@ -437,17 +462,27 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             adbBusy = true
+                            adbMessage = "正在连接…"
                             scope.launch {
+                                val host = adbHost.trim().ifBlank { "127.0.0.1" }
+                                val connectPort = adbConnectPort.trim().toIntOrNull()
                                 val error = withContext(Dispatchers.IO) {
-                                    AdbManager.connectDevice(context, 8000)
+                                    if (connectPort != null) {
+                                        AdbManager.connectDirect(context, host, connectPort)
+                                    } else {
+                                        AdbManager.connectDevice(context, 8000)
+                                    }
                                 }
                                 adbBusy = false
                                 adbConnected = AdbManager.connected()
                                 if (error == null) {
+                                    adbMessage = "无线 ADB 已连接"
                                     Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
                                     vm.refreshCapabilities(force = true)
                                 } else {
-                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                    val message = "连接失败：$error"
+                                    adbMessage = message
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 }
                             }
                         },
@@ -455,10 +490,18 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "已自动填入本机 Wi-Fi IP；如果配对失败，改成无线调试页显示的 IP。配对端口每次打开配对页都会变化，连接端口由 mDNS 自动发现。",
+                    "「配对端口」填配对弹窗里的端口；「连接端口」填无线调试首页「IP 地址和端口」里的端口，可留空由 mDNS 自动发现。配对成功后先关闭系统配对弹窗。",
                     style = MaterialTheme.typography.labelSmall,
                     color = Glass.Faint,
                 )
+                adbMessage?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (adbConnected) Glass.Mint else Glass.Amber,
+                    )
+                }
             }
             if (adbConnected) {
                 Spacer(Modifier.height(8.dp))

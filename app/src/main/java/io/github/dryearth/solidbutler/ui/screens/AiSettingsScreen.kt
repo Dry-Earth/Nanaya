@@ -328,7 +328,7 @@ fun AiSettingsScreen(
         SectionHeader("系统数字助理", "在系统默认应用页手动选择汐")
         GlassPanel {
             Text(
-                "汐沿用 0.7 的 ACTION_ASSIST 方式。先去系统默认应用页，把「数字助理」选成汐；之后长按 Home/电源键就能唤起。",
+                "汐使用 ACTION_ASSIST 的无界面入口唤起悬浮窗，不会把 App 主界面带到前台。更新后请在系统默认应用页重新选择一次汐；之后长按 Home/电源键就能唤起。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Muted,
             )

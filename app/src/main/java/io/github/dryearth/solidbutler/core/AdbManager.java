@@ -158,6 +158,20 @@ public final class AdbManager extends AbsAdbConnectionManager {
         }
     }
 
+    /** Connect directly to the port shown on the Wireless debugging page. */
+    @Nullable
+    public static String connectDirect(@NonNull Context context, String host, int port) {
+        if (!init(context)) return LAST_ERROR;
+        try {
+            boolean ok = INSTANCE.connect(host, port);
+            return ok ? null : "没有连上这个端口";
+        } catch (AdbPairingRequiredException e) {
+            return "还没有完成配对：请先在无线调试里使用配对码配对";
+        } catch (Exception e) {
+            return message(e);
+        }
+    }
+
     public static void disconnectDevice() {
         AdbManager manager = INSTANCE;
         if (manager == null) return;

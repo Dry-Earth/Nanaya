@@ -10,4 +10,5 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">#A9C1FF</item>
-    </style></resources>
+    </style>    <style name="Theme.SolidButler.NoDisplay" parent="@android:style/Theme.NoDisplay" />
+</resources>
