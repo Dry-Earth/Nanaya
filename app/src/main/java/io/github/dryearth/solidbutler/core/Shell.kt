@@ -18,7 +18,7 @@ data class ShellResult(
 
 /**
  * Single entry point for privileged work.
- * Order: root shell -> app shell.
+ * Order: root shell -> wireless ADB -> app shell.
  *
  * Everything is executed through the platform's own shell commands
  * (pm / appops / cmd / dumpsys / iptables), not through private hooks.
@@ -67,6 +67,10 @@ object Shell {
     fun run(cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when {
             rootReady || detectRoot() -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
+            AdbManager.connected() -> {
+                val out = AdbManager.run(cmd, timeoutMs)
+                if (out != null) ShellResult(0, out) else ShellResult(-1, "", "无线 ADB 执行失败")
+            }
             else -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
     }
@@ -75,6 +79,10 @@ object Shell {
     fun runAs(backend: Backend, cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when (backend) {
             Backend.ROOT -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)
+            Backend.ADB -> {
+                val out = AdbManager.run(cmd, timeoutMs)
+                if (out != null) ShellResult(0, out) else ShellResult(-1, "", "无线 ADB 未连接")
+            }
             Backend.APP -> exec(arrayOf("sh", "-c", cmd), timeoutMs)
         }
     }
@@ -94,19 +102,21 @@ object Shell {
         }.getOrElse { ShellResult(-1, "", it.message ?: "exec failed") }
     }
 
-    enum class Backend { ROOT, APP }
+    enum class Backend { ROOT, ADB, APP }
 
     fun backend(): Backend = when {
         rootReady -> Backend.ROOT
+        AdbManager.connected() -> Backend.ADB
         else -> Backend.APP
     }
 
     fun backendLabel(): String = when (backend()) {
         Backend.ROOT -> "Root"
+        Backend.ADB -> "无线 ADB"
         Backend.APP -> "普通权限"
     }
 
-    fun isPrivileged(): Boolean = rootReady
+    fun isPrivileged(): Boolean = rootReady || AdbManager.connected()
 
     /** Cheap periodic check; avoids keeping stale root/shell state after the user revokes it. */
     fun revalidate() {

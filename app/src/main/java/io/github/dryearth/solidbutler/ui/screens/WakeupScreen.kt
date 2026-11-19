@@ -91,7 +91,7 @@ fun WakeupScreen(onBack: () -> Unit) {
         if (loading) {
             item { EmptyHint("读取 jobscheduler / alarm…") }
         } else if (items.isEmpty()) {
-            item { EmptyHint("需要 Root 才能读取系统调度信息") }
+            item { EmptyHint("需要 Root 或无线 ADB 才能读取系统调度信息") }
         } else {
             items(items, key = { it.pkg }) { s ->
                 GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp)) {

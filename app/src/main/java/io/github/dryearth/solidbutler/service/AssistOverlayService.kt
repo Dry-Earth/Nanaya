@@ -975,22 +975,25 @@ private fun WakeAmbient(
             )
         }
 
-        // 3. Light streak: right edge -> the voice capsule centre -> heart.
-        if (e > 0.04f) {
+        // 3. Edge streamer: top-right -> right edge -> capsule heart, then
+        //    a second streamer leaves the heart for the opposite bottom edge.
+        if (e > 0.02f) {
             val heartCy = h - 54.dp.toPx()
-            val travel = ((e - 0.03f) / 0.43f).coerceIn(0f, 1f)
-            val streak = Path().apply {
-                moveTo(w + 2.dp.toPx(), heartCy)
-                quadraticBezierTo(w * 0.78f, heartCy - 26.dp.toPx(), w * 0.55f, heartCy)
-                lineTo(w * 0.50f, heartCy)
+            val cx = w * 0.5f
+            val travel = ((e - 0.02f) / 0.40f).coerceIn(0f, 1f)
+            val edgePath = Path().apply {
+                moveTo(w - 2.dp.toPx(), 0f)
+                lineTo(w - 2.dp.toPx(), heartCy)
+                quadraticBezierTo(w - 2.dp.toPx(), heartCy, w * 0.72f, heartCy)
+                lineTo(cx, heartCy)
             }
-            val streakMeasure = PathMeasure().apply { setPath(streak, false) }
-            val streakLength = streakMeasure.length
-            if (streakLength > 1f && travel < 1f) {
-                val head = streakLength * travel
-                val tail = (head - streakLength * 0.34f).coerceAtLeast(0f)
+            val edgeMeasure = PathMeasure().apply { setPath(edgePath, false) }
+            val edgeLength = edgeMeasure.length
+            if (edgeLength > 1f && travel < 1f) {
+                val head = edgeLength * travel
+                val tail = (head - edgeLength * 0.28f).coerceAtLeast(0f)
                 val segment = Path()
-                if (streakMeasure.getSegment(tail, head, segment, true)) {
+                if (edgeMeasure.getSegment(tail, head, segment, true)) {
                     drawPath(
                         path = segment,
                         brush = Brush.linearGradient(
@@ -1005,18 +1008,17 @@ private fun WakeAmbient(
                     )
                 }
                 if (head > 0f) {
-                    val point = streakMeasure.getPosition(head)
-                    bloom(point.x, point.y, 28.dp.toPx(), Color(0xFFFFF3D6), 0.88f)
+                    val point = edgeMeasure.getPosition(head)
+                    bloom(point.x, point.y, 30.dp.toPx(), Color(0xFFFFF3D6), 0.90f)
                 }
             }
 
-            // The heart is about the size of the capsule, then scatters.
-            val heartT = ((e - 0.46f) / 0.26f).coerceIn(0f, 1f)
-            val disperse = ((e - 0.72f) / 0.28f).coerceIn(0f, 1f)
+            // Big heart at the capsule, then scatter.
+            val heartT = ((e - 0.42f) / 0.25f).coerceIn(0f, 1f)
+            val disperse = ((e - 0.67f) / 0.20f).coerceIn(0f, 1f)
             val heartAlpha = 1f - disperse
             if (heartT > 0f && heartAlpha > 0f) {
-                val cx = w * 0.5f
-                val r = 32.dp.toPx()
+                val r = 44.dp.toPx()
                 val heart = heartPath(cx, heartCy, r)
                 val heartMeasure = PathMeasure().apply { setPath(heart, false) }
                 val heartLength = heartMeasure.length
@@ -1035,7 +1037,7 @@ private fun WakeAmbient(
                                 start = Offset(cx - r, heartCy - r),
                                 end = Offset(cx + r, heartCy + r),
                             ),
-                            style = Stroke(width = 3.2.dp.toPx(), cap = StrokeCap.Round),
+                            style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Round),
                             alpha = 0.96f * heartAlpha,
                         )
                     }
@@ -1045,23 +1047,55 @@ private fun WakeAmbient(
                         alpha = 0.10f * heartT * heartAlpha,
                     )
                 }
-                bloom(cx, heartCy, r * 3.6f, Color(0xFFFF7AC6), 0.32f * heartT * heartAlpha)
+                bloom(cx, heartCy, r * 3.4f, Color(0xFFFF7AC6), 0.34f * heartT * heartAlpha)
 
-                // Scatter: small motes drift outward and fade.
                 if (disperse > 0f) {
-                    val count = 14
+                    val count = 16
                     for (i in 0 until count) {
                         val angle = i * (2.0 * Math.PI / count) + 0.35
-                        val distance = r * (1.15f + 1.05f * disperse)
+                        val distance = r * (1.15f + 1.15f * disperse)
                         val px = cx + cos(angle).toFloat() * distance
                         val py = heartCy + sin(angle).toFloat() * distance
                         drawCircle(
                             color = if (i % 3 == 0) Color(0xFFFFE4B5) else Color(0xFFFF9ECB),
-                            radius = (2.6.dp.toPx()) * (1f - 0.65f * disperse),
+                            radius = (2.8.dp.toPx()) * (1f - 0.65f * disperse),
                             center = Offset(px, py),
-                            alpha = 0.62f * (1f - disperse),
+                            alpha = 0.64f * (1f - disperse),
                         )
                     }
+                }
+            }
+
+            // Second streamer: from the heart to the opposite bottom edge.
+            val exitT = ((e - 0.78f) / 0.22f).coerceIn(0f, 1f)
+            if (exitT > 0f) {
+                val exitPath = Path().apply {
+                    moveTo(cx, heartCy)
+                    quadraticBezierTo(w * 0.34f, h - 34.dp.toPx(), w * 0.06f, h - 2.dp.toPx())
+                }
+                val exitMeasure = PathMeasure().apply { setPath(exitPath, false) }
+                val exitLength = exitMeasure.length
+                if (exitLength > 1f) {
+                    val head = exitLength * exitT
+                    val tail = (head - exitLength * 0.30f).coerceAtLeast(0f)
+                    val segment = Path()
+                    if (exitMeasure.getSegment(tail, head, segment, true)) {
+                        drawPath(
+                            path = segment,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFFFFE4B5),
+                                    Color(0xFFFF7AC6),
+                                    Color(0xFF9DBBFF),
+                                    Color.Transparent,
+                                ),
+                            ),
+                            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
+                            alpha = 0.9f,
+                        )
+                    }
+                    val point = exitMeasure.getPosition(head)
+                    bloom(point.x, point.y, 28.dp.toPx(), Color(0xFFFFE4B5), 0.75f)
                 }
             }
         }

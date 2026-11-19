@@ -100,7 +100,7 @@ fun HomeScreen(
         item { SummaryCard(storage.report, security.report, caps, onOpenTab) }
         item {
             Text(
-                "汐 · 本机读取，不上传文件。NPU/进程占用取决于厂商驱动与 Root。",
+                "汐 · 本机读取，不上传文件。NPU/进程占用取决于厂商驱动与 Root/无线 ADB。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Faint,
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -245,7 +245,7 @@ private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
     GlassPanel(padding = PaddingValues(14.dp)) {
         SectionHeader(
             "进程与内存",
-            if (snapshot.processes.isEmpty()) "需要 Root 读取 dumpsys" else "按 CPU/PSS 排序 · 10 秒刷新",
+            if (snapshot.processes.isEmpty()) "需要 Root 或无线 ADB 读取 dumpsys" else "按 CPU/PSS 排序 · 10 秒刷新",
             trailing = {
                 Text(
                     "内存详情",
@@ -258,7 +258,7 @@ private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         if (snapshot.processes.isEmpty()) {
             Text(
-                "没有可显示的进程占用。授予 Root 后，这里会列出 top CPU 进程。",
+                "没有可显示的进程占用。授予 Root 或无线 ADB 后，这里会列出 top CPU 进程。",
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Faint,
             )

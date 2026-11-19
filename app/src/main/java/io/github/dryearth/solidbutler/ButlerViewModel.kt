@@ -494,7 +494,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun killBackground() {
         if (!_caps.value.privileged) {
-            _perf.update { it.copy(toast = "回收后台需要 Root") }
+            _perf.update { it.copy(toast = "回收后台需要 Root 或无线 ADB") }
             return
         }
         viewModelScope.launch {
@@ -949,14 +949,14 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(1, 100)
                 val value = percent * 255 / 100
                 val r = withContext(Dispatchers.IO) { Shell.run("settings put system screen_brightness $value") }
-                if (r.ok) "亮度已设为 $percent%。" else "需要 Root 才能改系统亮度。"
+                if (r.ok) "亮度已设为 $percent%。" else "需要 Root 或无线 ADB 才能改系统亮度。"
             }
             "set_screen_timeout" -> {
                 val sec = (args["seconds"]?.toIntOrNull() ?: 60).coerceIn(15, 1800)
                 val r = withContext(Dispatchers.IO) {
                     Shell.run("settings put system screen_off_timeout ${sec * 1000}")
                 }
-                if (r.ok) "息屏时间已设为 $sec 秒。" else "需要 Root。"
+                if (r.ok) "息屏时间已设为 $sec 秒。" else "需要 Root 或无线 ADB。"
             }
             "set_volume" -> {
                 val percent = (args["percent"]?.toIntOrNull() ?: 50).coerceIn(0, 100)
@@ -1091,7 +1091,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
 设备状态：
 - 机型：${c.device}，${c.android}
-- 权限：Root=${c.root}，所有文件访问=${c.allFiles}，使用情况访问=${c.usageAccess}
+- 权限：Root=${c.root}，无线ADB=${c.adbConnected}，所有文件访问=${c.allFiles}，使用情况访问=${c.usageAccess}
 - 充电控制：${if (p.charging.supported) "支持，当前上限 ${p.charging.limit}%，模式 ${LineageHealth.modeLabel(p.charging.mode)}" else "不支持"}
 - LineageOS 硬件接口：${if (io.github.dryearth.solidbutler.core.LineageHardware.bind()) "已连接 lineagehardware" else "未连接"}
 - 电池：${p.snapshot.battery.level}%，${p.snapshot.battery.status}，温度 ${p.snapshot.battery.tempC}℃

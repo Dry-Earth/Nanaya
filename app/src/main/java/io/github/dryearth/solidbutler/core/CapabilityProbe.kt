@@ -10,6 +10,7 @@ import android.provider.Settings
 
 data class Capabilities(
     val root: Boolean = false,
+    val adbConnected: Boolean = false,
     val allFiles: Boolean = false,
     val usageAccess: Boolean = false,
     val batteryUnrestricted: Boolean = false,
@@ -19,7 +20,7 @@ data class Capabilities(
     val android: String = "",
     val backend: String = "普通权限",
 ) {
-    val privileged: Boolean get() = root
+    val privileged: Boolean get() = root || adbConnected
 }
 
 object CapabilityProbe {
@@ -56,6 +57,7 @@ object CapabilityProbe {
 
         return Capabilities(
             root = Shell.rootReady,
+            adbConnected = AdbManager.connected(),
             allFiles = isExternalManager(),
             usageAccess = usage,
             batteryUnrestricted = batteryUnrestricted,

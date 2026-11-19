@@ -383,6 +383,8 @@ private fun TopBar(
             }
             if (caps.root) {
                 Pill("Root", selected = true, color = Glass.Mint)
+            } else if (caps.adbConnected) {
+                Pill("无线 ADB", selected = true, color = Glass.Accent)
             }
             if (aiConfigured) {
                 Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)

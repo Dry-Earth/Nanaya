@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.core.AdbManager
 import io.github.dryearth.solidbutler.core.Capabilities
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -98,6 +99,12 @@ fun SettingsScreen(
     var pinInput by remember { mutableStateOf("") }
     var pinConfirm by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
+    var adbExpanded by rememberSaveable { mutableStateOf(false) }
+    var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
+    var adbBusy by remember { mutableStateOf(false) }
+    var adbHost by rememberSaveable { mutableStateOf("127.0.0.1") }
+    var adbPort by rememberSaveable { mutableStateOf("") }
+    var adbCode by rememberSaveable { mutableStateOf("") }
 
     Column(
         Modifier
@@ -328,6 +335,143 @@ fun SettingsScreen(
             )
         }
 
+        SectionHeader("无线 ADB", "不依赖 Shizuku；用系统的无线调试配对")
+        GlassPanel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (adbConnected) "已连接 adbd" else "未连接",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (adbConnected) Glass.Mint else Glass.Text,
+                    )
+                    Text(
+                        if (adbConnected) "深度操作会优先走无线 ADB" else "权限与 Root 类似，但由系统无线调试授权",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Pill(
+                    if (adbBusy) "处理中" else if (adbConnected) "在线" else "离线",
+                    selected = adbConnected,
+                    color = if (adbConnected) Glass.Mint else Glass.Faint,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "步骤：开发者选项 → 无线调试 → 使用配对码配对设备，把屏幕上的地址、端口和 6 位配对码填到下面。配对成功后点「连接」。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    "打开无线调试",
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        openFirst(
+                            context,
+                            Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS"),
+                            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+                        )
+                    },
+                )
+                ActionButton(
+                    if (adbExpanded) "收起配对" else "配对 / 连接",
+                    accent = !adbConnected,
+                    modifier = Modifier.weight(1f),
+                    onClick = { adbExpanded = !adbExpanded },
+                )
+            }
+            if (adbExpanded) {
+                Spacer(Modifier.height(10.dp))
+                AdbField("配对地址", adbHost, "127.0.0.1 或屏幕上显示的 IP") { adbHost = it }
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        AdbField("配对端口", adbPort, "例如 37123", numeric = true) { adbPort = it }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        AdbField("配对码", adbCode, "6 位数字", numeric = true) { adbCode = it }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        "配对并连接",
+                        accent = true,
+                        enabled = !adbBusy,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val port = adbPort.trim().toIntOrNull()
+                            if (port == null || adbCode.trim().length < 6) {
+                                Toast.makeText(context, "请填写正确的端口和 6 位配对码", Toast.LENGTH_SHORT).show()
+                                return@ActionButton
+                            }
+                            adbBusy = true
+                            scope.launch {
+                                val error = withContext(Dispatchers.IO) {
+                                    AdbManager.pairDevice(
+                                        context,
+                                        adbHost.trim().ifBlank { "127.0.0.1" },
+                                        port,
+                                        adbCode.trim(),
+                                    ) ?: AdbManager.connectDevice(context, 8000)
+                                }
+                                adbBusy = false
+                                adbConnected = AdbManager.connected()
+                                if (error == null) {
+                                    Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
+                                    vm.refreshCapabilities(force = true)
+                                    adbExpanded = false
+                                } else {
+                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                    )
+                    ActionButton(
+                        "只连接",
+                        enabled = !adbBusy,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            adbBusy = true
+                            scope.launch {
+                                val error = withContext(Dispatchers.IO) {
+                                    AdbManager.connectDevice(context, 8000)
+                                }
+                                adbBusy = false
+                                adbConnected = AdbManager.connected()
+                                if (error == null) {
+                                    Toast.makeText(context, "无线 ADB 已连接", Toast.LENGTH_SHORT).show()
+                                    vm.refreshCapabilities(force = true)
+                                } else {
+                                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "配对失败时，把地址改成无线调试页显示的 IP；配对端口每次打开配对页都会变化，连接端口由 mDNS 自动发现。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
+            if (adbConnected) {
+                Spacer(Modifier.height(8.dp))
+                ActionButton(
+                    "断开无线 ADB",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        AdbManager.disconnectDevice()
+                        adbConnected = false
+                        vm.refreshCapabilities(force = true)
+                    },
+                )
+            }
+        }
+
         SectionHeader("应用锁", "本地 PIN · 不上传")
         GlassPanel {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -503,6 +647,42 @@ private fun openFirst(context: android.content.Context, vararg intents: Intent) 
 }
 
 @Composable
+private fun AdbField(
+    label: String,
+    value: String,
+    placeholder: String,
+    numeric: Boolean = false,
+    onChange: (String) -> Unit,
+) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+        Spacer(Modifier.height(4.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0x07FFFFFF))
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+        ) {
+            if (value.isEmpty()) {
+                Text(placeholder, style = MaterialTheme.typography.bodySmall, color = Glass.Faint)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = Glass.Text),
+                cursorBrush = SolidColor(Glass.Accent),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
 private fun SettingRow(
     title: String,
     subtitle: String,
@@ -562,7 +742,7 @@ private fun GlassField(
                 visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = when {
-                        number -> KeyboardType.NumberPassword
+                        number -> KeyboardType.Number
                         password -> KeyboardType.Password
                         else -> KeyboardType.Text
                     }

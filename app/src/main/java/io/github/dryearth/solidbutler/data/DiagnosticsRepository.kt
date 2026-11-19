@@ -16,7 +16,7 @@ class DiagnosticsRepository(private val context: Context) {
 
     fun load(): Diagnostics {
         if (!Shell.isPrivileged()) {
-            return Diagnostics(emptyList(), emptyList(), "需要 Root 读取系统日志", false)
+            return Diagnostics(emptyList(), emptyList(), "需要 Root 或无线 ADB 读取系统日志", false)
         }
         val crashText = Shell.run("logcat -d -b crash -t 600", 20_000).text
         val mainText = Shell.run("logcat -d -b main -t 600", 20_000).text

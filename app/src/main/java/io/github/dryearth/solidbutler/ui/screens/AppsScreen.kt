@@ -176,7 +176,7 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
             item {
                 GlassPanel(tint = Glass.Amber, corner = 14.dp, padding = PaddingValues(12.dp)) {
                     Text(
-                        "冻结、限制后台、收回权限需要 Root。当前为只读浏览。",
+                        "冻结、限制后台、收回权限需要 Root 或无线 ADB。当前为只读浏览。",
                         style = MaterialTheme.typography.bodySmall,
                         color = Glass.Amber,
                     )

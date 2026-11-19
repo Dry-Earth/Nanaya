@@ -97,7 +97,7 @@ fun RulesScreen(vm: ButlerViewModel, onBack: () -> Unit) {
         item {
             GlassPanel(tint = Glass.Amber) {
                 Text(
-                    "规则由电池守护服务执行，需要服务开启；实际限制通过 AppOps 完成，因此需要 Root。低电量/充满语音和自动限充在「性能 → 电池规则」里。",
+                    "规则由电池守护服务执行，需要服务开启；实际限制通过 AppOps 完成，因此需要 Root 或无线 ADB。低电量/充满语音和自动限充在「性能 → 电池规则」里。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Glass.Muted,
                 )
