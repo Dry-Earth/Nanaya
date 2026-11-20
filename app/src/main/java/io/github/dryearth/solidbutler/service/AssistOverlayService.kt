@@ -126,6 +126,7 @@ import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
+import io.github.dryearth.solidbutler.ui.components.VoiceWave
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -461,6 +462,7 @@ private fun OverlayAssistant(
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     val busStatus by OverlayVoiceBus.status.collectAsState()
     val busListening by OverlayVoiceBus.listening.collectAsState()
+    val busLevel by OverlayVoiceBus.level.collectAsState()
     val busResult by OverlayVoiceBus.result.collectAsState()
     val busError by OverlayVoiceBus.error.collectAsState()
     val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
@@ -927,13 +929,8 @@ private fun OverlayAssistant(
                 }
             }
         } else {
-            VoiceCapsule(
-                status = busStatus ?: voiceStatus,
-                listening = busListening,
-                onOpen = { revealed = true },
-                onClose = { dismiss() },
-                onMic = { if (busListening) revealed = true else startVoice() },
-                modifier = Modifier
+            Box(
+                Modifier
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 18.dp, vertical = 18.dp)
                     .graphicsLayer {
@@ -941,7 +938,24 @@ private fun OverlayAssistant(
                         translationY = (1f - entry.value) * 34.dp.toPx() +
                             exit.value * 34.dp.toPx()
                     },
-            )
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                if (busListening) {
+                    VoiceWave(
+                        active = true,
+                        level = busLevel,
+                        modifier = Modifier.fillMaxWidth().height(84.dp),
+                    )
+                }
+                VoiceCapsule(
+                    status = busStatus ?: voiceStatus,
+                    listening = busListening,
+                    onOpen = { revealed = true },
+                    onClose = { dismiss() },
+                    onMic = { if (busListening) revealed = true else startVoice() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         WakeStreamerLayer(
             modifier = Modifier.fillMaxSize(),

@@ -1,12 +1,10 @@
 package io.github.dryearth.solidbutler.ui.screens
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,6 +40,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -81,8 +80,10 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
+import io.github.dryearth.solidbutler.ui.components.VoiceWave
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import io.github.dryearth.solidbutler.service.AssistOverlayService
+import io.github.dryearth.solidbutler.service.SystemRecognitionSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,6 +101,11 @@ fun AssistantScreen(
     val prefs = remember { Prefs(context) }
     var input by rememberSaveable { mutableStateOf("") }
     var speakReplies by rememberSaveable { mutableStateOf(prefs.aiSpeakReplies) }
+    var speechSession by remember { mutableStateOf<SystemRecognitionSession?>(null) }
+    var speechListening by remember { mutableStateOf(false) }
+    var speechLevel by remember { mutableStateOf(0f) }
+    var speechPreview by remember { mutableStateOf("") }
+    var speechStatus by remember { mutableStateOf<String?>(null) }
     var pendingImage by remember { mutableStateOf<ImageBitmap?>(null) }
     var pendingOriginalPath by remember { mutableStateOf<String?>(null) }
     var pendingSendPath by remember { mutableStateOf<String?>(null) }
@@ -165,39 +171,49 @@ fun AssistantScreen(
         }
     }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val text = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-            if (!text.isNullOrBlank()) {
-                input = ""
-                vm.sendChat(text)
-            }
-        }
+    fun stopSpeech() {
+        speechSession?.cancel()
+        speechSession = null
+        speechListening = false
+        speechLevel = 0f
+        speechPreview = ""
+        speechStatus = null
     }
 
-    fun launchSpeech() {
-        fun build(pkg: String?): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧，汐在听")
-            if (!pkg.isNullOrBlank()) setPackage(pkg)
-        }
-        val preferred = prefs.sttPackage.takeIf { it.isNotBlank() }
-        var intent = build(preferred)
-        // A selected engine may expose only a RecognitionService and no
-        // ACTION_RECOGNIZE_SPEECH activity. Fall back to the system default.
-        if (preferred != null && intent.resolveActivity(context.packageManager) == null) {
-            intent = build(null)
-        }
-        if (intent.resolveActivity(context.packageManager) == null) {
-            Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
-            return
-        }
-        speechLauncher.launch(intent)
+    fun startSpeech() {
+        speechSession?.cancel()
+        speechPreview = ""
+        speechLevel = 0f
+        speechStatus = "正在聆听，点麦克风结束"
+        speechListening = true
+        val session = SystemRecognitionSession(
+            context = context,
+            onReady = { speechStatus = "正在聆听，点麦克风结束" },
+            onLevel = { speechLevel = it },
+            onPreview = { speechPreview = it },
+            onResult = { text ->
+                speechListening = false
+                speechLevel = 0f
+                speechPreview = ""
+                speechStatus = null
+                speechSession = null
+                vm.sendChat(text)
+            },
+            onFailure = { message ->
+                speechListening = false
+                speechLevel = 0f
+                speechPreview = ""
+                speechStatus = null
+                speechSession = null
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            },
+        )
+        speechSession = session
+        session.start()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { speechSession?.cancel() }
     }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -207,17 +223,22 @@ fun AssistantScreen(
             if (AssistOverlayService.active != null) {
                 AssistOverlayService.refreshMic(context)
             }
-            launchSpeech()
+            startSpeech()
         } else {
             Toast.makeText(context, "需要麦克风权限才能语音输入", Toast.LENGTH_SHORT).show()
         }
     }
 
     fun requestMic() {
+        if (speechListening) {
+            speechStatus = "正在识别…"
+            speechSession?.finish()
+            return
+        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            launchSpeech()
+            startSpeech()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -373,6 +394,10 @@ fun AssistantScreen(
                 pendingThumbPath = null
             },
             onMic = { requestMic() },
+            speechListening = speechListening,
+            speechLevel = speechLevel,
+            speechPreview = speechPreview,
+            speechStatus = speechStatus,
             onSend = {
                 val text = input.trim()
                 if (text.isNotEmpty() || pendingSendPath != null) {
@@ -534,6 +559,10 @@ private fun Composer(
     onPickImage: () -> Unit,
     onRemoveImage: () -> Unit,
     onMic: () -> Unit,
+    speechListening: Boolean,
+    speechLevel: Float,
+    speechPreview: String,
+    speechStatus: String?,
     onSend: () -> Unit,
 ) {
     Box(
@@ -547,6 +576,28 @@ private fun Composer(
             corner = 20.dp,
             padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         ) {
+            if (speechListening) {
+                VoiceWave(
+                    active = true,
+                    level = speechLevel,
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        speechPreview.ifBlank { speechStatus ?: "正在聆听…" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (speechPreview.isBlank()) Glass.Muted else Glass.Accent,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                    )
+                    Text(
+                        "点麦克风结束",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
             if (imagePreview != null) {
                 Box(Modifier.padding(bottom = 8.dp)) {
                     Image(
@@ -608,14 +659,16 @@ private fun Composer(
                     Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(0x0FFFFFFF))
+                        .background(
+                            if (speechListening) Color(0x22F472B6) else Color(0x0FFFFFFF),
+                        )
                         .clickable(enabled = enabled) { onMic() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Rounded.Mic,
-                        contentDescription = "语音输入",
-                        tint = if (enabled) Glass.Accent else Glass.Faint,
+                        if (speechListening) Icons.Rounded.Stop else Icons.Rounded.Mic,
+                        contentDescription = if (speechListening) "结束语音输入" else "语音输入",
+                        tint = if (speechListening) Glass.Rose else if (enabled) Glass.Accent else Glass.Faint,
                         modifier = Modifier.size(16.dp),
                     )
                 }
