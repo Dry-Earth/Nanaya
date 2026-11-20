@@ -25,6 +25,9 @@ import android.view.inputmethod.InputMethodManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -88,13 +91,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -474,40 +480,114 @@ private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) 
     Canvas(modifier) {
         val w = size.width
         val h = size.height
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(palette.auroraA, palette.auroraA.copy(alpha = palette.auroraA.alpha * 0.4f), Color.Transparent),
-                center = Offset(w * 0.12f, h * 0.18f),
-                radius = w * 0.62f,
+        if (w <= 0f || h <= 0f) return@Canvas
+        val band = 34.dp.toPx()
+        val radius = CornerRadius(30.dp.toPx())
+        // Only a soft colored rim: no filled rectangle behind the glass.
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(
+                    palette.auroraA,
+                    palette.auroraB,
+                    palette.auroraC,
+                    palette.auroraA,
+                ),
             ),
-            radius = w * 0.62f,
-            center = Offset(w * 0.12f, h * 0.18f),
+            topLeft = Offset(-band / 2f, -band / 2f),
+            size = Size(w + band, h + band),
+            cornerRadius = radius,
+            style = Stroke(width = band),
         )
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(palette.auroraB, palette.auroraB.copy(alpha = palette.auroraB.alpha * 0.4f), Color.Transparent),
-                center = Offset(w * 0.88f, h * 0.42f),
-                radius = w * 0.55f,
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(
+                    palette.auroraC.copy(alpha = palette.auroraC.alpha * 0.8f),
+                    palette.auroraA.copy(alpha = palette.auroraA.alpha * 0.8f),
+                ),
             ),
-            radius = w * 0.55f,
-            center = Offset(w * 0.88f, h * 0.42f),
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(palette.auroraC, palette.auroraC.copy(alpha = palette.auroraC.alpha * 0.4f), Color.Transparent),
-                center = Offset(w * 0.35f, h * 0.92f),
-                radius = w * 0.48f,
-            ),
-            radius = w * 0.48f,
-            center = Offset(w * 0.35f, h * 0.92f),
+            topLeft = Offset(-band / 4f, -band / 4f),
+            size = Size(w + band / 2f, h + band / 2f),
+            cornerRadius = CornerRadius(32.dp.toPx()),
+            style = Stroke(width = band / 2f),
         )
         GlassGrainPoints.forEach { p ->
             drawCircle(
-                color = palette.primaryText.copy(alpha = 0.035f),
+                color = palette.primaryText.copy(alpha = 0.025f),
                 radius = 0.6.dp.toPx(),
                 center = Offset(p.x * w, p.y * h),
             )
         }
+    }
+}
+
+@Composable
+private fun FlowingAiIcon(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "overlay-ai-icon")
+    val shift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+        label = "shift",
+    )
+    Box(
+        modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val side = size.minDimension
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF67E8F9),
+                            Color(0xFF818CF8),
+                            Color(0xFFE879F9),
+                            Color(0xFF6EE7B7),
+                            Color(0xFF67E8F9),
+                        ),
+                        start = Offset(-side + shift * side * 2f, 0f),
+                        end = Offset(shift * side * 2f, side),
+                    ),
+                    blendMode = BlendMode.SrcIn,
+                )
+            },
+    ) {
+        Icon(
+            Icons.Rounded.AutoAwesome,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun GlassIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    palette: OverlayPalette,
+    backdrop: LayerBackdrop,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(28.dp)
+            .overlayGlass(
+                backdrop = backdrop,
+                shape = CircleShape,
+                palette = palette,
+                tintAlpha = 0.20f,
+                refractionHeight = 8.dp,
+                refractionAmount = 6.dp,
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = palette.secondaryText,
+            modifier = Modifier.size(15.dp),
+        )
     }
 }
 
@@ -917,10 +997,10 @@ private fun OverlayAssistant(
                             shape = { shape },
                             effects = {
                                 lens(
-                                    refractionHeight = 26.dp.toPx(),
-                                    refractionAmount = 18.dp.toPx(),
+                                    refractionHeight = 32.dp.toPx(),
+                                    refractionAmount = 22.dp.toPx(),
                                     depthEffect = true,
-                                    chromaticAberration = 0.06f,
+                                    chromaticAberration = 0.08f,
                                 )
                             },
                             onDrawSurface = { drawRect(palette.glass) },
@@ -929,11 +1009,21 @@ private fun OverlayAssistant(
                             drawRect(
                                 Brush.verticalGradient(
                                     listOf(
-                                        Color(0x12FFFFFF),
+                                        Color(0x18FFFFFF),
                                         Color(0x06000000),
-                                        Color(0x22000000),
+                                        Color(0x2A000000),
                                     ),
                                 ),
+                            )
+                            val highlightRadius = size.width * 0.55f
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(Color(0x1FFFFFFF), Color.Transparent),
+                                    center = Offset(size.width * 0.18f, size.height * 0.04f),
+                                    radius = highlightRadius,
+                                ),
+                                radius = highlightRadius,
+                                center = Offset(size.width * 0.18f, size.height * 0.04f),
                             )
                             drawContent()
                             drawLine(
@@ -948,32 +1038,66 @@ private fun OverlayAssistant(
                         .border(
                             1.dp,
                             Brush.verticalGradient(
-                                listOf(Color(0x66FFFFFF), Color(0x1FFFFFFF), Color(0x0DFFFFFF)),
+                                listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
                             ),
                             shape,
                         )
                         .navigationBarsPadding()
                         .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 ) {
-                Box(
-                    Modifier.fillMaxWidth().height(18.dp).then(dragModifier),
-                    contentAlignment = Alignment.Center,
-                ) {
+                val expanded = panelHeightPx >
+                    minPanelPx + with(density) { 24.dp.toPx() }
+                Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
                     Box(
-                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(palette.secondaryText.copy(alpha = 0.45f)),
+                        Modifier
+                            .align(Alignment.Center)
+                            .width(38.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(palette.secondaryText.copy(alpha = 0.45f)),
                     )
+                    Row(
+                        Modifier.align(Alignment.CenterEnd),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        GlassIconButton(
+                            icon = if (expanded) {
+                                Icons.Rounded.CloseFullscreen
+                            } else {
+                                Icons.Rounded.OpenInFull
+                            },
+                            contentDescription = "展开或收起",
+                            palette = palette,
+                            backdrop = panelBackdrop,
+                        ) {
+                            scope.launch {
+                                val collapsed = panelHeightPx <=
+                                    minPanelPx + with(density) { 24.dp.toPx() }
+                                val target = if (collapsed) {
+                                    maxOf(autoTargetPx, maxPanelPx * 0.62f)
+                                } else {
+                                    minPanelPx
+                                }
+                                heightAnim.animateTo(
+                                    target.coerceIn(minPanelPx, maxPanelPx),
+                                    spring(dampingRatio = 0.86f, stiffness = 380f),
+                                )
+                            }
+                        }
+                        GlassIconButton(
+                            icon = Icons.Rounded.Close,
+                            contentDescription = "关闭",
+                            palette = palette,
+                            backdrop = panelBackdrop,
+                            onClick = { dismiss() },
+                        )
+                    }
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = dragModifier.fillMaxWidth(),
                 ) {
-                    Box(
-                        Modifier.size(32.dp).clip(CircleShape)
-                            .background(palette.ink),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Rounded.AutoAwesome, null, tint = palette.accent, modifier = Modifier.size(17.dp))
-                    }
+                    FlowingAiIcon(Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -994,36 +1118,6 @@ private fun OverlayAssistant(
                             color = if (busListening) palette.danger else palette.secondaryText,
                         )
                     }
-                    Icon(
-                        if (panelHeightPx > minPanelPx + with(density) { 24.dp.toPx() }) {
-                            Icons.Rounded.CloseFullscreen
-                        } else {
-                            Icons.Rounded.OpenInFull
-                        },
-                        contentDescription = "展开或收起",
-                        tint = palette.secondaryText,
-                        modifier = Modifier.size(19.dp).clickable {
-                            scope.launch {
-                                val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
-                                val target = if (collapsed) {
-                                    maxOf(autoTargetPx, maxPanelPx * 0.62f)
-                                } else {
-                                    minPanelPx
-                                }
-                                heightAnim.animateTo(
-                                    target.coerceIn(minPanelPx, maxPanelPx),
-                                    spring(dampingRatio = 0.86f, stiffness = 380f),
-                                )
-                            }
-                        },
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "关闭",
-                        tint = palette.secondaryText,
-                        modifier = Modifier.size(19.dp).clickable { dismiss() },
-                    )
                 }
 
                 if (state.messages.isNotEmpty()) {
@@ -1073,6 +1167,19 @@ private fun OverlayAssistant(
                                 refractionHeight = 10.dp,
                                 refractionAmount = 8.dp,
                             )
+                            .drawBehind {
+                                drawRoundRect(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(
+                                            palette.accent.copy(alpha = 0.20f),
+                                            Color.Transparent,
+                                            palette.auroraB.copy(alpha = 0.24f),
+                                        ),
+                                    ),
+                                    cornerRadius = CornerRadius(16.dp.toPx()),
+                                    style = Stroke(width = 2.dp.toPx()),
+                                )
+                            }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         if (input.isEmpty()) {
@@ -1098,8 +1205,8 @@ private fun OverlayAssistant(
                                 backdrop = panelBackdrop,
                                 shape = CircleShape,
                                 palette = palette,
-                                tint = if (busListening) palette.danger else palette.ink,
-                                tintAlpha = if (busListening) 0.30f else 0.22f,
+                                tint = if (busListening) palette.danger else palette.accent,
+                                tintAlpha = if (busListening) 0.30f else 0.16f,
                                 refractionHeight = 10.dp,
                                 refractionAmount = 8.dp,
                             )
@@ -1109,7 +1216,7 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Mic,
                             contentDescription = "语音输入",
-                            tint = if (busListening) palette.danger else palette.secondaryText,
+                            tint = if (busListening) palette.danger else palette.accent,
                             modifier = Modifier.size(17.dp),
                         )
                     }
@@ -1136,7 +1243,7 @@ private fun OverlayAssistant(
                             Icons.Rounded.Send,
                             contentDescription = "发送",
                             tint = if (input.isBlank()) palette.secondaryText.copy(alpha = 0.35f) else palette.primaryText,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(17.dp),
                         )
                     }
                 }
