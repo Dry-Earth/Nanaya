@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.ai.AiClient
 import io.github.dryearth.solidbutler.ui.components.ActionButton
+import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
@@ -173,12 +174,7 @@ fun AiSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(Color(0x0FFFFFFF)).clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
-            }
+            GlassBackButton(onClick = { onBack() })
             Spacer(Modifier.width(12.dp))
             Column {
                 Text("AI 管家设置", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)

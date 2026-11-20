@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.service.DomainFirewallService
 import io.github.dryearth.solidbutler.ui.components.ActionButton
+import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.theme.Glass
@@ -91,12 +92,7 @@ fun DomainFirewallScreen(onBack: () -> Unit) {
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(Color(0x0FFFFFFF)).clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
-                }
+                GlassBackButton(onClick = { onBack() })
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("域名过滤", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)

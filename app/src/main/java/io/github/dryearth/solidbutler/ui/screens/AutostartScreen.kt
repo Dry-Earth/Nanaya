@@ -46,6 +46,7 @@ import io.github.dryearth.solidbutler.data.AutostartApp
 import io.github.dryearth.solidbutler.data.BootComponent
 import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
+import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
@@ -75,16 +76,7 @@ fun AutostartScreen(vm: ButlerViewModel, onBack: () -> Unit, onOpenWakeup: () ->
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x0FFFFFFF))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
-            }
+            GlassBackButton(onClick = { onBack() })
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("自启与后台", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)

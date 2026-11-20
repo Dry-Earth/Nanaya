@@ -77,6 +77,7 @@ import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.TtsDefaults
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.components.ActionButton
+import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
@@ -262,16 +263,7 @@ fun AssistantScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x0FFFFFFF))
-                    .clickable { onClose() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
-            }
+            GlassBackButton(onClick = { onClose() })
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(prefs.personaName, style = MaterialTheme.typography.titleLarge, color = Glass.Text)

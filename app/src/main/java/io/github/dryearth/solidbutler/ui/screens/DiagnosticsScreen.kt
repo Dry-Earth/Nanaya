@@ -40,6 +40,7 @@ import io.github.dryearth.solidbutler.data.DiagnosticsRepository
 import io.github.dryearth.solidbutler.data.Diagnostics
 import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
+import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
@@ -64,12 +65,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(Color(0x0FFFFFFF)).clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Rounded.ArrowBack, contentDescription = "返回", tint = Glass.Muted, modifier = Modifier.size(18.dp))
-                }
+                GlassBackButton(onClick = { onBack() })
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("崩溃与 ANR", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
