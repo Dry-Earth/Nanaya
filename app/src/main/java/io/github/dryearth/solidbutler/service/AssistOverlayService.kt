@@ -476,6 +476,51 @@ private fun rememberOverlayPalette(): OverlayPalette {
 }
 
 @Composable
+private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+        val band = 34.dp.toPx()
+        val radius = CornerRadius(30.dp.toPx())
+        // Only a soft colored rim: no filled rectangle behind the glass.
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(
+                    palette.auroraA,
+                    palette.auroraB,
+                    palette.auroraC,
+                    palette.auroraA,
+                ),
+            ),
+            topLeft = Offset(-band / 2f, -band / 2f),
+            size = Size(w + band, h + band),
+            cornerRadius = radius,
+            style = Stroke(width = band),
+        )
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                listOf(
+                    palette.auroraC.copy(alpha = palette.auroraC.alpha * 0.8f),
+                    palette.auroraA.copy(alpha = palette.auroraA.alpha * 0.8f),
+                ),
+            ),
+            topLeft = Offset(-band / 4f, -band / 4f),
+            size = Size(w + band / 2f, h + band / 2f),
+            cornerRadius = CornerRadius(32.dp.toPx()),
+            style = Stroke(width = band / 2f),
+        )
+        GlassGrainPoints.forEach { p ->
+            drawCircle(
+                color = palette.primaryText.copy(alpha = 0.025f),
+                radius = 0.6.dp.toPx(),
+                center = Offset(p.x * w, p.y * h),
+            )
+        }
+    }
+}
+
+@Composable
 private fun FlowingAiIcon(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "overlay-ai-icon")
     val shift by transition.animateFloat(
@@ -556,7 +601,19 @@ private fun Modifier.overlayGlass(
     refractionAmount: Dp = 9.dp,
 ): Modifier = this
     .clip(shape)
-    .background(tint.copy(alpha = tintAlpha))
+    .drawBackdrop(
+        backdrop = backdrop,
+        shape = { shape },
+        effects = {
+            lens(
+                refractionHeight = refractionHeight.toPx(),
+                refractionAmount = refractionAmount.toPx(),
+                depthEffect = true,
+                chromaticAberration = 0.04f,
+            )
+        },
+        onDrawSurface = { drawRect(tint.copy(alpha = tintAlpha)) },
+    )
     .border(
         1.dp,
         Brush.verticalGradient(
@@ -654,7 +711,7 @@ private fun OverlayAssistant(
     val busLevel by OverlayVoiceBus.level.collectAsState()
     val busResult by OverlayVoiceBus.result.collectAsState()
     val busError by OverlayVoiceBus.error.collectAsState()
-    val shape = RoundedCornerShape(30.dp)
+    val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
 
     // Entrance: the panel rises once, the aurora blooms then settles into a
     // quiet halo that breathes with the microphone while listening.
@@ -921,37 +978,76 @@ private fun OverlayAssistant(
                 Modifier
                     .fillMaxWidth()
                     .height(with(density) { panelHeightPx.toDp() })
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
                     .graphicsLayer {
                         alpha = sheetEntry.value * (1f - exit.value)
                         translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
                             exit.value * 40.dp.toPx()
                     }
-                    .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                    .clip(shape)
-                    .background(palette.glass)
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
-                        ),
-                        shape,
-                    ),
+                    .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(shape),
             ) {
+                Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
+                    PanelAurora(palette, Modifier.matchParentSize())
+                }
                 Column(
                     Modifier
                         .matchParentSize()
+                        .drawBackdrop(
+                            backdrop = panelBackdrop,
+                            shape = { shape },
+                            effects = {
+                                lens(
+                                    refractionHeight = 32.dp.toPx(),
+                                    refractionAmount = 22.dp.toPx(),
+                                    depthEffect = true,
+                                    chromaticAberration = 0.08f,
+                                )
+                            },
+                            onDrawSurface = { drawRect(palette.glass) },
+                        )
+                        .drawWithContent {
+                            drawRect(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0x18FFFFFF),
+                                        Color(0x06000000),
+                                        Color(0x2A000000),
+                                    ),
+                                ),
+                            )
+                            val highlightRadius = size.width * 0.55f
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(Color(0x1FFFFFFF), Color.Transparent),
+                                    center = Offset(size.width * 0.18f, size.height * 0.04f),
+                                    radius = highlightRadius,
+                                ),
+                                radius = highlightRadius,
+                                center = Offset(size.width * 0.18f, size.height * 0.04f),
+                            )
+                            drawContent()
+                            drawLine(
+                                brush = Brush.horizontalGradient(
+                                    listOf(Color.Transparent, Color(0x66FFFFFF), Color.Transparent),
+                                ),
+                                start = Offset(24.dp.toPx(), 0.8f),
+                                end = Offset(size.width - 24.dp.toPx(), 0.8f),
+                                strokeWidth = 1f,
+                            )
+                        }
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
+                            ),
+                            shape,
+                        )
                         .navigationBarsPadding()
                         .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 ) {
                 val expanded = panelHeightPx >
                     minPanelPx + with(density) { 24.dp.toPx() }
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        .then(dragModifier),
-                ) {
+                Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
                     Box(
                         Modifier
                             .align(Alignment.Center)
