@@ -217,7 +217,6 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.38f))
                 .clickable { vm.closeApp() },
         )
         GlassPanel(
