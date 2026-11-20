@@ -1,6 +1,6 @@
 # AI 管家实现说明
 
-本文说明汐的 AI 管家、悬浮助手、语音链路和无线 ADB 的代码结构，方便继续开发和构建。
+本文说明 Nanaya（汐）的 AI 管家、悬浮助手、语音链路和无线 ADB 的代码结构，方便继续开发和构建。
 
 ## 入口
 
@@ -19,11 +19,13 @@ ACTION_ASSIST
 | --- | --- |
 | `ai/AiClient.kt` | OpenAI 兼容接口、模型列表、图片消息、响应解析 |
 | `ButlerViewModel.kt` | 对话状态、模型配置、动作确认、设备上下文、自动化 |
-| `ui/screens/AssistantScreen.kt` | 全屏 AI 对话、图片选择、TTS、系统语音按钮 |
+| `ui/screens/AssistantScreen.kt` | 全屏 AI 对话、图片选择、TTS、系统语音会话与聆听声波 |
 | `ui/screens/AiSettingsScreen.kt` | 接口、模型、思考强度、人设、语音、悬浮窗、开场白 |
 | `service/AssistOverlayService.kt` | 全屏悬浮窗、唤醒动画、液态玻璃面板、拖拽与自动生长 |
-| `service/OverlayVoice.kt` | 直接绑定系统语音识别服务，结果回传悬浮窗 |
+| `service/OverlayVoice.kt` | 悬浮窗语音会话，结果回传悬浮窗 |
+| `service/SystemRecognitionSession.kt` | 聊天页直接绑定 `RecognitionService`，支持预览与结束识别 |
 | `service/SystemSpeechRecognizer.kt` | 读取系统语音识别服务并选择外部引擎 |
+| `ui/components/VoiceWave.kt` | 聆听时的流动声波与呼吸光晕 |
 | `core/AdbManager.java` | 无线 ADB 配对、连接与 shell 执行 |
 | `core/Shell.kt` | Root / 无线 ADB / 普通 Shell 后端选择 |
 
@@ -44,7 +46,7 @@ ACTION_ASSIST
 - 唤醒：暗场、右侧极光、边框收缩、顶部到胶囊的流光、沿胶囊边缘流动的彩色光环、粒子爆发。
 - 语音胶囊：未交互时只显示底部胶囊；点击后展开面板。
 - 面板：上拉展开、下拉吸附、内容自动生长，超过屏幕高度后内部滚动。
-- 语音：识别结果直接发送；错误、取消、销毁时清理“正在识别”状态。
+- 语音：绑定系统 `RecognitionService`，不打开第二个语音窗口；聆听时显示流动声波和实时预览，识别结果直接发送；错误、取消、销毁时清理“正在识别”状态。
 - 玻璃：半透明底色、斜向高光、磨砂颗粒、边缘亮线和内阴影；不启用不稳定的跨窗口实时模糊。
 
 ## 语音链路
@@ -53,6 +55,7 @@ ACTION_ASSIST
 悬浮窗 / 胶囊
   → OverlayVoiceBus
   → OverlaySpeech.start()
+  → SystemRecognitionSession / OverlaySpeech
   → SystemSpeechRecognizer.create()
   → 系统配置的 RecognitionService
   → onPartialResults / onResults
