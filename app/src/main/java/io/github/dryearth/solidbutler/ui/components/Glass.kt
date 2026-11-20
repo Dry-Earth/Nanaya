@@ -254,9 +254,7 @@ fun LiquidGlassHost(content: @Composable () -> Unit) {
         drawContent()
     }
     CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
-        Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
-            content()
-        }
+        content()
     }
 }
 
