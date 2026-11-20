@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
@@ -42,7 +43,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -78,7 +78,6 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
 import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
 import io.github.dryearth.solidbutler.ui.components.liquid.lens
-import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
@@ -132,7 +131,6 @@ fun ButlerApp(
     val glassBackdrop = LocalGlassBackdrop.current
     val density = LocalDensity.current
     val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
-    val blurBandHeight = statusBarHeight + 76.dp
     val contentBackdrop = rememberLayerBackdrop {
         drawRect(Glass.Ink)
         drawContent()
@@ -252,12 +250,13 @@ fun ButlerApp(
             }
         }
         if (sub == null && !detailOpen) {
-            TopBlurBand(
+            TopRefractionSeam(
                 backdrop = contentBackdrop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(blurBandHeight)
-                    .align(Alignment.TopCenter),
+                    .height(14.dp)
+                    .align(Alignment.TopCenter)
+                    .offset(y = statusBarHeight),
             )
             Box(
                 Modifier
@@ -477,15 +476,23 @@ private fun TopBar(
 }
 
 @Composable
-private fun TopBlurBand(backdrop: LayerBackdrop, modifier: Modifier = Modifier) {
+private fun TopRefractionSeam(backdrop: LayerBackdrop, modifier: Modifier = Modifier) {
     Box(
         modifier
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawContent()
+                // A thin specular edge at the seam.
+                drawLine(
+                    color = Color(0x22FFFFFF),
+                    start = Offset(0f, size.height / 2f),
+                    end = Offset(size.width, size.height / 2f),
+                    strokeWidth = 0.8.dp.toPx(),
+                )
+                // Fade the lens strip at both edges instead of a hard band.
                 drawRect(
                     brush = Brush.verticalGradient(
-                        listOf(Color.Black, Color.Black.copy(alpha = 0.72f), Color.Transparent),
+                        listOf(Color.Transparent, Color.Black, Color.Black, Color.Transparent),
                     ),
                     blendMode = BlendMode.DstIn,
                 )
@@ -498,14 +505,11 @@ private fun TopBlurBand(backdrop: LayerBackdrop, modifier: Modifier = Modifier) 
                     backdrop = backdrop,
                     shape = { RectangleShape },
                     effects = {
-                        vibrancy()
-                        blur(12.dp.toPx(), 12.dp.toPx())
                         lens(
-                            refractionHeight = 26.dp.toPx(),
-                            refractionAmount = 20.dp.toPx(),
+                            refractionHeight = 18.dp.toPx(),
+                            refractionAmount = 14.dp.toPx(),
                         )
                     },
-                    onDrawSurface = { drawRect(Color(0x08000000)) },
                 ),
         )
     }
