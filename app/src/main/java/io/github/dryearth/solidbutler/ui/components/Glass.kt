@@ -73,6 +73,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 
+private object AmbientBitmapCache {
+    @Volatile private var key: String? = null
+    @Volatile private var bitmap: ImageBitmap? = null
+
+    fun get(cacheKey: String): ImageBitmap? =
+        if (cacheKey.isNotBlank() && cacheKey == key) bitmap else null
+
+    fun put(cacheKey: String, value: ImageBitmap) {
+        key = cacheKey
+        bitmap = value
+    }
+}
+
 @Composable
 fun AmbientBackground(
     style: String = "stars",
@@ -81,8 +94,15 @@ fun AmbientBackground(
     soften: Boolean = false,
 ) {
     val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, style, imageUri) {
-        value = if (style == "image" && imageUri.isNotBlank()) {
+    val cacheKey = if (style == "image" && imageUri.isNotBlank()) "$style|$imageUri" else ""
+    val bitmap by produceState<ImageBitmap?>(
+        initialValue = AmbientBitmapCache.get(cacheKey),
+        style,
+        imageUri,
+        cacheKey,
+    ) {
+        if (value != null) return@produceState
+        val decoded = if (style == "image" && imageUri.isNotBlank()) {
             withContext(Dispatchers.IO) {
                 runCatching {
                     val resolver = context.contentResolver
@@ -107,6 +127,10 @@ fun AmbientBackground(
                 }.getOrNull()
             }
         } else null
+        if (decoded != null && cacheKey.isNotBlank()) {
+            AmbientBitmapCache.put(cacheKey, decoded)
+        }
+        value = decoded
     }
 
     Box(Modifier.fillMaxSize()) {
