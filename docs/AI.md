@@ -51,6 +51,8 @@ ACTION_ASSIST
 
 ## 语音链路
 
+完整的调用方式、权限与排错说明见 [`VOICE.md`](VOICE.md)。
+
 ```
 悬浮窗 / 胶囊
   → OverlayVoiceBus
