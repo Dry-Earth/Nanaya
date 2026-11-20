@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,9 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -46,6 +47,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.AppFilter
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -198,37 +201,51 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
     }
 
     if (state.detail != null) {
-        ModalBottomSheet(
+        Dialog(
             onDismissRequest = { vm.closeApp() },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Color.Transparent,
-            scrimColor = Color(0x66000000),
-            dragHandle = null,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
         ) {
-            val sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+            val shape = RoundedCornerShape(32.dp)
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .clip(sheetShape)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xE6FFFFFF),
-                                Color(0xCFF4F8FF),
-                                Color(0xAAE7EEFF),
-                            ),
-                        ),
-                    )
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            listOf(Color(0xAAFFFFFF), Color(0x44FFFFFF), Color(0x1AFFFFFF)),
-                        ),
-                        sheetShape,
-                    )
-                    .padding(top = 8.dp),
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 22.dp),
+                contentAlignment = Alignment.BottomCenter,
             ) {
-                AppDetailSheet(vm, state.detail!!, caps.privileged)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.88f)
+                        .shadow(28.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                        .clip(shape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Color(0xE60B1220),
+                                    Color(0xCC111827),
+                                    Color(0xB30A0D18),
+                                ),
+                            ),
+                        )
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
+                            ),
+                            shape,
+                        ),
+                ) {
+                    AppDetailSheet(
+                        vm = vm,
+                        detail = state.detail!!,
+                        privileged = caps.privileged,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
@@ -283,14 +300,19 @@ private fun AppRow(app: AppEntry, busy: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AppDetailSheet(vm: ButlerViewModel, detail: AppDetail, privileged: Boolean) {
+private fun AppDetailSheet(
+    vm: ButlerViewModel,
+    detail: AppDetail,
+    privileged: Boolean,
+    modifier: Modifier = Modifier,
+) {
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     val security by vm.security.collectAsStateWithLifecycle()
     val blocked = security.firewallBlocked.contains(detail.app.uid)
     val app = detail.app
 
     LazyColumn(
-        Modifier.fillMaxWidth().heightIn(max = 680.dp),
+        modifier.fillMaxWidth().fillMaxHeight(),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
