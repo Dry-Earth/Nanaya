@@ -374,9 +374,35 @@ fun Pill(
     val shape = CircleShape
     Row(
         modifier = Modifier
+            .shadow(4.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
-            .background(if (selected) color.copy(alpha = 0.16f) else Color(0x0DFFFFFF))
-            .border(1.dp, if (selected) color.copy(alpha = 0.45f) else Color(0x12FFFFFF), shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        color.copy(alpha = if (selected) 0.28f else 0.10f),
+                        Color(0x16FFFFFF),
+                        color.copy(alpha = if (selected) 0.12f else 0.04f),
+                    ),
+                ),
+            )
+            .border(
+                1.dp,
+                Brush.verticalGradient(
+                    listOf(Color(0x77FFFFFF), color.copy(alpha = if (selected) 0.42f else 0.16f), Color(0x12FFFFFF)),
+                ),
+                shape,
+            )
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        listOf(Color.Transparent, Color(0x66FFFFFF), Color.Transparent),
+                    ),
+                    start = Offset(8.dp.toPx(), 0.7f),
+                    end = Offset(size.width - 8.dp.toPx(), 0.7f),
+                    strokeWidth = 1f,
+                )
+            }
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

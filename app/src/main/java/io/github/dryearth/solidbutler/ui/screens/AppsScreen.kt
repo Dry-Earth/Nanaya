@@ -1,6 +1,7 @@
 package io.github.dryearth.solidbutler.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -199,11 +201,35 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
         ModalBottomSheet(
             onDismissRequest = { vm.closeApp() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = Glass.InkSoft,
-            scrimColor = Color(0x99000000),
+            containerColor = Color.Transparent,
+            scrimColor = Color(0x66000000),
             dragHandle = null,
         ) {
-            AppDetailSheet(vm, state.detail!!, caps.privileged)
+            val sheetShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(sheetShape)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xE6FFFFFF),
+                                Color(0xCFF4F8FF),
+                                Color(0xAAE7EEFF),
+                            ),
+                        ),
+                    )
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            listOf(Color(0xAAFFFFFF), Color(0x44FFFFFF), Color(0x1AFFFFFF)),
+                        ),
+                        sheetShape,
+                    )
+                    .padding(top = 8.dp),
+            ) {
+                AppDetailSheet(vm, state.detail!!, caps.privileged)
+            }
         }
     }
 }

@@ -1227,9 +1227,9 @@ private fun VoiceCapsule(
                 shape = shape,
                 corner = 30.dp,
                 colors = listOf(
-                    Color(0x99FFFFFF),
-                    Color(0x66F4F8FF),
-                    Color(0x40E7EEFF),
+                    Color(0x66FFFFFF),
+                    Color(0x40F4F8FF),
+                    Color(0x22E7EEFF),
                 ),
             )
             .clickable { onOpen() }
