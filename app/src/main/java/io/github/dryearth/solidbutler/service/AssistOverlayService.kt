@@ -104,6 +104,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -722,6 +723,13 @@ private fun OverlayAssistant(
     val dim = remember { Animatable(0f) }
     val entrance = remember { Animatable(0f) }
     val orbit = remember { Animatable(0f) }
+    val edgeTransition = rememberInfiniteTransition(label = "panel-edge")
+    val edgeAngle by edgeTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing)),
+        label = "edgeAngle",
+    )
     val sheetEntry = remember { Animatable(0f) }
     var wakeSerial by remember { mutableIntStateOf(0) }
     var wakeToken by remember { mutableIntStateOf(0) }
@@ -1001,10 +1009,10 @@ private fun OverlayAssistant(
                             shape = { shape },
                             effects = {
                                 vibrancy()
-                                blur(5.dp.toPx(), 5.dp.toPx())
+                                blur(6.dp.toPx(), 6.dp.toPx())
                                 lens(
-                                    refractionHeight = 20.dp.toPx(),
-                                    refractionAmount = 14.dp.toPx(),
+                                    refractionHeight = 24.dp.toPx(),
+                                    refractionAmount = 16.dp.toPx(),
                                     depthEffect = true,
                                     chromaticAberration = 0f,
                                 )
@@ -1025,6 +1033,43 @@ private fun OverlayAssistant(
                                 ),
                             )
                             drawContent()
+                            val radius = 30.dp.toPx()
+                            val edge = Path().apply {
+                                addRoundRect(
+                                    RoundRect(
+                                        left = 0.8f,
+                                        top = 0.8f,
+                                        right = size.width - 0.8f,
+                                        bottom = size.height - 0.8f,
+                                        topLeftCornerRadius = CornerRadius(radius),
+                                        topRightCornerRadius = CornerRadius(radius),
+                                        bottomRightCornerRadius = CornerRadius(0f),
+                                        bottomLeftCornerRadius = CornerRadius(0f),
+                                    ),
+                                )
+                            }
+                            val center = Offset(size.width / 2f, size.height / 2f)
+                            val edgeColors = listOf(
+                                Color(0xFF67E8F9),
+                                Color(0xFF818CF8),
+                                Color(0xFFE879F9),
+                                Color(0xFF6EE7B7),
+                                Color(0xFF67E8F9),
+                            )
+                            rotate(edgeAngle, pivot = center) {
+                                drawPath(
+                                    path = edge,
+                                    brush = Brush.sweepGradient(edgeColors, center = center),
+                                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
+                                    alpha = 0.18f,
+                                )
+                                drawPath(
+                                    path = edge,
+                                    brush = Brush.sweepGradient(edgeColors, center = center),
+                                    style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round),
+                                    alpha = 0.85f,
+                                )
+                            }
                         }
                         .border(
                             1.dp,
