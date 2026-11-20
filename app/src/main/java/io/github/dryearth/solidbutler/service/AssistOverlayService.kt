@@ -1004,7 +1004,7 @@ private fun OverlayAssistant(
                             shape = { shape },
                             effects = {
                                 vibrancy()
-                                blur(8.dp.toPx(), 8.dp.toPx())
+                                blur(5.dp.toPx(), 5.dp.toPx())
                                 lens(
                                     refractionHeight = 32.dp.toPx(),
                                     refractionAmount = 22.dp.toPx(),
@@ -1027,25 +1027,7 @@ private fun OverlayAssistant(
                                     ),
                                 ),
                             )
-                            val highlightRadius = size.width * 0.55f
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    listOf(Color(0x1FFFFFFF), Color.Transparent),
-                                    center = Offset(size.width * 0.18f, size.height * 0.04f),
-                                    radius = highlightRadius,
-                                ),
-                                radius = highlightRadius,
-                                center = Offset(size.width * 0.18f, size.height * 0.04f),
-                            )
                             drawContent()
-                            drawLine(
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color.Transparent, Color(0x66FFFFFF), Color.Transparent),
-                                ),
-                                start = Offset(24.dp.toPx(), 0.8f),
-                                end = Offset(size.width - 24.dp.toPx(), 0.8f),
-                                strokeWidth = 1f,
-                            )
                         }
                         .border(
                             1.dp,
