@@ -1034,30 +1034,41 @@ private fun OverlayAssistant(
                             )
                             drawContent()
                             val radius = 30.dp.toPx()
-                            val edge = Path().apply {
-                                addRoundRect(
-                                    RoundRect(
-                                        left = 0.8f,
-                                        top = 0.8f,
-                                        right = size.width - 0.8f,
-                                        bottom = size.height - 0.8f,
-                                        topLeftCornerRadius = CornerRadius(radius),
-                                        topRightCornerRadius = CornerRadius(radius),
-                                        bottomRightCornerRadius = CornerRadius(0f),
-                                        bottomLeftCornerRadius = CornerRadius(0f),
-                                    ),
+                            val borderPath = Path().apply {
+                                moveTo(0.8f, size.height)
+                                lineTo(0.8f, radius)
+                                arcTo(
+                                    androidx.compose.ui.geometry.Rect(0.8f, 0.8f, 0.8f + radius * 2f, 0.8f + radius * 2f),
+                                    180f,
+                                    90f,
+                                    false,
                                 )
+                                lineTo(size.width - radius - 0.8f, 0.8f)
+                                arcTo(
+                                    androidx.compose.ui.geometry.Rect(
+                                        size.width - 0.8f - radius * 2f,
+                                        0.8f,
+                                        size.width - 0.8f,
+                                        0.8f + radius * 2f,
+                                    ),
+                                    270f,
+                                    90f,
+                                    false,
+                                )
+                                lineTo(size.width - 0.8f, size.height)
                             }
-                            val measure = PathMeasure().apply { setPath(edge, false) }
+                            drawPath(
+                                path = borderPath,
+                                brush = Brush.verticalGradient(
+                                    listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
+                                ),
+                                style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round),
+                            )
+                            val measure = PathMeasure().apply { setPath(borderPath, false) }
                             val length = measure.length
                             if (length > 1f) {
-                                drawPath(
-                                    path = edge,
-                                    color = Color(0x18FFFFFF),
-                                    style = Stroke(width = 1.dp.toPx()),
-                                )
                                 val head = length * edgePhase
-                                val tail = head - length * 0.28f
+                                val tail = head - length * 0.42f
                                 fun drawSegment(from: Float, to: Float) {
                                     if (to <= from + 0.5f) return
                                     val part = Path()
@@ -1074,7 +1085,7 @@ private fun OverlayAssistant(
                                                 ),
                                                 center = Offset(size.width / 2f, size.height / 2f),
                                             ),
-                                            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round),
+                                            style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round),
                                             alpha = 0.9f,
                                         )
                                     }
@@ -1085,26 +1096,8 @@ private fun OverlayAssistant(
                                     drawSegment(0f, head)
                                     drawSegment(length + tail, length)
                                 }
-                                val pos = measure.getPosition(head)
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        listOf(Color(0xCCFFF3DC), Color(0x66FF9ECB), Color.Transparent),
-                                        center = pos,
-                                        radius = 14.dp.toPx(),
-                                    ),
-                                    radius = 14.dp.toPx(),
-                                    center = pos,
-                                    alpha = 0.55f,
-                                )
                             }
                         }
-                        .border(
-                            1.dp,
-                            Brush.verticalGradient(
-                                listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
-                            ),
-                            shape,
-                        )
                         .navigationBarsPadding()
                         .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 ) {
