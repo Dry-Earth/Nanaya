@@ -575,21 +575,44 @@ private fun GlassIconButton(
     Box(
         Modifier
             .size(28.dp)
+            .shadow(
+                4.dp,
+                CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.30f),
+                spotColor = Color.Black.copy(alpha = 0.18f),
+            )
             .overlayGlass(
                 backdrop = backdrop,
                 shape = CircleShape,
                 palette = palette,
-                tintAlpha = 0.20f,
+                tintAlpha = 0.22f,
                 refractionHeight = 8.dp,
                 refractionAmount = 6.dp,
             )
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color(0x40FFFFFF),
+                            Color(0x08FFFFFF),
+                            Color(0x33000000),
+                        ),
+                    ),
+                )
+                drawCircle(
+                    brush = Brush.verticalGradient(
+                        listOf(Color(0x66FFFFFF), Color(0x1AFFFFFF), Color(0x22000000)),
+                    ),
+                    style = Stroke(width = 1.dp.toPx()),
+                )
+            }
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
-            tint = palette.secondaryText,
+            tint = palette.primaryText,
             modifier = Modifier.size(15.dp),
         )
     }
@@ -1009,6 +1032,16 @@ private fun OverlayAssistant(
                     )
                     .clip(shape),
             ) {
+                Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
+                    Canvas(Modifier.matchParentSize()) {
+                        drawRect(
+                            Brush.linearGradient(
+                                0f to palette.auroraA.copy(alpha = 0.025f),
+                                1f to palette.auroraB.copy(alpha = 0.018f),
+                            ),
+                        )
+                    }
+                }
                 Column(
                     Modifier
                         .matchParentSize()
@@ -1027,7 +1060,7 @@ private fun OverlayAssistant(
                             },
                             onDrawSurface = {
                                 drawRect(palette.glass)
-                                drawRect(Color(0x0AFFFFFF))
+                                drawRect(Color(0x18FFFFFF))
                             },
                         )
                         .drawWithContent {
@@ -1118,7 +1151,10 @@ private fun OverlayAssistant(
                             .clip(CircleShape)
                             .background(palette.secondaryText.copy(alpha = 0.45f)),
                     )
-                    Box(Modifier.align(Alignment.CenterEnd)) {
+                    Box(
+                        Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         GlassIconButton(
                             icon = Icons.Rounded.DeleteSweep,
                             contentDescription = "清除对话",
