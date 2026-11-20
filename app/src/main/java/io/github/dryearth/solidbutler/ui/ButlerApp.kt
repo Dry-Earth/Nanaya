@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,6 +45,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.runtime.remember
@@ -58,11 +61,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -83,6 +89,8 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
 import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
 import io.github.dryearth.solidbutler.ui.screens.AiSettingsScreen
@@ -287,25 +295,10 @@ fun ButlerApp(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                GlassPanel(
-                    modifier = Modifier.size(44.dp),
-                    corner = 22.dp,
-                    padding = PaddingValues(0.dp),
-                    strongGlass = true,
-                    backdropOverride = contentBackdrop,
-                ) {
-                    Box(
-                        Modifier.fillMaxSize().clickable { chat = true },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Rounded.AutoAwesome,
-                            contentDescription = "AI 管家",
-                            tint = Glass.Accent,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+                AiGlassButton(
+                    backdrop = contentBackdrop,
+                    onClick = { chat = true },
+                )
             }
         }
         if (!detailOpen) {
@@ -455,6 +448,81 @@ private fun BreathingDot(ready: Boolean, active: Boolean) {
 }
 
 @Composable
+private fun FlowingAiIcon(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "ai-icon-flow")
+    val shift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+        label = "shift",
+    )
+    Box(
+        modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val side = size.minDimension
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF67E8F9),
+                            Color(0xFF818CF8),
+                            Color(0xFFE879F9),
+                            Color(0xFF6EE7B7),
+                            Color(0xFF67E8F9),
+                        ),
+                        start = Offset(-side + shift * side * 2f, 0f),
+                        end = Offset(shift * side * 2f, side),
+                    ),
+                    blendMode = BlendMode.SrcIn,
+                )
+            },
+    ) {
+        Icon(
+            Icons.Rounded.AutoAwesome,
+            contentDescription = "AI 管家",
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
+    val shape = CircleShape
+    Box(
+        Modifier
+            .size(46.dp)
+            .shadow(10.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .clip(shape)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(6.dp.toPx(), 6.dp.toPx())
+                    lens(
+                        refractionHeight = 24.dp.toPx(),
+                        refractionAmount = 22.dp.toPx(),
+                    )
+                },
+                onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
+            )
+            .border(
+                1.dp,
+                Brush.verticalGradient(
+                    listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
+                ),
+                shape,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        FlowingAiIcon(Modifier.size(22.dp))
+    }
+}
+
+@Composable
 private fun AiStatusLight(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "ai-status-light")
     val sweep by transition.animateFloat(
@@ -534,7 +602,7 @@ private fun RowScope.BarItem(item: NavItem, selected: Boolean, onClick: () -> Un
             .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
             .background(if (selected) Color(0x10FFFFFF) else Color.Transparent)
-            .padding(vertical = 7.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
@@ -575,7 +643,7 @@ private fun TopBar(
                 )
             }
             IconButton(onClick = onChat) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = "AI 管家", tint = Glass.Accent)
+                FlowingAiIcon(modifier = Modifier.size(24.dp))
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -618,8 +686,8 @@ private fun BottomBar(
         contentAlignment = Alignment.Center,
     ) {
         GlassPanel(
-            modifier = Modifier.fillMaxWidth().height(66.dp),
-            corner = 33.dp,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            corner = 28.dp,
             padding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
             strongGlass = true,
             backdropOverride = backdrop,

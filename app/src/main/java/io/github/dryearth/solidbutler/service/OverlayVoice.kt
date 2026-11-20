@@ -3,12 +3,11 @@ package io.github.dryearth.solidbutler.service
 import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import androidx.core.content.ContextCompat
+import io.github.dryearth.solidbutler.core.MicPermission
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Bridge between the speech recognizer and the overlay window. */
@@ -44,10 +43,8 @@ object OverlaySpeech {
         OverlayVoiceBus.status.value = "正在聆听…"
 
         val app = context.applicationContext
-        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            fail("麦克风未授权")
+        if (!MicPermission.granted(app)) {
+            fail("麦克风未授权，请到 设置 → 权限与授权 开启")
             return
         }
 
@@ -150,7 +147,7 @@ object OverlaySpeech {
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没有听清，再试一次"
                 SpeechRecognizer.ERROR_NETWORK,
                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "识别服务网络错误"
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "麦克风权限不足"
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "识别服务缺少麦克风权限，请在系统设置里允许"
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "识别器忙，稍后再试"
                 SpeechRecognizer.ERROR_CLIENT -> "识别客户端异常，请重试"
                 else -> "识别失败：$error"

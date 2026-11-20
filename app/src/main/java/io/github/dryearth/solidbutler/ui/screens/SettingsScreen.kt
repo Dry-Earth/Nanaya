@@ -60,7 +60,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -69,6 +68,7 @@ import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.core.AdbManager
 import io.github.dryearth.solidbutler.core.Capabilities
+import io.github.dryearth.solidbutler.core.MicPermission
 import io.github.dryearth.solidbutler.core.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -808,8 +808,7 @@ private fun PermissionSection(vm: ButlerViewModel) {
     ) { version++ }
 
     val states = remember(version) {
-        val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
+        val mic = MicPermission.granted(context)
         val notifications = NotificationManagerCompat.from(context).areNotificationsEnabled()
         val overlay = Settings.canDrawOverlays(context)
         val usage = hasUsageAccess(context)

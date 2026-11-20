@@ -117,6 +117,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import io.github.dryearth.solidbutler.core.MicPermission
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.SystemSounds
 import io.github.dryearth.solidbutler.core.TtsDefaults
@@ -165,8 +166,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         active = this
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
-            val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
+            val mic = MicPermission.granted(this)
             val type = if (mic) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -180,12 +180,37 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_REFRESH_MIC) {
+            upgradeMicrophoneType()
+            if (view == null) showWindow()
+            return START_NOT_STICKY
+        }
         if (intent?.getBooleanExtra(EXTRA_VOICE, false) == true) {
             autoVoice = true
             SystemSounds.play(this, Prefs(this).wakeSoundUri)
         }
         if (view == null) showWindow()
         return START_NOT_STICKY
+    }
+
+    /**
+     * Android 11+ only lets a background service record when its foreground
+     * service type includes microphone. The service may have started before
+     * the user granted RECORD_AUDIO, so refresh the type after the grant.
+     */
+    private fun upgradeMicrophoneType() {
+        if (Build.VERSION.SDK_INT < 34) return
+        val base = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        val type = if (MicPermission.granted(this)) {
+            base or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            base
+        }
+        runCatching {
+            startForeground(NOTIFICATION_ID, notification(), type)
+        }.onFailure {
+            runCatching { startForeground(NOTIFICATION_ID, notification()) }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -292,6 +317,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         private const val CHANNEL_ID = "xi_assist_overlay"
         private const val NOTIFICATION_ID = 12003
         private const val EXTRA_VOICE = "xi_voice"
+        private const val ACTION_REFRESH_MIC = "xi_refresh_mic"
 
         @Volatile
         var active: AssistOverlayService? = null
@@ -304,6 +330,16 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             else context.startService(intent)
             true
         }.getOrDefault(false)
+
+        /** Re-apply the microphone foreground type after RECORD_AUDIO is granted. */
+        fun refreshMic(context: android.content.Context) {
+            runCatching {
+                val intent = Intent(context, AssistOverlayService::class.java)
+                    .setAction(ACTION_REFRESH_MIC)
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
+                else context.startService(intent)
+            }
+        }
     }
 }
 
@@ -498,14 +534,13 @@ private fun OverlayAssistant(
     }
 
     fun startVoice() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            voiceStatus = "麦克风未授权，请先在完整对话里授权"
+        if (!MicPermission.granted(context)) {
+            voiceStatus = "麦克风未授权，请在 设置 → 权限与授权 开启"
             revealed = true
             Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
+        upgradeMicrophoneType()
         voiceStatus = "正在启动语音…"
         try {
             ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {

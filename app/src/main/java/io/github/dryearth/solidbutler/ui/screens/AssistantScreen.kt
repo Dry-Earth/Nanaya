@@ -3,9 +3,9 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
@@ -68,12 +68,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatImageStore
 import io.github.dryearth.solidbutler.data.ChatMessage
+import io.github.dryearth.solidbutler.core.MicPermission
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.TtsDefaults
 import io.github.dryearth.solidbutler.data.ChatRole
@@ -82,6 +82,7 @@ import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import io.github.dryearth.solidbutler.service.AssistOverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -192,18 +193,47 @@ fun AssistantScreen(
         speechLauncher.launch(intent)
     }
 
+    fun openAppSettings() {
+        runCatching {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${context.packageName}"),
+                ),
+            )
+        }.onFailure {
+            Toast.makeText(context, "请到系统设置里开启麦克风权限", Toast.LENGTH_LONG).show()
+        }
+    }
+
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) launchSpeech() else {
-            Toast.makeText(context, "需要麦克风权限才能语音输入", Toast.LENGTH_SHORT).show()
+        if (granted) {
+            if (AssistOverlayService.active != null) {
+                AssistOverlayService.refreshMic(context)
+            }
+            launchSpeech()
+        } else {
+            val activity = context as? Activity
+            val canAskAgain = activity?.shouldShowRequestPermissionRationale(
+                Manifest.permission.RECORD_AUDIO,
+            ) ?: false
+            if (!canAskAgain) {
+                Toast.makeText(
+                    context,
+                    "麦克风权限被系统拒绝，正在打开应用设置",
+                    Toast.LENGTH_LONG,
+                ).show()
+                openAppSettings()
+            } else {
+                Toast.makeText(context, "语音输入需要麦克风权限", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     fun requestMic() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (MicPermission.granted(context)) {
             launchSpeech()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
