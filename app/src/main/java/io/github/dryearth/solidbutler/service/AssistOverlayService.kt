@@ -63,6 +63,8 @@ import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -93,11 +95,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -129,7 +134,6 @@ import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 import io.github.dryearth.solidbutler.ui.components.liquid.lens
-import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -384,29 +388,103 @@ private val GlassGrainPoints = List(56) { i ->
 }
 
 /** Frosted liquid-glass surface: translucency, specular sweep and fine grain. */
-private val PanelTextShadow = Shadow(
-    color = Color(0x99000000),
-    offset = Offset(0f, 1.5f),
-    blurRadius = 3.5f,
+private data class OverlayPalette(
+    val glass: Color,
+    val primaryText: Color,
+    val secondaryText: Color,
+    val accent: Color,
+    val danger: Color,
+    val ink: Color,
+    val inputInk: Color,
+    val onPrimary: Color,
+    val shadow: Shadow,
+    val auroraA: Color,
+    val auroraB: Color,
+    val auroraC: Color,
 )
 
+private fun contrastRatio(a: Color, b: Color): Float {
+    val x = a.luminance()
+    val y = b.luminance()
+    val light = maxOf(x, y)
+    val dark = minOf(x, y)
+    return (light + 0.05f) / (dark + 0.05f)
+}
+
+/**
+ * The glass is translucent, so text must survive both a bright and a dark
+ * backdrop. Check the candidate against the tint composited over black, white
+ * and mid grey, then fall back to white or near-black when needed.
+ */
+private fun ensureContrast(preferred: Color, tint: Color, minRatio: Float): Color {
+    val samples = listOf(
+        tint.compositeOver(Color.Black),
+        tint.compositeOver(Color.White),
+        tint.compositeOver(Color(0xFF808080)),
+    )
+    fun score(color: Color): Float = samples.minOf { contrastRatio(color, it) }
+    if (score(preferred) >= minRatio) return preferred
+    val light = Color(0xFFF7F8FC)
+    val dark = Color(0xFF0B0B0D)
+    return if (score(light) >= score(dark)) light else dark
+}
+
 @Composable
-private fun PanelAurora(modifier: Modifier = Modifier) {
+private fun rememberOverlayPalette(): OverlayPalette {
+    val context = LocalContext.current
+    val scheme = runCatching { dynamicDarkColorScheme(context) }
+        .getOrElse { darkColorScheme() }
+    val glass = scheme.surfaceContainer.copy(alpha = 0.22f)
+    val primary = ensureContrast(scheme.onSurface, glass, 4.5f)
+    val secondaryCandidate = ensureContrast(scheme.onSurfaceVariant, glass, 3.0f)
+    val secondary = if (contrastRatio(secondaryCandidate, primary) < 1.15f) {
+        primary.copy(alpha = 0.72f)
+    } else {
+        secondaryCandidate
+    }
+    val accent = scheme.primary
+    val danger = scheme.error
+    val onPrimary = if (primary.luminance() > 0.5f) Color(0xFF0B0B0D) else Color(0xFFF7F8FC)
+    val shadow = Shadow(
+        color = if (primary.luminance() > 0.5f) Color(0x99000000) else Color(0x66FFFFFF),
+        offset = Offset(0f, 1.5f),
+        blurRadius = 3.5f,
+    )
+    return remember(scheme, glass, primary, secondary, accent, danger) {
+        OverlayPalette(
+            glass = glass,
+            primaryText = primary,
+            secondaryText = secondary,
+            accent = accent,
+            danger = danger,
+            ink = scheme.surfaceContainerHighest.copy(alpha = 0.20f),
+            inputInk = scheme.surfaceContainerHigh.copy(alpha = 0.24f),
+            onPrimary = onPrimary,
+            shadow = shadow,
+            auroraA = scheme.primary.copy(alpha = 0.055f),
+            auroraB = scheme.tertiary.copy(alpha = 0.045f),
+            auroraC = scheme.secondary.copy(alpha = 0.035f),
+        )
+    }
+}
+
+@Composable
+private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
         drawRect(
             Brush.verticalGradient(
                 listOf(
-                    Color(0x1A4F8BFF),
-                    Color(0x080B1220),
-                    Color(0x14A78BFA),
+                    palette.auroraA,
+                    Color.Transparent,
+                    palette.auroraB,
                 ),
             ),
         )
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Color(0x2E4F8BFF), Color(0x0F4F8BFF), Color.Transparent),
+                listOf(palette.auroraA, palette.auroraA.copy(alpha = palette.auroraA.alpha * 0.4f), Color.Transparent),
                 center = Offset(w * 0.12f, h * 0.18f),
                 radius = w * 0.62f,
             ),
@@ -415,7 +493,7 @@ private fun PanelAurora(modifier: Modifier = Modifier) {
         )
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Color(0x26A78BFA), Color(0x0CA78BFA), Color.Transparent),
+                listOf(palette.auroraB, palette.auroraB.copy(alpha = palette.auroraB.alpha * 0.4f), Color.Transparent),
                 center = Offset(w * 0.88f, h * 0.42f),
                 radius = w * 0.55f,
             ),
@@ -424,7 +502,7 @@ private fun PanelAurora(modifier: Modifier = Modifier) {
         )
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Color(0x1FFF7AC6), Color(0x08FF7AC6), Color.Transparent),
+                listOf(palette.auroraC, palette.auroraC.copy(alpha = palette.auroraC.alpha * 0.4f), Color.Transparent),
                 center = Offset(w * 0.35f, h * 0.92f),
                 radius = w * 0.48f,
             ),
@@ -433,7 +511,7 @@ private fun PanelAurora(modifier: Modifier = Modifier) {
         )
         GlassGrainPoints.forEach { p ->
             drawCircle(
-                color = Color.White.copy(alpha = 0.035f),
+                color = palette.primaryText.copy(alpha = 0.035f),
                 radius = 0.6.dp.toPx(),
                 center = Offset(p.x * w, p.y * h),
             )
@@ -519,6 +597,7 @@ private fun OverlayAssistant(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val palette = rememberOverlayPalette()
     val scope = rememberCoroutineScope()
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
@@ -805,7 +884,7 @@ private fun OverlayAssistant(
                     .clip(shape),
             ) {
                 Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
-                    PanelAurora(Modifier.matchParentSize())
+                    PanelAurora(palette, Modifier.matchParentSize())
                 }
                 Column(
                     Modifier
@@ -814,15 +893,14 @@ private fun OverlayAssistant(
                             backdrop = panelBackdrop,
                             shape = { shape },
                             effects = {
-                                vibrancy()
                                 lens(
                                     refractionHeight = 26.dp.toPx(),
                                     refractionAmount = 18.dp.toPx(),
                                     depthEffect = true,
-                                    chromaticAberration = 0.22f,
+                                    chromaticAberration = 0.06f,
                                 )
                             },
-                            onDrawSurface = { drawRect(Color(0x2E0B1220)) },
+                            onDrawSurface = { drawRect(palette.glass) },
                         )
                         .drawWithContent {
                             drawRect(
@@ -859,7 +937,7 @@ private fun OverlayAssistant(
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x55FFFFFF)),
+                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(palette.secondaryText.copy(alpha = 0.45f)),
                     )
                 }
                 Row(
@@ -868,10 +946,10 @@ private fun OverlayAssistant(
                 ) {
                     Box(
                         Modifier.size(32.dp).clip(CircleShape)
-                            .background(Color(0x1FFFFFFF)),
+                            .background(palette.ink),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFFDCE8FF), modifier = Modifier.size(17.dp))
+                        Icon(Icons.Rounded.AutoAwesome, null, tint = palette.accent, modifier = Modifier.size(17.dp))
                     }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
@@ -879,9 +957,9 @@ private fun OverlayAssistant(
                             vm.prefs.personaName,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                shadow = PanelTextShadow,
+                                shadow = palette.shadow,
                             ),
-                            color = Color(0xFFF4F8FF),
+                            color = palette.primaryText,
                         )
                         Text(
                             when {
@@ -890,7 +968,7 @@ private fun OverlayAssistant(
                                 else -> "悬浮助手 · 尚未配置模型"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
+                            color = if (busListening) palette.danger else palette.secondaryText,
                         )
                     }
                     Icon(
@@ -900,7 +978,7 @@ private fun OverlayAssistant(
                             Icons.Rounded.OpenInFull
                         },
                         contentDescription = "展开或收起",
-                        tint = Color(0xB3DCE8FF),
+                        tint = palette.secondaryText,
                         modifier = Modifier.size(19.dp).clickable {
                             scope.launch {
                                 val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
@@ -920,7 +998,7 @@ private fun OverlayAssistant(
                     Icon(
                         Icons.Rounded.Close,
                         contentDescription = "关闭",
-                        tint = Color(0xB3DCE8FF),
+                        tint = palette.secondaryText,
                         modifier = Modifier.size(19.dp).clickable { dismiss() },
                     )
                 }
@@ -936,7 +1014,7 @@ private fun OverlayAssistant(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 state.messages.takeLast(8).forEach { msg ->
-                                    OverlayBubble(vm, msg)
+                                    OverlayBubble(vm, msg, palette)
                                 }
                             }
                         }
@@ -946,7 +1024,7 @@ private fun OverlayAssistant(
                     Text(
                         "直接说或输入。上拉面板看历史，下拉收回到这里。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xB3DCE8FF),
+                        color = palette.secondaryText,
                     )
                 }
 
@@ -955,7 +1033,7 @@ private fun OverlayAssistant(
                     Text(
                         it,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
+                        color = if (busListening) palette.danger else palette.secondaryText,
                         maxLines = 1,
                     )
                 }
@@ -963,22 +1041,22 @@ private fun OverlayAssistant(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                            .background(Color(0x1FFFFFFF))
-                            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(16.dp))
+                            .background(palette.inputInk)
+                            .border(1.dp, palette.secondaryText.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         if (input.isEmpty()) {
-                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x66E6EEFF))
+                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = palette.secondaryText.copy(alpha = 0.55f))
                         }
                         BasicTextField(
                             value = input,
                             onValueChange = { input = it },
                             textStyle = TextStyle(
-                                color = Color(0xFFF4F8FF),
+                                color = palette.primaryText,
                                 fontSize = 13.sp,
-                                shadow = PanelTextShadow,
+                                shadow = palette.shadow,
                             ),
-                            cursorBrush = SolidColor(Color(0xFF9FC0FF)),
+                            cursorBrush = SolidColor(palette.accent),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -986,10 +1064,10 @@ private fun OverlayAssistant(
                     Spacer(Modifier.width(6.dp))
                     Box(
                         Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (busListening) Color(0x44D85B5B) else Color(0x1FFFFFFF))
+                            .background(if (busListening) palette.danger.copy(alpha = 0.22f) else palette.ink)
                             .border(
                                 width = if (busListening) 1.5.dp else 0.dp,
-                                color = if (busListening) Color(0x99D85B5B) else Color.Transparent,
+                                color = if (busListening) palette.danger.copy(alpha = 0.60f) else Color.Transparent,
                                 shape = CircleShape,
                             )
                             .clickable { startVoice() },
@@ -998,14 +1076,14 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Mic,
                             contentDescription = "语音输入",
-                            tint = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
+                            tint = if (busListening) palette.danger else palette.secondaryText,
                             modifier = Modifier.size(17.dp),
                         )
                     }
                     Spacer(Modifier.width(6.dp))
                     Box(
                         Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (input.isBlank()) Color(0x14FFFFFF) else Color(0xFFE6EEFF))
+                            .background(if (input.isBlank()) palette.ink.copy(alpha = 0.55f) else palette.primaryText)
                             .clickable(enabled = input.isNotBlank()) {
                                 val text = input.trim()
                                 input = ""
@@ -1016,7 +1094,7 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Send,
                             contentDescription = "发送",
-                            tint = if (input.isBlank()) Color(0x4DE6EEFF) else Color(0xFF0B1220),
+                            tint = if (input.isBlank()) palette.secondaryText.copy(alpha = 0.35f) else palette.onPrimary,
                             modifier = Modifier.size(16.dp),
                         )
                     }
@@ -1026,13 +1104,13 @@ private fun OverlayAssistant(
                     Text(
                         "上拉展开 · 下拉收起",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0x73DCE8FF),
+                        color = palette.secondaryText.copy(alpha = 0.70f),
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         "完整对话",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF9FC0FF),
+                        color = palette.accent,
                         modifier = Modifier.clickable {
                             runCatching {
                                 context.startActivity(
@@ -1463,7 +1541,7 @@ private fun VoiceCapsule(
 }
 
 @Composable
-private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
+private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage, palette: OverlayPalette) {
     val isUser = msg.role == ChatRole.USER
     Row(
         Modifier.fillMaxWidth(),
@@ -1473,13 +1551,15 @@ private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
             Modifier
                 .fillMaxWidth(0.9f)
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (isUser) Color(0x2EFFFFFF) else Color(0x14FFFFFF))
+                .background(
+                    if (isUser) palette.ink.copy(alpha = 0.34f) else palette.ink.copy(alpha = 0.18f),
+                )
                 .padding(10.dp),
         ) {
             Text(
                 msg.text,
-                style = MaterialTheme.typography.bodySmall.copy(shadow = PanelTextShadow),
-                color = Color(0xFFF4F8FF),
+                style = MaterialTheme.typography.bodySmall.copy(shadow = palette.shadow),
+                color = palette.primaryText,
             )
             val action = msg.action
             if (action != null && msg.actionState == ActionState.PENDING) {
@@ -1487,27 +1567,27 @@ private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
                 Text(
                     action.title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF9FC0FF),
+                    color = palette.accent,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "执行",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFF4F8FF),
+                        color = palette.primaryText,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x2EFFFFFF))
+                            .background(palette.inputInk)
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                             .clickable { vm.confirmAction(msg.id) },
                     )
                     Text(
                         "取消",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xB3DCE8FF),
+                        color = palette.secondaryText,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x14FFFFFF))
+                            .background(palette.ink.copy(alpha = 0.5f))
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                             .clickable { vm.rejectAction(msg.id) },
                     )
