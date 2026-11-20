@@ -993,9 +993,6 @@ private fun OverlayAssistant(
                     )
                     .clip(shape),
             ) {
-                Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
-                    PanelAurora(palette, Modifier.matchParentSize())
-                }
                 Column(
                     Modifier
                         .matchParentSize()
@@ -1006,10 +1003,10 @@ private fun OverlayAssistant(
                                 vibrancy()
                                 blur(5.dp.toPx(), 5.dp.toPx())
                                 lens(
-                                    refractionHeight = 32.dp.toPx(),
-                                    refractionAmount = 22.dp.toPx(),
+                                    refractionHeight = 20.dp.toPx(),
+                                    refractionAmount = 14.dp.toPx(),
                                     depthEffect = true,
-                                    chromaticAberration = 0.08f,
+                                    chromaticAberration = 0f,
                                 )
                             },
                             onDrawSurface = {
