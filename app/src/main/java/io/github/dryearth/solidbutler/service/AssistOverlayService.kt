@@ -969,7 +969,7 @@ private fun OverlayAssistant(
                     .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                     .clip(shape),
             ) {
-                if (diagMode != 3) {
+                if (diagMode != 3 && diagMode != 5) {
                     Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
                         PanelAurora(palette, Modifier.matchParentSize())
                     }
@@ -981,7 +981,7 @@ private fun OverlayAssistant(
                             backdrop = panelBackdrop,
                             shape = { shape },
                             effects = {
-                                if (diagMode != 4) {
+                                if (diagMode != 4 && diagMode != 5) {
                                     lens(
                                         refractionHeight = 16.dp.toPx(),
                                         refractionAmount = 10.dp.toPx(),
@@ -991,11 +991,15 @@ private fun OverlayAssistant(
                                 }
                             },
                             onDrawSurface = {
-                                if (diagMode != 1) drawRect(palette.glass)
+                                when (diagMode) {
+                                    1 -> Unit
+                                    5 -> drawRect(Color(0xFFFF00FF))
+                                    else -> drawRect(palette.glass)
+                                }
                             },
                         )
                         .drawWithContent {
-                            if (diagMode != 2) {
+                            if (diagMode != 2 && diagMode != 5) {
                                 drawRect(
                                     Brush.verticalGradient(
                                         listOf(
@@ -1036,12 +1040,13 @@ private fun OverlayAssistant(
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = {
-                                    diagMode = (diagMode + 1) % 5
+                                    diagMode = (diagMode + 1) % 6
                                     val label = when (diagMode) {
                                         1 -> "隐藏玻璃底色"
                                         2 -> "隐藏纵向渐变"
                                         3 -> "隐藏极光层"
                                         4 -> "隐藏 lens"
+                                        5 -> "不透明品红测试"
                                         else -> "恢复正常"
                                     }
                                     Toast.makeText(
@@ -1263,6 +1268,7 @@ private fun OverlayAssistant(
                                 2 -> "隐藏纵向渐变"
                                 3 -> "隐藏极光层"
                                 4 -> "隐藏 lens"
+                                5 -> "不透明品红测试"
                                 else -> "正常"
                             }
                         },
