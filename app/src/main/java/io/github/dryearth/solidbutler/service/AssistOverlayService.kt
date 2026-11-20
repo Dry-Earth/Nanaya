@@ -134,6 +134,7 @@ import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -325,7 +326,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     private fun notification(): Notification =
         Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("汐 · 悬浮助手")
+            .setContentTitle("${Prefs(this).personaName} · 悬浮助手")
             .setContentText("数字助理悬浮窗正在运行")
             .setOngoing(true)
             .build()
@@ -473,15 +474,6 @@ private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) 
     Canvas(modifier) {
         val w = size.width
         val h = size.height
-        drawRect(
-            Brush.verticalGradient(
-                listOf(
-                    palette.auroraA,
-                    Color.Transparent,
-                    palette.auroraB,
-                ),
-            ),
-        )
         drawCircle(
             brush = Brush.radialGradient(
                 listOf(palette.auroraA, palette.auroraA.copy(alpha = palette.auroraA.alpha * 0.4f), Color.Transparent),
@@ -518,6 +510,37 @@ private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) 
         }
     }
 }
+
+private fun Modifier.overlayGlass(
+    backdrop: LayerBackdrop,
+    shape: Shape,
+    palette: OverlayPalette,
+    tint: Color = palette.ink,
+    tintAlpha: Float = 0.24f,
+    refractionHeight: Dp = 12.dp,
+    refractionAmount: Dp = 9.dp,
+): Modifier = this
+    .clip(shape)
+    .drawBackdrop(
+        backdrop = backdrop,
+        shape = { shape },
+        effects = {
+            lens(
+                refractionHeight = refractionHeight.toPx(),
+                refractionAmount = refractionAmount.toPx(),
+                depthEffect = true,
+                chromaticAberration = 0.04f,
+            )
+        },
+        onDrawSurface = { drawRect(tint.copy(alpha = tintAlpha)) },
+    )
+    .border(
+        1.dp,
+        Brush.verticalGradient(
+            listOf(Color(0x55FFFFFF), Color(0x1AFFFFFF), Color(0x0DFFFFFF)),
+        ),
+        shape,
+    )
 
 private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>): Modifier =
     this
@@ -1014,7 +1037,7 @@ private fun OverlayAssistant(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 state.messages.takeLast(8).forEach { msg ->
-                                    OverlayBubble(vm, msg, palette)
+                                    OverlayBubble(vm, msg, palette, panelBackdrop)
                                 }
                             }
                         }
@@ -1040,13 +1063,20 @@ private fun OverlayAssistant(
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                            .background(palette.inputInk)
-                            .border(1.dp, palette.secondaryText.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+                        Modifier.weight(1f)
+                            .overlayGlass(
+                                backdrop = panelBackdrop,
+                                shape = RoundedCornerShape(16.dp),
+                                palette = palette,
+                                tint = palette.inputInk,
+                                tintAlpha = 0.28f,
+                                refractionHeight = 10.dp,
+                                refractionAmount = 8.dp,
+                            )
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         if (input.isEmpty()) {
-                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = palette.secondaryText.copy(alpha = 0.55f))
+                            Text("问${vm.prefs.personaName}…", style = MaterialTheme.typography.bodySmall, color = palette.secondaryText.copy(alpha = 0.55f))
                         }
                         BasicTextField(
                             value = input,
@@ -1063,12 +1093,15 @@ private fun OverlayAssistant(
                     }
                     Spacer(Modifier.width(6.dp))
                     Box(
-                        Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (busListening) palette.danger.copy(alpha = 0.22f) else palette.ink)
-                            .border(
-                                width = if (busListening) 1.5.dp else 0.dp,
-                                color = if (busListening) palette.danger.copy(alpha = 0.60f) else Color.Transparent,
+                        Modifier.size(36.dp)
+                            .overlayGlass(
+                                backdrop = panelBackdrop,
                                 shape = CircleShape,
+                                palette = palette,
+                                tint = if (busListening) palette.danger else palette.ink,
+                                tintAlpha = if (busListening) 0.30f else 0.22f,
+                                refractionHeight = 10.dp,
+                                refractionAmount = 8.dp,
                             )
                             .clickable { startVoice() },
                         contentAlignment = Alignment.Center,
@@ -1082,8 +1115,16 @@ private fun OverlayAssistant(
                     }
                     Spacer(Modifier.width(6.dp))
                     Box(
-                        Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (input.isBlank()) palette.ink.copy(alpha = 0.55f) else palette.primaryText)
+                        Modifier.size(36.dp)
+                            .overlayGlass(
+                                backdrop = panelBackdrop,
+                                shape = CircleShape,
+                                palette = palette,
+                                tint = if (input.isBlank()) palette.ink else palette.accent,
+                                tintAlpha = if (input.isBlank()) 0.18f else 0.30f,
+                                refractionHeight = 10.dp,
+                                refractionAmount = 8.dp,
+                            )
                             .clickable(enabled = input.isNotBlank()) {
                                 val text = input.trim()
                                 input = ""
@@ -1094,7 +1135,7 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Send,
                             contentDescription = "发送",
-                            tint = if (input.isBlank()) palette.secondaryText.copy(alpha = 0.35f) else palette.onPrimary,
+                            tint = if (input.isBlank()) palette.secondaryText.copy(alpha = 0.35f) else palette.primaryText,
                             modifier = Modifier.size(16.dp),
                         )
                     }
@@ -1149,6 +1190,7 @@ private fun OverlayAssistant(
                     )
                 }
                 VoiceCapsule(
+                    assistantName = vm.prefs.personaName,
                     status = busStatus ?: voiceStatus,
                     listening = busListening,
                     onOpen = { revealed = true },
@@ -1468,6 +1510,7 @@ private fun WakeStreamerLayer(
 /** Compact voice-first capsule shown before the conversation sheet opens. */
 @Composable
 private fun VoiceCapsule(
+    assistantName: String,
     status: String?,
     listening: Boolean,
     onOpen: () -> Unit,
@@ -1518,7 +1561,7 @@ private fun VoiceCapsule(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                if (listening) "汐在听…" else "轻触打开面板",
+                if (listening) "${assistantName}在听…" else "轻触打开面板",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = Color(0xFF0B1220),
                 maxLines = 1,
@@ -1541,7 +1584,12 @@ private fun VoiceCapsule(
 }
 
 @Composable
-private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage, palette: OverlayPalette) {
+private fun OverlayBubble(
+    vm: ButlerViewModel,
+    msg: ChatMessage,
+    palette: OverlayPalette,
+    backdrop: LayerBackdrop,
+) {
     val isUser = msg.role == ChatRole.USER
     Row(
         Modifier.fillMaxWidth(),
@@ -1550,9 +1598,13 @@ private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage, palette: Overla
         Column(
             Modifier
                 .fillMaxWidth(0.9f)
-                .clip(RoundedCornerShape(14.dp))
-                .background(
-                    if (isUser) palette.ink.copy(alpha = 0.34f) else palette.ink.copy(alpha = 0.18f),
+                .overlayGlass(
+                    backdrop = backdrop,
+                    shape = RoundedCornerShape(14.dp),
+                    palette = palette,
+                    tintAlpha = if (isUser) 0.34f else 0.20f,
+                    refractionHeight = 12.dp,
+                    refractionAmount = 9.dp,
                 )
                 .padding(10.dp),
         ) {
