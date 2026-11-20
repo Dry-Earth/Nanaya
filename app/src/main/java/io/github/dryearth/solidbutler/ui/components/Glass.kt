@@ -299,7 +299,7 @@ fun GlassPanel(
                             )
                         },
                         onDrawSurface = {
-                            drawRect(Color(if (strongGlass) 0x220B0E13 else 0x550B0E13))
+                            drawRect(Color(if (strongGlass) 0x140B0E13 else 0x330B0E13))
                         },
                     )
                 } else {
@@ -307,7 +307,7 @@ fun GlassPanel(
                 },
             )
             // A solid-ish base keeps the background grid from showing through the glass.
-            .background(if (opaque) Color(0xC70B0E13) else if (strongGlass) Color(0x080B0E13) else Color(0x1F0B0E13))
+            .background(if (opaque) Color(0xB80B0E13) else if (strongGlass) Color(0x050B0E13) else Color(0x120B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(
