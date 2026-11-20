@@ -312,7 +312,7 @@ fun ButlerApp(
     }
 
     if (chat) {
-        Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+        Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
@@ -326,7 +326,7 @@ fun ButlerApp(
         }
     }
     if (settings) {
-        Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+        Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
@@ -342,7 +342,7 @@ fun ButlerApp(
         }
     }
     if (aiSettings) {
-        Box(Modifier.fillMaxSize().background(Glass.Ink)) {
+        Box(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
             AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
