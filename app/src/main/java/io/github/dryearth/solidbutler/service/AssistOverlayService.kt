@@ -724,11 +724,11 @@ private fun OverlayAssistant(
     val entrance = remember { Animatable(0f) }
     val orbit = remember { Animatable(0f) }
     val edgeTransition = rememberInfiniteTransition(label = "panel-edge")
-    val edgeAngle by edgeTransition.animateFloat(
+    val edgePhase by edgeTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing)),
-        label = "edgeAngle",
+        label = "edgePhase",
     )
     val sheetEntry = remember { Animatable(0f) }
     var wakeSerial by remember { mutableIntStateOf(0) }
@@ -1048,26 +1048,53 @@ private fun OverlayAssistant(
                                     ),
                                 )
                             }
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            val edgeColors = listOf(
-                                Color(0xFF67E8F9),
-                                Color(0xFF818CF8),
-                                Color(0xFFE879F9),
-                                Color(0xFF6EE7B7),
-                                Color(0xFF67E8F9),
-                            )
-                            rotate(edgeAngle, pivot = center) {
+                            val measure = PathMeasure().apply { setPath(edge, false) }
+                            val length = measure.length
+                            if (length > 1f) {
                                 drawPath(
                                     path = edge,
-                                    brush = Brush.sweepGradient(edgeColors, center = center),
-                                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
-                                    alpha = 0.18f,
+                                    color = Color(0x18FFFFFF),
+                                    style = Stroke(width = 1.dp.toPx()),
                                 )
-                                drawPath(
-                                    path = edge,
-                                    brush = Brush.sweepGradient(edgeColors, center = center),
-                                    style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round),
-                                    alpha = 0.85f,
+                                val head = length * edgePhase
+                                val tail = head - length * 0.28f
+                                fun drawSegment(from: Float, to: Float) {
+                                    if (to <= from + 0.5f) return
+                                    val part = Path()
+                                    if (measure.getSegment(from, to, part, true)) {
+                                        drawPath(
+                                            path = part,
+                                            brush = Brush.sweepGradient(
+                                                listOf(
+                                                    Color(0xFF67E8F9),
+                                                    Color(0xFF818CF8),
+                                                    Color(0xFFE879F9),
+                                                    Color(0xFF6EE7B7),
+                                                    Color(0xFF67E8F9),
+                                                ),
+                                                center = Offset(size.width / 2f, size.height / 2f),
+                                            ),
+                                            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round),
+                                            alpha = 0.9f,
+                                        )
+                                    }
+                                }
+                                if (tail >= 0f) {
+                                    drawSegment(tail, head)
+                                } else {
+                                    drawSegment(0f, head)
+                                    drawSegment(length + tail, length)
+                                }
+                                val pos = measure.getPosition(head)
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        listOf(Color(0xCCFFF3DC), Color(0x66FF9ECB), Color.Transparent),
+                                        center = pos,
+                                        radius = 14.dp.toPx(),
+                                    ),
+                                    radius = 14.dp.toPx(),
+                                    center = pos,
+                                    alpha = 0.55f,
                                 )
                             }
                         }
