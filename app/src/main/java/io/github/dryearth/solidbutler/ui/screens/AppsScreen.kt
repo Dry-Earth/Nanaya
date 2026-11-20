@@ -517,55 +517,61 @@ private fun AppDetailSheet(
 
 @Composable
 private fun PermissionLine(p: PermissionRow, onRevoke: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0x07FFFFFF))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    GlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        corner = 12.dp,
+        padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        strongGlass = true,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(p.label, style = MaterialTheme.typography.bodyMedium, color = Glass.Text)
-            Text(
-                p.name.substringAfterLast('.'),
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-                maxLines = 1,
-            )
-        }
-        if (p.granted) {
-            Pill("已授予", selected = true, color = Glass.Amber, onClick = onRevoke)
-        } else {
-            Pill("未授予", color = Glass.Faint)
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(p.label, style = MaterialTheme.typography.bodyMedium, color = Glass.Text)
+                Text(
+                    p.name.substringAfterLast('.'),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                    maxLines = 1,
+                )
+            }
+            if (p.granted) {
+                Pill("已授予", selected = true, color = Glass.Amber, onClick = onRevoke)
+            } else {
+                Pill("未授予", color = Glass.Faint)
+            }
         }
     }
 }
 
 @Composable
 private fun BootLine(c: BootComponent, onToggle: (Boolean) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0x07FFFFFF))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    GlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        corner = 12.dp,
+        padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        strongGlass = true,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(c.shortName, style = MaterialTheme.typography.bodyMedium, color = Glass.Text)
-            Text(
-                c.actions.joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-                maxLines = 1,
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(c.shortName, style = MaterialTheme.typography.bodyMedium, color = Glass.Text)
+                Text(
+                    c.actions.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                    maxLines = 1,
+                )
+            }
+            Pill(
+                if (c.enabled) "已启用" else "已禁用",
+                selected = c.enabled,
+                color = if (c.enabled) Glass.Amber else Glass.Mint,
+                onClick = { onToggle(!c.enabled) },
             )
         }
-        Pill(
-            if (c.enabled) "已启用" else "已禁用",
-            selected = c.enabled,
-            color = if (c.enabled) Glass.Amber else Glass.Mint,
-            onClick = { onToggle(!c.enabled) },
-        )
     }
 }
