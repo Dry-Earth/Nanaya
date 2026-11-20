@@ -1102,7 +1102,7 @@ private fun OverlayAssistant(
                             }
                         }
                         .navigationBarsPadding()
-                        .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
+                        .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 18.dp),
                 ) {
                 Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
                     Box(
@@ -1737,7 +1737,7 @@ private fun OverlayBubble(
     ) {
         Column(
             Modifier
-                .widthIn(max = 320.dp)
+                .widthIn(max = 360.dp)
                 .overlayGlass(
                     backdrop = backdrop,
                     shape = RoundedCornerShape(14.dp),
