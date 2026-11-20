@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -127,6 +128,11 @@ import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
+import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
+import top.yukonga.miuix.kmp.blur.drawBackdrop
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import io.github.dryearth.solidbutler.ui.components.VoiceWave
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -378,6 +384,63 @@ private val GlassGrainPoints = List(56) { i ->
 }
 
 /** Frosted liquid-glass surface: translucency, specular sweep and fine grain. */
+private val PanelTextShadow = Shadow(
+    color = Color(0x99000000),
+    offset = Offset(0f, 1.5f),
+    blurRadius = 3.5f,
+)
+
+@Composable
+private fun PanelAurora(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        drawRect(
+            Brush.verticalGradient(
+                listOf(
+                    Color(0x1A4F8BFF),
+                    Color(0x080B1220),
+                    Color(0x14A78BFA),
+                ),
+            ),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(Color(0x2E4F8BFF), Color(0x0F4F8BFF), Color.Transparent),
+                center = Offset(w * 0.12f, h * 0.18f),
+                radius = w * 0.62f,
+            ),
+            radius = w * 0.62f,
+            center = Offset(w * 0.12f, h * 0.18f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(Color(0x26A78BFA), Color(0x0CA78BFA), Color.Transparent),
+                center = Offset(w * 0.88f, h * 0.42f),
+                radius = w * 0.55f,
+            ),
+            radius = w * 0.55f,
+            center = Offset(w * 0.88f, h * 0.42f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(Color(0x1FFF7AC6), Color(0x08FF7AC6), Color.Transparent),
+                center = Offset(w * 0.35f, h * 0.92f),
+                radius = w * 0.48f,
+            ),
+            radius = w * 0.48f,
+            center = Offset(w * 0.35f, h * 0.92f),
+        )
+        GlassGrainPoints.forEach { p ->
+            drawCircle(
+                color = Color.White.copy(alpha = 0.035f),
+                radius = 0.6.dp.toPx(),
+                center = Offset(p.x * w, p.y * h),
+            )
+        }
+    }
+}
+
 private fun Modifier.frostedGlass(shape: Shape, corner: Dp, colors: List<Color>): Modifier =
     this
         .clip(shape)
@@ -725,7 +788,11 @@ private fun OverlayAssistant(
         )
 
         if (sheetVisible) {
-            Column(
+            val panelBackdrop = rememberLayerBackdrop {
+                drawRect(Color.Transparent)
+                drawContent()
+            }
+            Box(
                 Modifier
                     .fillMaxWidth()
                     .height(with(density) { panelHeightPx.toDp() })
@@ -734,25 +801,65 @@ private fun OverlayAssistant(
                         translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
                             exit.value * 40.dp.toPx()
                     }
-                    .shadow(26.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                    .frostedGlass(
-                        shape = shape,
-                        corner = 30.dp,
-                        colors = listOf(
-                            Color(0xB8FFFFFF),
-                            Color(0x80F4F8FF),
-                            Color(0x55E7EEFF),
-                        ),
-                    )
-                    .navigationBarsPadding()
-                    .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
+                    .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(shape),
             ) {
+                Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
+                    PanelAurora(Modifier.matchParentSize())
+                }
+                Column(
+                    Modifier
+                        .matchParentSize()
+                        .drawBackdrop(
+                            backdrop = panelBackdrop,
+                            shape = { shape },
+                            effects = {
+                                vibrancy()
+                                lens(
+                                    refractionHeight = 26.dp.toPx(),
+                                    refractionAmount = 18.dp.toPx(),
+                                    depthEffect = true,
+                                    chromaticAberration = 0.22f,
+                                )
+                            },
+                            onDrawSurface = { drawRect(Color(0x2E0B1220)) },
+                        )
+                        .drawWithContent {
+                            drawRect(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0x12FFFFFF),
+                                        Color(0x06000000),
+                                        Color(0x22000000),
+                                    ),
+                                ),
+                            )
+                            drawContent()
+                            drawLine(
+                                brush = Brush.horizontalGradient(
+                                    listOf(Color.Transparent, Color(0x66FFFFFF), Color.Transparent),
+                                ),
+                                start = Offset(24.dp.toPx(), 0.8f),
+                                end = Offset(size.width - 24.dp.toPx(), 0.8f),
+                                strokeWidth = 1f,
+                            )
+                        }
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(Color(0x66FFFFFF), Color(0x1FFFFFFF), Color(0x0DFFFFFF)),
+                            ),
+                            shape,
+                        )
+                        .navigationBarsPadding()
+                        .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
+                ) {
                 Box(
                     Modifier.fillMaxWidth().height(18.dp).then(dragModifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x330B1220)),
+                        Modifier.width(38.dp).height(4.dp).clip(CircleShape).background(Color(0x55FFFFFF)),
                     )
                 }
                 Row(
@@ -761,17 +868,20 @@ private fun OverlayAssistant(
                 ) {
                     Box(
                         Modifier.size(32.dp).clip(CircleShape)
-                            .background(Color(0x220B1220)),
+                            .background(Color(0x1FFFFFFF)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFF33406A), modifier = Modifier.size(17.dp))
+                        Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFFDCE8FF), modifier = Modifier.size(17.dp))
                     }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             vm.prefs.personaName,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFF0B1220),
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                shadow = PanelTextShadow,
+                            ),
+                            color = Color(0xFFF4F8FF),
                         )
                         Text(
                             when {
@@ -780,7 +890,7 @@ private fun OverlayAssistant(
                                 else -> "悬浮助手 · 尚未配置模型"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                            color = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
                         )
                     }
                     Icon(
@@ -790,7 +900,7 @@ private fun OverlayAssistant(
                             Icons.Rounded.OpenInFull
                         },
                         contentDescription = "展开或收起",
-                        tint = Color(0x990B1220),
+                        tint = Color(0xB3DCE8FF),
                         modifier = Modifier.size(19.dp).clickable {
                             scope.launch {
                                 val collapsed = panelHeightPx <= minPanelPx + with(density) { 24.dp.toPx() }
@@ -810,7 +920,7 @@ private fun OverlayAssistant(
                     Icon(
                         Icons.Rounded.Close,
                         contentDescription = "关闭",
-                        tint = Color(0x990B1220),
+                        tint = Color(0xB3DCE8FF),
                         modifier = Modifier.size(19.dp).clickable { dismiss() },
                     )
                 }
@@ -836,7 +946,7 @@ private fun OverlayAssistant(
                     Text(
                         "直接说或输入。上拉面板看历史，下拉收回到这里。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0x990B1220),
+                        color = Color(0xB3DCE8FF),
                     )
                 }
 
@@ -845,7 +955,7 @@ private fun OverlayAssistant(
                     Text(
                         it,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                        color = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
                         maxLines = 1,
                     )
                 }
@@ -853,17 +963,22 @@ private fun OverlayAssistant(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                            .background(Color(0x330B1220))
+                            .background(Color(0x1FFFFFFF))
+                            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(16.dp))
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         if (input.isEmpty()) {
-                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x660B1220))
+                            Text("问汐…", style = MaterialTheme.typography.bodySmall, color = Color(0x66E6EEFF))
                         }
                         BasicTextField(
                             value = input,
                             onValueChange = { input = it },
-                            textStyle = TextStyle(color = Color(0xFF0B1220), fontSize = 13.sp),
-                            cursorBrush = SolidColor(Color(0xFF33406A)),
+                            textStyle = TextStyle(
+                                color = Color(0xFFF4F8FF),
+                                fontSize = 13.sp,
+                                shadow = PanelTextShadow,
+                            ),
+                            cursorBrush = SolidColor(Color(0xFF9FC0FF)),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -871,7 +986,7 @@ private fun OverlayAssistant(
                     Spacer(Modifier.width(6.dp))
                     Box(
                         Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (busListening) Color(0x33D85B5B) else Color(0x220B1220))
+                            .background(if (busListening) Color(0x44D85B5B) else Color(0x1FFFFFFF))
                             .border(
                                 width = if (busListening) 1.5.dp else 0.dp,
                                 color = if (busListening) Color(0x99D85B5B) else Color.Transparent,
@@ -883,14 +998,14 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Mic,
                             contentDescription = "语音输入",
-                            tint = if (busListening) Color(0xFFD85B5B) else Color(0x990B1220),
+                            tint = if (busListening) Color(0xFFFF9AA8) else Color(0xB3DCE8FF),
                             modifier = Modifier.size(17.dp),
                         )
                     }
                     Spacer(Modifier.width(6.dp))
                     Box(
                         Modifier.size(36.dp).clip(CircleShape)
-                            .background(if (input.isBlank()) Color(0x220B1220) else Color(0xFF0B1220))
+                            .background(if (input.isBlank()) Color(0x14FFFFFF) else Color(0xFFE6EEFF))
                             .clickable(enabled = input.isNotBlank()) {
                                 val text = input.trim()
                                 input = ""
@@ -901,7 +1016,7 @@ private fun OverlayAssistant(
                         Icon(
                             Icons.Rounded.Send,
                             contentDescription = "发送",
-                            tint = if (input.isBlank()) Color(0x660B1220) else Color.White,
+                            tint = if (input.isBlank()) Color(0x4DE6EEFF) else Color(0xFF0B1220),
                             modifier = Modifier.size(16.dp),
                         )
                     }
@@ -911,13 +1026,13 @@ private fun OverlayAssistant(
                     Text(
                         "上拉展开 · 下拉收起",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0x660B1220),
+                        color = Color(0x73DCE8FF),
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         "完整对话",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF33406A),
+                        color = Color(0xFF9FC0FF),
                         modifier = Modifier.clickable {
                             runCatching {
                                 context.startActivity(
@@ -934,6 +1049,7 @@ private fun OverlayAssistant(
                         },
                     )
                 }
+            }
             }
         } else {
             Box(
@@ -1357,13 +1473,13 @@ private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
             Modifier
                 .fillMaxWidth(0.9f)
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (isUser) Color(0x1F0B1220) else Color(0x12FFFFFF))
+                .background(if (isUser) Color(0x2EFFFFFF) else Color(0x14FFFFFF))
                 .padding(10.dp),
         ) {
             Text(
                 msg.text,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF0B1220),
+                style = MaterialTheme.typography.bodySmall.copy(shadow = PanelTextShadow),
+                color = Color(0xFFF4F8FF),
             )
             val action = msg.action
             if (action != null && msg.actionState == ActionState.PENDING) {
@@ -1371,27 +1487,27 @@ private fun OverlayBubble(vm: ButlerViewModel, msg: ChatMessage) {
                 Text(
                     action.title,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF33406A),
+                    color = Color(0xFF9FC0FF),
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "执行",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF0B1220),
+                        color = Color(0xFFF4F8FF),
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x220B1220))
+                            .background(Color(0x2EFFFFFF))
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                             .clickable { vm.confirmAction(msg.id) },
                     )
                     Text(
                         "取消",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0x990B1220),
+                        color = Color(0xB3DCE8FF),
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x110B1220))
+                            .background(Color(0x14FFFFFF))
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                             .clickable { vm.rejectAction(msg.id) },
                     )
