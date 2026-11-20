@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -492,8 +491,8 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
     val shape = CircleShape
     Box(
         Modifier
-            .size(46.dp)
-            .shadow(10.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .size(40.dp)
+            .shadow(8.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
             .drawBackdrop(
                 backdrop = backdrop,
@@ -502,8 +501,8 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
                     vibrancy()
                     blur(6.dp.toPx(), 6.dp.toPx())
                     lens(
-                        refractionHeight = 24.dp.toPx(),
-                        refractionAmount = 22.dp.toPx(),
+                        refractionHeight = 20.dp.toPx(),
+                        refractionAmount = 18.dp.toPx(),
                     )
                 },
                 onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
@@ -518,7 +517,7 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        FlowingAiIcon(Modifier.size(22.dp))
+        FlowingAiIcon(Modifier.size(19.dp))
     }
 }
 
@@ -594,10 +593,10 @@ private fun AiStatusLight(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun RowScope.BarItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
+private fun BarItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
     Column(
         Modifier
-            .weight(1f)
+            .width(46.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
@@ -686,7 +685,7 @@ private fun BottomBar(
         contentAlignment = Alignment.Center,
     ) {
         GlassPanel(
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.height(56.dp),
             corner = 28.dp,
             padding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
             strongGlass = true,
@@ -694,6 +693,7 @@ private fun BottomBar(
         ) {
             Row(
                 Modifier.fillMaxHeight(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 navItems.forEach { item ->

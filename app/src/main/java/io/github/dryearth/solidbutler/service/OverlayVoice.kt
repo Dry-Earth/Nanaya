@@ -3,11 +3,12 @@ package io.github.dryearth.solidbutler.service
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import io.github.dryearth.solidbutler.core.MicPermission
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Bridge between the speech recognizer and the overlay window. */
@@ -43,7 +44,9 @@ object OverlaySpeech {
         OverlayVoiceBus.status.value = "正在聆听…"
 
         val app = context.applicationContext
-        if (!MicPermission.granted(app)) {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
             fail("麦克风未授权，请到 设置 → 权限与授权 开启")
             return
         }

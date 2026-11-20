@@ -117,7 +117,6 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import io.github.dryearth.solidbutler.core.MicPermission
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.SystemSounds
 import io.github.dryearth.solidbutler.core.TtsDefaults
@@ -166,7 +165,8 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         active = this
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
-            val mic = MicPermission.granted(this)
+            val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
             val type = if (mic) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -199,9 +199,14 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
      * the user granted RECORD_AUDIO, so refresh the type after the grant.
      */
     internal fun upgradeMicrophoneType() {
-        if (Build.VERSION.SDK_INT < 34) return
         val base = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        val type = if (MicPermission.granted(this)) {
+        if (Build.VERSION.SDK_INT < 34) {
+            runCatching { startForeground(NOTIFICATION_ID, notification()) }
+            return
+        }
+        val type = if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
             base or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         } else {
             base
@@ -534,7 +539,9 @@ private fun OverlayAssistant(
     }
 
     fun startVoice() {
-        if (!MicPermission.granted(context)) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
             voiceStatus = "麦克风未授权，请在 设置 → 权限与授权 开启"
             revealed = true
             Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()

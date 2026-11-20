@@ -3,9 +3,9 @@ package io.github.dryearth.solidbutler.ui.screens
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
@@ -68,12 +68,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.data.ActionState
 import io.github.dryearth.solidbutler.ButlerViewModel
 import io.github.dryearth.solidbutler.data.ChatImageStore
 import io.github.dryearth.solidbutler.data.ChatMessage
-import io.github.dryearth.solidbutler.core.MicPermission
 import io.github.dryearth.solidbutler.core.Prefs
 import io.github.dryearth.solidbutler.core.TtsDefaults
 import io.github.dryearth.solidbutler.data.ChatRole
@@ -180,30 +180,24 @@ fun AssistantScreen(
     }
 
     fun launchSpeech() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        fun build(pkg: String?): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "说吧，汐在听")
-            if (prefs.sttPackage.isNotBlank()) setPackage(prefs.sttPackage)
+            if (!pkg.isNullOrBlank()) setPackage(pkg)
+        }
+        val preferred = prefs.sttPackage.takeIf { it.isNotBlank() }
+        var intent = build(preferred)
+        // A selected engine may expose only a RecognitionService and no
+        // ACTION_RECOGNIZE_SPEECH activity. Fall back to the system default.
+        if (preferred != null && intent.resolveActivity(context.packageManager) == null) {
+            intent = build(null)
         }
         if (intent.resolveActivity(context.packageManager) == null) {
             Toast.makeText(context, "系统没有语音识别服务", Toast.LENGTH_SHORT).show()
             return
         }
         speechLauncher.launch(intent)
-    }
-
-    fun openAppSettings() {
-        runCatching {
-            context.startActivity(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:${context.packageName}"),
-                ),
-            )
-        }.onFailure {
-            Toast.makeText(context, "请到系统设置里开启麦克风权限", Toast.LENGTH_LONG).show()
-        }
     }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -215,25 +209,14 @@ fun AssistantScreen(
             }
             launchSpeech()
         } else {
-            val activity = context as? Activity
-            val canAskAgain = activity?.shouldShowRequestPermissionRationale(
-                Manifest.permission.RECORD_AUDIO,
-            ) ?: false
-            if (!canAskAgain) {
-                Toast.makeText(
-                    context,
-                    "麦克风权限被系统拒绝，正在打开应用设置",
-                    Toast.LENGTH_LONG,
-                ).show()
-                openAppSettings()
-            } else {
-                Toast.makeText(context, "语音输入需要麦克风权限", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(context, "需要麦克风权限才能语音输入", Toast.LENGTH_SHORT).show()
         }
     }
 
     fun requestMic() {
-        if (MicPermission.granted(context)) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
             launchSpeech()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
