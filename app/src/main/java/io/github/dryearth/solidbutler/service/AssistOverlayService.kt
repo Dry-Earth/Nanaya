@@ -61,6 +61,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloseFullscreen
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Send
@@ -730,6 +731,13 @@ private fun OverlayAssistant(
         animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing)),
         label = "edgePhase",
     )
+    val textTransition = rememberInfiniteTransition(label = "message-text")
+    val textShift by textTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing)),
+        label = "textShift",
+    )
     val sheetEntry = remember { Animatable(0f) }
     var wakeSerial by remember { mutableIntStateOf(0) }
     var wakeToken by remember { mutableIntStateOf(0) }
@@ -1068,7 +1076,7 @@ private fun OverlayAssistant(
                             val length = measure.length
                             if (length > 1f) {
                                 val head = length * edgePhase
-                                val tail = head - length * 0.42f
+                                val tail = head - length * 0.95f
                                 fun drawSegment(from: Float, to: Float) {
                                     if (to <= from + 0.5f) return
                                     val part = Path()
@@ -1101,8 +1109,6 @@ private fun OverlayAssistant(
                         .navigationBarsPadding()
                         .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 ) {
-                val expanded = panelHeightPx >
-                    minPanelPx + with(density) { 24.dp.toPx() }
                 Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
                     Box(
                         Modifier
@@ -1112,40 +1118,17 @@ private fun OverlayAssistant(
                             .clip(CircleShape)
                             .background(palette.secondaryText.copy(alpha = 0.45f)),
                     )
-                    Row(
-                        Modifier.align(Alignment.CenterEnd),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
+                    Box(Modifier.align(Alignment.CenterEnd)) {
                         GlassIconButton(
-                            icon = if (expanded) {
-                                Icons.Rounded.CloseFullscreen
-                            } else {
-                                Icons.Rounded.OpenInFull
+                            icon = Icons.Rounded.DeleteSweep,
+                            contentDescription = "清除对话",
+                            palette = palette,
+                            backdrop = panelBackdrop,
+                            onClick = {
+                                vm.clearChat()
+                                input = ""
+                                voiceStatus = null
                             },
-                            contentDescription = "展开或收起",
-                            palette = palette,
-                            backdrop = panelBackdrop,
-                        ) {
-                            scope.launch {
-                                val collapsed = panelHeightPx <=
-                                    minPanelPx + with(density) { 24.dp.toPx() }
-                                val target = if (collapsed) {
-                                    maxOf(autoTargetPx, maxPanelPx * 0.62f)
-                                } else {
-                                    minPanelPx
-                                }
-                                heightAnim.animateTo(
-                                    target.coerceIn(minPanelPx, maxPanelPx),
-                                    spring(dampingRatio = 0.86f, stiffness = 380f),
-                                )
-                            }
-                        }
-                        GlassIconButton(
-                            icon = Icons.Rounded.Close,
-                            contentDescription = "关闭",
-                            palette = palette,
-                            backdrop = panelBackdrop,
-                            onClick = { dismiss() },
                         )
                     }
                 }
@@ -1187,18 +1170,13 @@ private fun OverlayAssistant(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 state.messages.takeLast(8).forEach { msg ->
-                                    OverlayBubble(vm, msg, palette, panelBackdrop)
+                                    OverlayBubble(vm, msg, palette, panelBackdrop, textShift)
                                 }
                             }
                         }
                     }
                 } else {
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        "直接说或输入。上拉面板看历史，下拉收回到这里。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = palette.secondaryText,
-                    )
                 }
 
                 (busStatus ?: voiceStatus)?.let {
@@ -1305,12 +1283,7 @@ private fun OverlayAssistant(
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "上拉展开 · 下拉收起",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.secondaryText.copy(alpha = 0.70f),
-                        modifier = Modifier.weight(1f),
-                    )
+                    Spacer(Modifier.weight(1f))
                     Text(
                         "完整对话",
                         style = MaterialTheme.typography.labelSmall,
@@ -1757,6 +1730,7 @@ private fun OverlayBubble(
     msg: ChatMessage,
     palette: OverlayPalette,
     backdrop: LayerBackdrop,
+    textShift: Float,
 ) {
     val isUser = msg.role == ChatRole.USER
     Row(
@@ -1776,10 +1750,23 @@ private fun OverlayBubble(
                 )
                 .padding(10.dp),
         ) {
+            val textBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFFE0F7FF),
+                    Color(0xFFC7D2FE),
+                    Color(0xFFFBCFE8),
+                    Color(0xFFD1FAE5),
+                    Color(0xFFE0F7FF),
+                ),
+                start = Offset(-260f + textShift * 520f, 0f),
+                end = Offset(260f + textShift * 520f, 320f),
+            )
             Text(
                 msg.text,
-                style = MaterialTheme.typography.bodySmall.copy(shadow = palette.shadow),
-                color = palette.primaryText,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    shadow = palette.shadow,
+                    brush = textBrush,
+                ),
             )
             val action = msg.action
             if (action != null && msg.actionState == ActionState.PENDING) {
