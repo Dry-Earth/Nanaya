@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.ui.draw.shadow
@@ -61,6 +63,7 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
 import io.github.dryearth.solidbutler.ui.components.statusBarInset
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
@@ -228,12 +231,15 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
             strongGlass = true,
             backdropOverride = listBackdrop,
         ) {
-            AppDetailSheet(
-                vm = vm,
-                detail = state.detail!!,
-                privileged = caps.privileged,
-                modifier = Modifier.fillMaxSize(),
-            )
+            CompositionLocalProvider(LocalGlassBackdrop provides listBackdrop) {
+                AppDetailSheet(
+                    vm = vm,
+                    detail = state.detail!!,
+                    privileged = caps.privileged,
+                    backdrop = listBackdrop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
     }
@@ -292,6 +298,7 @@ private fun AppDetailSheet(
     vm: ButlerViewModel,
     detail: AppDetail,
     privileged: Boolean,
+    backdrop: LayerBackdrop,
     modifier: Modifier = Modifier,
 ) {
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
@@ -299,8 +306,9 @@ private fun AppDetailSheet(
     val blocked = security.firewallBlocked.contains(detail.app.uid)
     val app = detail.app
 
+    Box(modifier.fillMaxSize()) {
     LazyColumn(
-        modifier.fillMaxWidth().fillMaxHeight(),
+        Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -475,11 +483,18 @@ private fun AppDetailSheet(
     }
 
     confirm?.let { (text, action) ->
-        androidx.compose.ui.window.Dialog(onDismissRequest = { confirm = null }) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f))
+                .clickable { confirm = null },
+            contentAlignment = Alignment.Center,
+        ) {
             GlassPanel(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
                 corner = 22.dp,
-                opaque = true,
+                strongGlass = true,
+                backdropOverride = backdrop,
                 padding = PaddingValues(18.dp),
             ) {
                 Text("确认操作", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
@@ -497,6 +512,7 @@ private fun AppDetailSheet(
                 }
             }
         }
+    }
     }
 }
 
