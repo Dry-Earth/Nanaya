@@ -476,33 +476,6 @@ private fun rememberOverlayPalette(): OverlayPalette {
 }
 
 @Composable
-private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        if (w <= 0f || h <= 0f) return@Canvas
-        // A uniform, edge-free color field: it gives the lens something to
-        // sample without drawing a visible frame or inner rectangle.
-        drawRect(
-            Brush.linearGradient(
-                0f to palette.auroraA.copy(alpha = 0.028f),
-                0.45f to palette.auroraB.copy(alpha = 0.018f),
-                1f to palette.auroraC.copy(alpha = 0.024f),
-                start = Offset(0f, 0f),
-                end = Offset(w, h),
-            ),
-        )
-        GlassGrainPoints.forEach { p ->
-            drawCircle(
-                color = palette.primaryText.copy(alpha = 0.018f),
-                radius = 0.6.dp.toPx(),
-                center = Offset(p.x * w, p.y * h),
-            )
-        }
-    }
-}
-
-@Composable
 private fun FlowingAiIcon(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "overlay-ai-icon")
     val shift by transition.animateFloat(
@@ -583,19 +556,7 @@ private fun Modifier.overlayGlass(
     refractionAmount: Dp = 9.dp,
 ): Modifier = this
     .clip(shape)
-    .drawBackdrop(
-        backdrop = backdrop,
-        shape = { shape },
-        effects = {
-            lens(
-                refractionHeight = refractionHeight.toPx(),
-                refractionAmount = refractionAmount.toPx(),
-                depthEffect = true,
-                chromaticAberration = 0.04f,
-            )
-        },
-        onDrawSurface = { drawRect(tint.copy(alpha = tintAlpha)) },
-    )
+    .background(tint.copy(alpha = tintAlpha))
     .border(
         1.dp,
         Brush.verticalGradient(
@@ -686,7 +647,6 @@ private fun OverlayAssistant(
     val scope = rememberCoroutineScope()
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
-    var diagMode by remember { mutableIntStateOf(0) }
     var revealed by remember { mutableStateOf(!autoVoice) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     val busStatus by OverlayVoiceBus.status.collectAsState()
@@ -694,7 +654,7 @@ private fun OverlayAssistant(
     val busLevel by OverlayVoiceBus.level.collectAsState()
     val busResult by OverlayVoiceBus.result.collectAsState()
     val busError by OverlayVoiceBus.error.collectAsState()
-    val shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
+    val shape = RoundedCornerShape(30.dp)
 
     // Entrance: the panel rises once, the aurora blooms then settles into a
     // quiet halo that breathes with the microphone while listening.
@@ -751,208 +711,6 @@ private fun OverlayAssistant(
     val sheetVisible = revealed
     LaunchedEffect(sheetVisible) {
         if (sheetVisible) {
-            sheetEntry.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
-        } else {
-            sheetEntry.snapTo(0f)
-        }
-    }
-
-    LaunchedEffect(busResult) {
-        val text = busResult ?: return@LaunchedEffect
-        if (text.isNotBlank()) {
-            input = ""
-            voiceStatus = null
-            vm.sendChat(text)
-            revealed = true
-        }
-        OverlayVoiceBus.reset()
-    }
-    LaunchedEffect(busError) {
-        val err = busError ?: return@LaunchedEffect
-        voiceStatus = err
-        revealed = true
-        Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-        OverlayVoiceBus.error.value = null
-    }
-
-    fun startVoice() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            voiceStatus = "麦克风未授权，请在 设置 → 权限与授权 开启"
-            revealed = true
-            Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
-            return
-        }
-        AssistOverlayService.active?.upgradeMicrophoneType()
-        voiceStatus = "正在启动语音…"
-        try {
-            ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
-                startTone(ToneGenerator.TONE_PROP_BEEP, 80)
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
-            }
-        } catch (_: Exception) {}
-        val ok = runCatching { OverlaySpeech.start(context) }.isSuccess
-        if (!ok) {
-            voiceStatus = "无法启动语音识别"
-            revealed = true
-        }
-    }
-
-    var closing by remember { mutableStateOf(false) }
-    val exit = remember { Animatable(0f) }
-    fun dismiss() {
-        if (closing) return
-        closing = true
-        scope.launch {
-            exit.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
-            onClose()
-        }
-    }
-
-    LaunchedEffect(autoVoice) {
-        if (autoVoice) {
-            revealed = false
-            wakeSerial++
-            wakeToken++
-        }
-    }
-    LaunchedEffect(wakeToken) {
-        if (wakeToken == 0) return@LaunchedEffect
-        val phrases = vm.prefs.wakeGreetings
-            .lines()
-            .map { it.trim().trim(',', '，', ';', '；') }
-            .filter { it.isNotBlank() }
-        val phrase = phrases.randomOrNull()
-        if (phrase != null) {
-            // Give the system engine time to initialise after the wake sound.
-            val ready = withTimeoutOrNull(4000) {
-                while (!ttsReady.value) delay(60)
-                true
-            } == true
-            if (ready) {
-                if (vm.prefs.wakeSoundUri.isNotBlank()) delay(450)
-                val engine = ttsRef.value
-                if (engine != null) {
-                    val finished = withTimeoutOrNull(6000) { speakAndWait(engine, phrase) }
-                    if (finished == null) runCatching { engine.stop() }
-                    delay(120)
-                }
-            }
-        }
-        startVoice()
-        onVoiceConsumed()
-    }
-
-    BoxWithConstraints(
-        Modifier.fillMaxSize().imePadding(),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        val maxPanelPx = with(density) { maxHeight.toPx() } * 0.92f
-        val minPanelPx = with(density) { 232.dp.toPx() }.coerceAtMost(maxPanelPx)
-        val heightAnim = remember { Animatable(0f) }
-        var dragHeight by remember { mutableStateOf<Float?>(null) }
-        var dragStart by remember { mutableFloatStateOf(0f) }
-        var dragDelta by remember { mutableFloatStateOf(0f) }
-        var contentHeight by remember { mutableFloatStateOf(0f) }
-        var autoSuppressed by remember { mutableStateOf(false) }
-
-        LaunchedEffect(minPanelPx) {
-            if (heightAnim.value <= 0.5f) heightAnim.snapTo(minPanelPx)
-        }
-        val autoTargetPx = (minPanelPx + contentHeight).coerceIn(minPanelPx, maxPanelPx)
-        LaunchedEffect(autoTargetPx, autoSuppressed) {
-            if (!autoSuppressed && dragHeight == null && autoTargetPx > heightAnim.value + 0.5f) {
-                heightAnim.animateTo(
-                    autoTargetPx,
-                    spring(dampingRatio = 0.9f, stiffness = 320f),
-                )
-            }
-        }
-        LaunchedEffect(state.messages.size) {
-            autoSuppressed = false
-        }
-        LaunchedEffect(state.messages.isEmpty()) {
-            if (state.messages.isEmpty()) contentHeight = 0f
-        }
-
-        val panelHeightPx = dragHeight ?: heightAnim.value
-        val dismissHeight = if (sheetVisible) {
-            (maxHeight - with(density) { panelHeightPx.toDp() }).coerceAtLeast(0.dp)
-        } else {
-            maxHeight
-        }
-        val dragModifier = Modifier.pointerInput(minPanelPx, maxPanelPx, autoTargetPx) {
-            detectVerticalDragGestures(
-                onDragStart = {
-                    dragStart = heightAnim.value
-                    dragDelta = 0f
-                },
-                onVerticalDrag = { change, amount ->
-                    change.consume()
-                    dragDelta += amount
-                    dragHeight = (dragStart - dragDelta).coerceIn(minPanelPx, maxPanelPx)
-                },
-                onDragEnd = {
-                    val released = dragHeight ?: heightAnim.value
-                    dragHeight = null
-                    val step = with(density) { 42.dp.toPx() }
-                    val anchors = listOf(
-                        minPanelPx,
-                        autoTargetPx.coerceIn(minPanelPx, maxPanelPx),
-                        maxPanelPx,
-                    ).distinct().sorted()
-                    val target = when {
-                        dragDelta > step -> minPanelPx
-                        dragDelta < -step -> anchors.firstOrNull { it > released + 1f } ?: maxPanelPx
-                        else -> anchors.minByOrNull { kotlin.math.abs(it - released) } ?: released
-                    }
-                    if (dragDelta > step) autoSuppressed = true
-                    scope.launch {
-                        heightAnim.snapTo(released)
-                        heightAnim.animateTo(
-                            target,
-                            spring(dampingRatio = 0.86f, stiffness = 380f),
-                        )
-                    }
-                },
-                onDragCancel = {
-                    val released = dragHeight ?: heightAnim.value
-                    dragHeight = null
-                    scope.launch {
-                        heightAnim.snapTo(released)
-                        heightAnim.animateTo(
-                            autoTargetPx,
-                            spring(dampingRatio = 0.9f, stiffness = 320f),
-                        )
-                    }
-                },
-            )
-        }
-
-        // Tapping the open screen either opens the panel or dismisses the
-        // assistant; the panel itself consumes its own touches.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(dismissHeight)
-                .align(Alignment.TopCenter)
-                .pointerInput(sheetVisible) {
-                    detectTapGestures {
-                        if (sheetVisible) dismiss() else revealed = true
-                    }
-                },
-        )
-        WakeAmbient(
-            modifier = Modifier.fillMaxSize(),
-            progress = glow.value * (1f - exit.value),
-            entrance = entrance.value,
-            dim = dim.value * (1f - exit.value),
-            panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 92.dp.toPx() },
-            sheetVisible = sheetVisible,
-        )
-
-        if (sheetVisible) {
             val panelBackdrop = rememberLayerBackdrop {
                 drawRect(Color.Transparent)
                 drawContent()
@@ -961,72 +719,26 @@ private fun OverlayAssistant(
                 Modifier
                     .fillMaxWidth()
                     .height(with(density) { panelHeightPx.toDp() })
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
                     .graphicsLayer {
                         alpha = sheetEntry.value * (1f - exit.value)
                         translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
                             exit.value * 40.dp.toPx()
                     }
-                    .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                    .clip(shape),
+                    .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(shape)
+                    .background(palette.glass)
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
+                        ),
+                        shape,
+                    ),
             ) {
-                if (diagMode != 3 && diagMode != 5) {
-                    Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
-                        PanelAurora(palette, Modifier.matchParentSize())
-                    }
-                }
                 Column(
                     Modifier
                         .matchParentSize()
-                        .drawBackdrop(
-                            backdrop = panelBackdrop,
-                            shape = { shape },
-                            effects = {
-                                if (diagMode != 4 && diagMode != 5) {
-                                    lens(
-                                        refractionHeight = 16.dp.toPx(),
-                                        refractionAmount = 10.dp.toPx(),
-                                        depthEffect = true,
-                                        chromaticAberration = 0.04f,
-                                    )
-                                }
-                            },
-                            onDrawSurface = {
-                                when (diagMode) {
-                                    1 -> Unit
-                                    5 -> drawRect(Color(0xFFFF00FF))
-                                    else -> drawRect(palette.glass)
-                                }
-                            },
-                        )
-                        .drawWithContent {
-                            if (diagMode != 2 && diagMode != 5) {
-                                drawRect(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color(0x18FFFFFF),
-                                            Color(0x06000000),
-                                            Color(0x2A000000),
-                                        ),
-                                    ),
-                                )
-                            }
-                            drawContent()
-                            drawLine(
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color.Transparent, Color(0x66FFFFFF), Color.Transparent),
-                                ),
-                                start = Offset(24.dp.toPx(), 0.8f),
-                                end = Offset(size.width - 24.dp.toPx(), 0.8f),
-                                strokeWidth = 1f,
-                            )
-                        }
-                        .border(
-                            1.dp,
-                            Brush.verticalGradient(
-                                listOf(Color(0x88FFFFFF), Color(0x2AFFFFFF), Color(0x12FFFFFF)),
-                            ),
-                            shape,
-                        )
                         .navigationBarsPadding()
                         .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 ) {
@@ -1036,27 +748,7 @@ private fun OverlayAssistant(
                     Modifier
                         .fillMaxWidth()
                         .height(30.dp)
-                        .then(dragModifier)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onLongPress = {
-                                    diagMode = (diagMode + 1) % 6
-                                    val label = when (diagMode) {
-                                        1 -> "隐藏玻璃底色"
-                                        2 -> "隐藏纵向渐变"
-                                        3 -> "隐藏极光层"
-                                        4 -> "隐藏 lens"
-                                        5 -> "不透明品红测试"
-                                        else -> "恢复正常"
-                                    }
-                                    Toast.makeText(
-                                        context,
-                                        "诊断 $diagMode：$label",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                },
-                            )
-                        },
+                        .then(dragModifier),
                 ) {
                     Box(
                         Modifier
@@ -1260,18 +952,7 @@ private fun OverlayAssistant(
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (diagMode == 0) {
-                            "上拉展开 · 下拉收起 · 长按横条诊断"
-                        } else {
-                            "诊断 $diagMode：" + when (diagMode) {
-                                1 -> "隐藏玻璃底色"
-                                2 -> "隐藏纵向渐变"
-                                3 -> "隐藏极光层"
-                                4 -> "隐藏 lens"
-                                5 -> "不透明品红测试"
-                                else -> "正常"
-                            }
-                        },
+                        "上拉展开 · 下拉收起",
                         style = MaterialTheme.typography.labelSmall,
                         color = palette.secondaryText.copy(alpha = 0.70f),
                         modifier = Modifier.weight(1f),
