@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
@@ -127,6 +130,9 @@ fun ButlerApp(
     val appsState by vm.apps.collectAsStateWithLifecycle()
     val detailOpen = appsState.detail != null
     val glassBackdrop = LocalGlassBackdrop.current
+    val density = LocalDensity.current
+    val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    val blurBandHeight = statusBarHeight + 76.dp
     val contentBackdrop = rememberLayerBackdrop {
         drawRect(Glass.Ink)
         drawContent()
@@ -250,7 +256,7 @@ fun ButlerApp(
                 backdrop = contentBackdrop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(142.dp)
+                    .height(blurBandHeight)
                     .align(Alignment.TopCenter),
             )
             Box(
@@ -421,7 +427,7 @@ private fun TopBar(
     onChat: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

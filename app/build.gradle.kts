@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.dryearth.solidbutler"
         minSdk = 33
         targetSdk = targetSdkValue
-        versionCode = 52
-        versionName = "0.8.9"
+        versionCode = 53
+        versionName = "0.8.10"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "Nanaya")
         ndk {
