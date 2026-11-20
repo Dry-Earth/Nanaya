@@ -61,6 +61,7 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.statusBarInset
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
@@ -94,9 +95,11 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
     }
     Box(Modifier.fillMaxSize()) {
     Box(Modifier.fillMaxSize().layerBackdrop(listBackdrop)) {
+    val topInset = statusBarInset()
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 114.dp, end = 16.dp, bottom = 14.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = topInset + 16.dp, end = 16.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
@@ -472,26 +475,28 @@ private fun AppDetailSheet(
     }
 
     confirm?.let { (text, action) ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirm = null },
-            containerColor = Glass.PanelHi,
-            title = { Text("确认操作", color = Glass.Text) },
-            text = { Text(text, color = Glass.Muted) },
-            confirmButton = {
-                Text(
-                    "确认",
-                    color = Glass.Rose,
-                    modifier = Modifier.clickable { confirm = null; action() }.padding(8.dp),
-                )
-            },
-            dismissButton = {
-                Text(
-                    "取消",
-                    color = Glass.Muted,
-                    modifier = Modifier.clickable { confirm = null }.padding(8.dp),
-                )
-            },
-        )
+        androidx.compose.ui.window.Dialog(onDismissRequest = { confirm = null }) {
+            GlassPanel(
+                modifier = Modifier.fillMaxWidth(),
+                corner = 22.dp,
+                opaque = true,
+                padding = PaddingValues(18.dp),
+            ) {
+                Text("确认操作", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Spacer(Modifier.height(8.dp))
+                Text(text, style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("取消", modifier = Modifier.weight(1f), onClick = { confirm = null })
+                    ActionButton(
+                        "确认",
+                        accent = true,
+                        modifier = Modifier.weight(1f),
+                        onClick = { confirm = null; action() },
+                    )
+                }
+            }
+        }
     }
 }
 

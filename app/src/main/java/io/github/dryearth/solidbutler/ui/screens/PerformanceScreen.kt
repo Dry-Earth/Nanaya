@@ -56,6 +56,7 @@ import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.BigNumber
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.statusBarInset
 import io.github.dryearth.solidbutler.ui.components.KeyValueRow
 import io.github.dryearth.solidbutler.ui.components.Meter
 import io.github.dryearth.solidbutler.ui.components.Pill
@@ -73,9 +74,11 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
 
     LaunchedEffect(Unit) { vm.refreshDrain() }
 
+    val topInset = statusBarInset()
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 114.dp, end = 16.dp, bottom = 14.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = topInset + 16.dp, end = 16.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { LivePanel(perf, vm) }

@@ -59,6 +59,7 @@ import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.Ring
 import io.github.dryearth.solidbutler.ui.components.SectionHeader
 import io.github.dryearth.solidbutler.ui.components.ToastEffect
+import io.github.dryearth.solidbutler.ui.components.statusBarInset
 import io.github.dryearth.solidbutler.ui.theme.Glass
 import java.util.Locale
 
@@ -77,10 +78,11 @@ fun HomeScreen(
     val security by vm.security.collectAsStateWithLifecycle()
 
     ToastEffect(perf.toast) { vm.clearPerfToast() }
+    val topInset = statusBarInset()
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 112.dp, end = 16.dp, bottom = 12.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = topInset + 84.dp, end = 16.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { MemoryCard(perf.snapshot, onTrim = { vm.killBackground() }) }

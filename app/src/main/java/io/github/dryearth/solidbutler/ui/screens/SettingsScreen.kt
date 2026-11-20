@@ -1,6 +1,11 @@
 package io.github.dryearth.solidbutler.ui.screens
 
+import android.Manifest
+import android.app.AppOpsManager
 import android.content.ComponentName
+import android.os.Build
+import android.os.Environment
+import android.os.Process
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -35,7 +40,10 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +59,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -212,6 +225,9 @@ fun SettingsScreen(
                 Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
             }
         }
+
+        SectionHeader("权限与授权", "语音输入、通知与系统访问")
+        PermissionSection(vm)
 
         SectionHeader("应用图标", "切换后桌面可能需重启")
         GlassPanel {
@@ -763,6 +779,168 @@ private fun AdbField(
             )
         }
     }
+}
+
+@Composable
+private fun PermissionSection(vm: ButlerViewModel) {
+    val context = LocalContext.current
+    var version by remember { mutableStateOf(0) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) version++
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    val micLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        version++
+        Toast.makeText(
+            context,
+            if (granted) "麦克风已授权" else "麦克风未授权，语音输入不可用",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { version++ }
+
+    val states = remember(version) {
+        val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        val notifications = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val overlay = Settings.canDrawOverlays(context)
+        val usage = hasUsageAccess(context)
+        val allFiles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else true
+        listOf(mic, notifications, overlay, usage, allFiles)
+    }
+
+    GlassPanel {
+        SettingRow(
+            "麦克风",
+            "语音输入与悬浮语音胶囊录音",
+            if (states[0]) "已授权" else "去授权",
+            states[0],
+        ) {
+            if (states[0]) openAppPermissionSettings(context)
+            else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+        DividerLine()
+        SettingRow(
+            "通知",
+            "前台服务、自动化提醒与告警",
+            if (states[1]) "已开启" else "去开启",
+            states[1],
+        ) {
+            if (states[1]) {
+                openFirst(
+                    context,
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                openAppPermissionSettings(context)
+            }
+        }
+        DividerLine()
+        SettingRow(
+            "悬浮窗",
+            "跨应用悬浮语音胶囊与状态提示",
+            if (states[2]) "已授权" else "去授权",
+            states[2],
+        ) {
+            openFirst(
+                context,
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${context.packageName}"),
+                ),
+            )
+        }
+        DividerLine()
+        SettingRow(
+            "使用情况访问",
+            "应用使用时长与前台应用判断",
+            if (states[3]) "已授权" else "去授权",
+            states[3],
+        ) {
+            openFirst(context, Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+        DividerLine()
+        SettingRow(
+            "所有文件访问",
+            "深度清理、重复文件扫描与存储分析",
+            if (states[4]) "已授权" else "去授权",
+            states[4],
+        ) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                openFirst(
+                    context,
+                    Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:${context.packageName}"),
+                    ),
+                    Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                )
+            } else {
+                openAppPermissionSettings(context)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "麦克风只在语音输入时使用；系统语音识别会再弹一次系统授权。若误点“不再询问”，可在系统设置里重新打开。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
+        )
+        val root = vm.caps.value.root
+        val adb = vm.caps.value.adbConnected
+        val mode = when {
+            root -> "Root"
+            adb -> "无线 ADB"
+            else -> "只读模式"
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "深度操作当前通过 $mode 执行。",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (root || adb) Glass.Mint else Glass.Amber,
+        )
+    }
+}
+
+private fun hasUsageAccess(context: android.content.Context): Boolean {
+    val ops = context.getSystemService(AppOpsManager::class.java) ?: return false
+    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        ops.unsafeCheckOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            context.packageName,
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        ops.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            context.packageName,
+        )
+    }
+    return mode == AppOpsManager.MODE_ALLOWED
+}
+
+private fun openAppPermissionSettings(context: android.content.Context) {
+    openFirst(
+        context,
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}"),
+        ),
+    )
 }
 
 @Composable

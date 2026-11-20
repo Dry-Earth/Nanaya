@@ -47,6 +47,7 @@ import io.github.dryearth.solidbutler.data.SecurityReport
 import io.github.dryearth.solidbutler.ui.components.AppIcon
 import io.github.dryearth.solidbutler.ui.components.EmptyHint
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
+import io.github.dryearth.solidbutler.ui.components.statusBarInset
 import io.github.dryearth.solidbutler.ui.components.Meter
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.components.Ring
@@ -68,9 +69,11 @@ fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit, onOpenDomain:
     val score = (100 - high * 12 - medium * 4 - report.trackerHits.size * 2 - report.privacyApps.size / 4)
         .coerceIn(0, 100)
 
+    val topInset = statusBarInset()
+
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 114.dp, end = 16.dp, bottom = 14.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = topInset + 16.dp, end = 16.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { ScorePanel(score, report, high) }
