@@ -307,7 +307,7 @@ fun GlassPanel(
                 },
             )
             // A solid-ish base keeps the background grid from showing through the glass.
-            .background(if (opaque) Color(0xFF0B0E13) else if (strongGlass) Color(0x080B0E13) else Color(0x1F0B0E13))
+            .background(if (opaque) Color(0xC70B0E13) else if (strongGlass) Color(0x080B0E13) else Color(0x1F0B0E13))
             .background(
                 Brush.linearGradient(
                     listOf(
