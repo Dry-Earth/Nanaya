@@ -590,6 +590,37 @@ private fun GlassIconButton(
     }
 }
 
+private fun Modifier.overlayGlass(
+    backdrop: LayerBackdrop,
+    shape: Shape,
+    palette: OverlayPalette,
+    tint: Color = palette.ink,
+    tintAlpha: Float = 0.24f,
+    refractionHeight: Dp = 12.dp,
+    refractionAmount: Dp = 9.dp,
+): Modifier = this
+    .clip(shape)
+    .drawBackdrop(
+        backdrop = backdrop,
+        shape = { shape },
+        effects = {
+            lens(
+                refractionHeight = refractionHeight.toPx(),
+                refractionAmount = refractionAmount.toPx(),
+                depthEffect = true,
+                chromaticAberration = 0.04f,
+            )
+        },
+        onDrawSurface = { drawRect(tint.copy(alpha = tintAlpha)) },
+    )
+    .border(
+        1.dp,
+        Brush.verticalGradient(
+            listOf(Color(0x55FFFFFF), Color(0x1AFFFFFF), Color(0x0DFFFFFF)),
+        ),
+        shape,
+    )
+
 @Composable
 private fun OverlayAssistant(
     vm: ButlerViewModel,
