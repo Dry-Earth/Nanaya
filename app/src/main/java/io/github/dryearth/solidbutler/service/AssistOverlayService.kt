@@ -979,10 +979,10 @@ private fun OverlayAssistant(
                             shape = { shape },
                             effects = {
                                 lens(
-                                    refractionHeight = 32.dp.toPx(),
-                                    refractionAmount = 22.dp.toPx(),
+                                    refractionHeight = 16.dp.toPx(),
+                                    refractionAmount = 10.dp.toPx(),
                                     depthEffect = true,
-                                    chromaticAberration = 0.08f,
+                                    chromaticAberration = 0.04f,
                                 )
                             },
                             onDrawSurface = { drawRect(palette.glass) },
