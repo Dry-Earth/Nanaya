@@ -140,7 +140,9 @@ import io.github.dryearth.solidbutler.data.ChatMessage
 import io.github.dryearth.solidbutler.data.ChatRole
 import io.github.dryearth.solidbutler.ui.theme.SolidButlerTheme
 import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -512,8 +514,8 @@ private fun PanelAurora(palette: OverlayPalette, modifier: Modifier = Modifier) 
         )
         GlassGrainPoints.forEach { p ->
             drawCircle(
-                color = palette.primaryText.copy(alpha = 0.025f),
-                radius = 0.6.dp.toPx(),
+                color = palette.primaryText.copy(alpha = 0.04f),
+                radius = 0.7.dp.toPx(),
                 center = Offset(p.x * w, p.y * h),
             )
         }
@@ -605,6 +607,7 @@ private fun Modifier.overlayGlass(
         backdrop = backdrop,
         shape = { shape },
         effects = {
+            blur(8.dp.toPx(), 8.dp.toPx())
             lens(
                 refractionHeight = refractionHeight.toPx(),
                 refractionAmount = refractionAmount.toPx(),
@@ -996,6 +999,8 @@ private fun OverlayAssistant(
                             backdrop = panelBackdrop,
                             shape = { shape },
                             effects = {
+                                vibrancy()
+                                blur(12.dp.toPx(), 12.dp.toPx())
                                 lens(
                                     refractionHeight = 32.dp.toPx(),
                                     refractionAmount = 22.dp.toPx(),
@@ -1003,7 +1008,10 @@ private fun OverlayAssistant(
                                     chromaticAberration = 0.08f,
                                 )
                             },
-                            onDrawSurface = { drawRect(palette.glass) },
+                            onDrawSurface = {
+                                drawRect(palette.glass)
+                                drawRect(Color(0x0FFFFFFF))
+                            },
                         )
                         .drawWithContent {
                             drawRect(
@@ -1183,7 +1191,7 @@ private fun OverlayAssistant(
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         if (input.isEmpty()) {
-                            Text("问${vm.prefs.personaName}…", style = MaterialTheme.typography.bodySmall, color = palette.secondaryText.copy(alpha = 0.55f))
+                            Text("问${vm.prefs.personaName}…", style = MaterialTheme.typography.bodySmall, color = palette.secondaryText.copy(alpha = 0.72f))
                         }
                         BasicTextField(
                             value = input,
@@ -1252,7 +1260,7 @@ private fun OverlayAssistant(
                     Text(
                         "上拉展开 · 下拉收起",
                         style = MaterialTheme.typography.labelSmall,
-                        color = palette.secondaryText.copy(alpha = 0.70f),
+                        color = palette.secondaryText.copy(alpha = 0.85f),
                         modifier = Modifier.weight(1f),
                     )
                     Text(

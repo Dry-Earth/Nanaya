@@ -342,7 +342,7 @@ private fun TemperaturePanel(perf: PerfUiState) {
                             Text(
                                 t.source,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Glass.Faint.copy(alpha = 0.65f),
+                                color = Glass.Faint,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
