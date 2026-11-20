@@ -198,7 +198,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
      * service type includes microphone. The service may have started before
      * the user granted RECORD_AUDIO, so refresh the type after the grant.
      */
-    private fun upgradeMicrophoneType() {
+    internal fun upgradeMicrophoneType() {
         if (Build.VERSION.SDK_INT < 34) return
         val base = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         val type = if (MicPermission.granted(this)) {
@@ -540,7 +540,7 @@ private fun OverlayAssistant(
             Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
             return
         }
-        upgradeMicrophoneType()
+        AssistOverlayService.active?.upgradeMicrophoneType()
         voiceStatus = "正在启动语音…"
         try {
             ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
