@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RectangleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
@@ -39,6 +40,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.blur
+import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.runtime.remember
@@ -48,9 +51,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -68,6 +74,8 @@ import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
 import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
+import io.github.dryearth.solidbutler.ui.components.liquid.lens
+import io.github.dryearth.solidbutler.ui.components.liquid.vibrancy
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
@@ -185,18 +193,7 @@ fun ButlerApp(
                 AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
             }
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Box(
-                Modifier.weight(1f).drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            listOf(Glass.Ink.copy(alpha = 0.58f), Color.Transparent),
-                            startY = 0f,
-                            endY = 22.dp.toPx(),
-                        ),
-                    )
-                },
-            ) {
+            Box(Modifier.weight(1f)) {
                 if (sub == "autostart") {
                     AutostartScreen(vm, onBack = { sub = null }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
@@ -249,19 +246,17 @@ fun ButlerApp(
             }
         }
         if (sub == null && !detailOpen) {
+            TopBlurBand(
+                backdrop = contentBackdrop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(142.dp)
+                    .align(Alignment.TopCenter),
+            )
             Box(
                 Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Glass.Ink.copy(alpha = 0.88f),
-                                Glass.Ink.copy(alpha = 0.48f),
-                                Color.Transparent,
-                            ),
-                        ),
-                    )
                     .statusBarsPadding(),
             ) {
                 TopBar(
@@ -426,7 +421,7 @@ private fun TopBar(
     onChat: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -472,6 +467,41 @@ private fun TopBar(
                 Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
             }
         }
+    }
+}
+
+@Composable
+private fun TopBlurBand(backdrop: LayerBackdrop, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(Color.Black, Color.Black.copy(alpha = 0.72f), Color.Transparent),
+                    ),
+                    blendMode = BlendMode.DstIn,
+                )
+            },
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RectangleShape },
+                    effects = {
+                        vibrancy()
+                        blur(12.dp.toPx(), 12.dp.toPx())
+                        lens(
+                            refractionHeight = 26.dp.toPx(),
+                            refractionAmount = 20.dp.toPx(),
+                        )
+                    },
+                    onDrawSurface = { drawRect(Color(0x08000000)) },
+                ),
+        )
     }
 }
 
