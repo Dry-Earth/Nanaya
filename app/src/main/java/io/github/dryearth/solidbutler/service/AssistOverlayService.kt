@@ -711,6 +711,208 @@ private fun OverlayAssistant(
     val sheetVisible = revealed
     LaunchedEffect(sheetVisible) {
         if (sheetVisible) {
+            sheetEntry.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+        } else {
+            sheetEntry.snapTo(0f)
+        }
+    }
+
+    LaunchedEffect(busResult) {
+        val text = busResult ?: return@LaunchedEffect
+        if (text.isNotBlank()) {
+            input = ""
+            voiceStatus = null
+            vm.sendChat(text)
+            revealed = true
+        }
+        OverlayVoiceBus.reset()
+    }
+    LaunchedEffect(busError) {
+        val err = busError ?: return@LaunchedEffect
+        voiceStatus = err
+        revealed = true
+        Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+        OverlayVoiceBus.error.value = null
+    }
+
+    fun startVoice() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            voiceStatus = "麦克风未授权，请在 设置 → 权限与授权 开启"
+            revealed = true
+            Toast.makeText(context, voiceStatus, Toast.LENGTH_LONG).show()
+            return
+        }
+        AssistOverlayService.active?.upgradeMicrophoneType()
+        voiceStatus = "正在启动语音…"
+        try {
+            ToneGenerator(AudioManager.STREAM_MUSIC, 50).apply {
+                startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ release() }, 250)
+            }
+        } catch (_: Exception) {}
+        val ok = runCatching { OverlaySpeech.start(context) }.isSuccess
+        if (!ok) {
+            voiceStatus = "无法启动语音识别"
+            revealed = true
+        }
+    }
+
+    var closing by remember { mutableStateOf(false) }
+    val exit = remember { Animatable(0f) }
+    fun dismiss() {
+        if (closing) return
+        closing = true
+        scope.launch {
+            exit.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
+            onClose()
+        }
+    }
+
+    LaunchedEffect(autoVoice) {
+        if (autoVoice) {
+            revealed = false
+            wakeSerial++
+            wakeToken++
+        }
+    }
+    LaunchedEffect(wakeToken) {
+        if (wakeToken == 0) return@LaunchedEffect
+        val phrases = vm.prefs.wakeGreetings
+            .lines()
+            .map { it.trim().trim(',', '，', ';', '；') }
+            .filter { it.isNotBlank() }
+        val phrase = phrases.randomOrNull()
+        if (phrase != null) {
+            // Give the system engine time to initialise after the wake sound.
+            val ready = withTimeoutOrNull(4000) {
+                while (!ttsReady.value) delay(60)
+                true
+            } == true
+            if (ready) {
+                if (vm.prefs.wakeSoundUri.isNotBlank()) delay(450)
+                val engine = ttsRef.value
+                if (engine != null) {
+                    val finished = withTimeoutOrNull(6000) { speakAndWait(engine, phrase) }
+                    if (finished == null) runCatching { engine.stop() }
+                    delay(120)
+                }
+            }
+        }
+        startVoice()
+        onVoiceConsumed()
+    }
+
+    BoxWithConstraints(
+        Modifier.fillMaxSize().imePadding(),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        val maxPanelPx = with(density) { maxHeight.toPx() } * 0.92f
+        val minPanelPx = with(density) { 232.dp.toPx() }.coerceAtMost(maxPanelPx)
+        val heightAnim = remember { Animatable(0f) }
+        var dragHeight by remember { mutableStateOf<Float?>(null) }
+        var dragStart by remember { mutableFloatStateOf(0f) }
+        var dragDelta by remember { mutableFloatStateOf(0f) }
+        var contentHeight by remember { mutableFloatStateOf(0f) }
+        var autoSuppressed by remember { mutableStateOf(false) }
+
+        LaunchedEffect(minPanelPx) {
+            if (heightAnim.value <= 0.5f) heightAnim.snapTo(minPanelPx)
+        }
+        val autoTargetPx = (minPanelPx + contentHeight).coerceIn(minPanelPx, maxPanelPx)
+        LaunchedEffect(autoTargetPx, autoSuppressed) {
+            if (!autoSuppressed && dragHeight == null && autoTargetPx > heightAnim.value + 0.5f) {
+                heightAnim.animateTo(
+                    autoTargetPx,
+                    spring(dampingRatio = 0.9f, stiffness = 320f),
+                )
+            }
+        }
+        LaunchedEffect(state.messages.size) {
+            autoSuppressed = false
+        }
+        LaunchedEffect(state.messages.isEmpty()) {
+            if (state.messages.isEmpty()) contentHeight = 0f
+        }
+
+        val panelHeightPx = dragHeight ?: heightAnim.value
+        val dismissHeight = if (sheetVisible) {
+            (maxHeight - with(density) { panelHeightPx.toDp() }).coerceAtLeast(0.dp)
+        } else {
+            maxHeight
+        }
+        val dragModifier = Modifier.pointerInput(minPanelPx, maxPanelPx, autoTargetPx) {
+            detectVerticalDragGestures(
+                onDragStart = {
+                    dragStart = heightAnim.value
+                    dragDelta = 0f
+                },
+                onVerticalDrag = { change, amount ->
+                    change.consume()
+                    dragDelta += amount
+                    dragHeight = (dragStart - dragDelta).coerceIn(minPanelPx, maxPanelPx)
+                },
+                onDragEnd = {
+                    val released = dragHeight ?: heightAnim.value
+                    dragHeight = null
+                    val step = with(density) { 42.dp.toPx() }
+                    val anchors = listOf(
+                        minPanelPx,
+                        autoTargetPx.coerceIn(minPanelPx, maxPanelPx),
+                        maxPanelPx,
+                    ).distinct().sorted()
+                    val target = when {
+                        dragDelta > step -> minPanelPx
+                        dragDelta < -step -> anchors.firstOrNull { it > released + 1f } ?: maxPanelPx
+                        else -> anchors.minByOrNull { kotlin.math.abs(it - released) } ?: released
+                    }
+                    if (dragDelta > step) autoSuppressed = true
+                    scope.launch {
+                        heightAnim.snapTo(released)
+                        heightAnim.animateTo(
+                            target,
+                            spring(dampingRatio = 0.86f, stiffness = 380f),
+                        )
+                    }
+                },
+                onDragCancel = {
+                    val released = dragHeight ?: heightAnim.value
+                    dragHeight = null
+                    scope.launch {
+                        heightAnim.snapTo(released)
+                        heightAnim.animateTo(
+                            autoTargetPx,
+                            spring(dampingRatio = 0.9f, stiffness = 320f),
+                        )
+                    }
+                },
+            )
+        }
+
+        // Tapping the open screen either opens the panel or dismisses the
+        // assistant; the panel itself consumes its own touches.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(dismissHeight)
+                .align(Alignment.TopCenter)
+                .pointerInput(sheetVisible) {
+                    detectTapGestures {
+                        if (sheetVisible) dismiss() else revealed = true
+                    }
+                },
+        )
+        WakeAmbient(
+            modifier = Modifier.fillMaxSize(),
+            progress = glow.value * (1f - exit.value),
+            entrance = entrance.value,
+            dim = dim.value * (1f - exit.value),
+            panelHeightPx = if (sheetVisible) panelHeightPx else with(density) { 92.dp.toPx() },
+            sheetVisible = sheetVisible,
+        )
+
+        if (sheetVisible) {
             val panelBackdrop = rememberLayerBackdrop {
                 drawRect(Color.Transparent)
                 drawContent()
