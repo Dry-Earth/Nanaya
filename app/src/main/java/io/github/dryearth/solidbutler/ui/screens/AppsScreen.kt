@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,8 +49,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.AppFilter
 import io.github.dryearth.solidbutler.ButlerViewModel
@@ -88,6 +88,12 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
         }
     }
 
+    val listBackdrop = rememberLayerBackdrop {
+        drawRect(Glass.Ink)
+        drawContent()
+    }
+    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().layerBackdrop(listBackdrop)) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 114.dp, end = 16.dp, bottom = 14.dp),
@@ -199,55 +205,34 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
+    }
 
     if (state.detail != null) {
-        Dialog(
-            onDismissRequest = { vm.closeApp() },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-            ),
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.38f))
+                .clickable { vm.closeApp() },
+        )
+        GlassPanel(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f),
+            corner = 30.dp,
+            bottomCorner = 0.dp,
+            padding = PaddingValues(0.dp),
+            strongGlass = true,
+            backdropOverride = listBackdrop,
         ) {
-            val shape = RoundedCornerShape(32.dp)
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 22.dp),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.88f)
-                        .shadow(28.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-                        .clip(shape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0xE60B1220),
-                                    Color(0xCC111827),
-                                    Color(0xB30A0D18),
-                                ),
-                            ),
-                        )
-                        .border(
-                            1.dp,
-                            Brush.verticalGradient(
-                                listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
-                            ),
-                            shape,
-                        ),
-                ) {
-                    AppDetailSheet(
-                        vm = vm,
-                        detail = state.detail!!,
-                        privileged = caps.privileged,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
+            AppDetailSheet(
+                vm = vm,
+                detail = state.detail!!,
+                privileged = caps.privileged,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
+    }
     }
 }
 

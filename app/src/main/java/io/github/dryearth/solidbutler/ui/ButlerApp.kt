@@ -116,6 +116,8 @@ fun ButlerApp(
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
+    val appsState by vm.apps.collectAsStateWithLifecycle()
+    val detailOpen = appsState.detail != null
     val glassBackdrop = LocalGlassBackdrop.current
     val contentBackdrop = rememberLayerBackdrop {
         drawRect(Glass.Ink)
@@ -246,7 +248,7 @@ fun ButlerApp(
             }
             }
         }
-        if (sub == null) {
+        if (sub == null && !detailOpen) {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -271,12 +273,14 @@ fun ButlerApp(
                 )
             }
         }
-        BottomBar(
-            current = tab,
-            onSelect = { sub = null; tab = it },
-            backdrop = contentBackdrop,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        if (!detailOpen) {
+            BottomBar(
+                current = tab,
+                onSelect = { sub = null; tab = it },
+                backdrop = contentBackdrop,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 
     if (chat) {

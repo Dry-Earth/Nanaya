@@ -229,6 +229,7 @@ fun LiquidGlassHost(content: @Composable () -> Unit) {
 fun GlassPanel(
     modifier: Modifier = Modifier,
     corner: Dp = 20.dp,
+    bottomCorner: Dp = corner,
     padding: PaddingValues = PaddingValues(16.dp),
     tint: Color = Color.White,
     opaque: Boolean = false,
@@ -237,7 +238,12 @@ fun GlassPanel(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(corner)
+    val shape = RoundedCornerShape(
+        topStart = corner,
+        topEnd = corner,
+        bottomStart = bottomCorner,
+        bottomEnd = bottomCorner,
+    )
     val backdrop = backdropOverride ?: LocalGlassBackdrop.current
     Column(
         modifier = modifier
