@@ -686,6 +686,7 @@ private fun OverlayAssistant(
     val scope = rememberCoroutineScope()
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
+    var diagMode by remember { mutableIntStateOf(0) }
     var revealed by remember { mutableStateOf(!autoVoice) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     val busStatus by OverlayVoiceBus.status.collectAsState()
@@ -968,8 +969,10 @@ private fun OverlayAssistant(
                     .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
                     .clip(shape),
             ) {
-                Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
-                    PanelAurora(palette, Modifier.matchParentSize())
+                if (diagMode != 3) {
+                    Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
+                        PanelAurora(palette, Modifier.matchParentSize())
+                    }
                 }
                 Column(
                     Modifier
@@ -978,25 +981,31 @@ private fun OverlayAssistant(
                             backdrop = panelBackdrop,
                             shape = { shape },
                             effects = {
-                                lens(
-                                    refractionHeight = 16.dp.toPx(),
-                                    refractionAmount = 10.dp.toPx(),
-                                    depthEffect = true,
-                                    chromaticAberration = 0.04f,
-                                )
+                                if (diagMode != 4) {
+                                    lens(
+                                        refractionHeight = 16.dp.toPx(),
+                                        refractionAmount = 10.dp.toPx(),
+                                        depthEffect = true,
+                                        chromaticAberration = 0.04f,
+                                    )
+                                }
                             },
-                            onDrawSurface = { drawRect(palette.glass) },
+                            onDrawSurface = {
+                                if (diagMode != 1) drawRect(palette.glass)
+                            },
                         )
                         .drawWithContent {
-                            drawRect(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0x18FFFFFF),
-                                        Color(0x06000000),
-                                        Color(0x2A000000),
+                            if (diagMode != 2) {
+                                drawRect(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color(0x18FFFFFF),
+                                            Color(0x06000000),
+                                            Color(0x2A000000),
+                                        ),
                                     ),
-                                ),
-                            )
+                                )
+                            }
                             drawContent()
                             drawLine(
                                 brush = Brush.horizontalGradient(
@@ -1019,7 +1028,31 @@ private fun OverlayAssistant(
                 ) {
                 val expanded = panelHeightPx >
                     minPanelPx + with(density) { 24.dp.toPx() }
-                Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                        .then(dragModifier)
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = {
+                                    diagMode = (diagMode + 1) % 5
+                                    val label = when (diagMode) {
+                                        1 -> "隐藏玻璃底色"
+                                        2 -> "隐藏纵向渐变"
+                                        3 -> "隐藏极光层"
+                                        4 -> "隐藏 lens"
+                                        else -> "恢复正常"
+                                    }
+                                    Toast.makeText(
+                                        context,
+                                        "诊断 $diagMode：$label",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                },
+                            )
+                        },
+                ) {
                     Box(
                         Modifier
                             .align(Alignment.Center)
@@ -1222,7 +1255,17 @@ private fun OverlayAssistant(
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "上拉展开 · 下拉收起",
+                        if (diagMode == 0) {
+                            "上拉展开 · 下拉收起 · 长按横条诊断"
+                        } else {
+                            "诊断 $diagMode：" + when (diagMode) {
+                                1 -> "隐藏玻璃底色"
+                                2 -> "隐藏纵向渐变"
+                                3 -> "隐藏极光层"
+                                4 -> "隐藏 lens"
+                                else -> "正常"
+                            }
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = palette.secondaryText.copy(alpha = 0.70f),
                         modifier = Modifier.weight(1f),
