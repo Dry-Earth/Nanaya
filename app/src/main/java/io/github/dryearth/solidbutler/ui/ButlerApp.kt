@@ -14,15 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
@@ -43,7 +39,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.runtime.remember
@@ -54,12 +49,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -77,7 +69,6 @@ import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.AmbientBackground
 import io.github.dryearth.solidbutler.ui.components.LocalGlassBackdrop
-import io.github.dryearth.solidbutler.ui.components.liquid.lens
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.screens.AppsScreen
@@ -129,8 +120,6 @@ fun ButlerApp(
     val appsState by vm.apps.collectAsStateWithLifecycle()
     val detailOpen = appsState.detail != null
     val glassBackdrop = LocalGlassBackdrop.current
-    val density = LocalDensity.current
-    val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     val contentBackdrop = rememberLayerBackdrop {
         drawRect(Glass.Ink)
         drawContent()
@@ -250,14 +239,6 @@ fun ButlerApp(
             }
         }
         if (sub == null && !detailOpen) {
-            TopRefractionSeam(
-                backdrop = contentBackdrop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .align(Alignment.TopCenter)
-                    .offset(y = statusBarHeight),
-            )
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -472,46 +453,6 @@ private fun TopBar(
                 Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
             }
         }
-    }
-}
-
-@Composable
-private fun TopRefractionSeam(backdrop: LayerBackdrop, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-            .drawWithContent {
-                drawContent()
-                // A thin specular edge at the seam.
-                drawLine(
-                    color = Color(0x22FFFFFF),
-                    start = Offset(0f, size.height / 2f),
-                    end = Offset(size.width, size.height / 2f),
-                    strokeWidth = 0.8.dp.toPx(),
-                )
-                // Fade the lens strip at both edges instead of a hard band.
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        listOf(Color.Transparent, Color.Black, Color.Black, Color.Transparent),
-                    ),
-                    blendMode = BlendMode.DstIn,
-                )
-            },
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RectangleShape },
-                    effects = {
-                        lens(
-                            refractionHeight = 18.dp.toPx(),
-                            refractionAmount = 14.dp.toPx(),
-                        )
-                    },
-                ),
-        )
     }
 }
 
