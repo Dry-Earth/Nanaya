@@ -280,7 +280,13 @@ fun GlassPanel(
     val backdrop = backdropOverride ?: LocalGlassBackdrop.current
     Column(
         modifier = modifier
-            .shadow(16.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+            .shadow(
+                12.dp,
+                shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.30f),
+                spotColor = Color.Black.copy(alpha = 0.22f),
+            )
             .clip(shape)
             .then(
                 if (backdrop != null && !opaque) {
@@ -414,11 +420,11 @@ fun Pill(
     Row(
         modifier = Modifier
             .shadow(
-                2.dp,
+                1.5.dp,
                 shape,
                 clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.28f),
-                spotColor = Color.Black.copy(alpha = 0.32f),
+                ambientColor = Color.Black.copy(alpha = 0.18f),
+                spotColor = Color.Black.copy(alpha = 0.12f),
             )
             .clip(shape)
             .background(

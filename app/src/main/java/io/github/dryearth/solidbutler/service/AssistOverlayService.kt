@@ -983,7 +983,12 @@ private fun OverlayAssistant(
                         translationY = (1f - sheetEntry.value) * 28.dp.toPx() +
                             exit.value * 40.dp.toPx()
                     }
-                    .shadow(18.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .shadow(
+                        14.dp,
+                        shape,
+                        ambientColor = Color.Black.copy(alpha = 0.34f),
+                        spotColor = Color.Black.copy(alpha = 0.22f),
+                    )
                     .clip(shape),
             ) {
                 Box(Modifier.matchParentSize().layerBackdrop(panelBackdrop)) {
@@ -1631,7 +1636,12 @@ private fun VoiceCapsule(
         modifier
             .fillMaxWidth()
             .height(56.dp)
-            .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .shadow(
+                10.dp,
+                shape,
+                ambientColor = Color.Black.copy(alpha = 0.30f),
+                spotColor = Color.Black.copy(alpha = 0.20f),
+            )
             .frostedGlass(
                 shape = shape,
                 corner = 30.dp,

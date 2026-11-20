@@ -492,7 +492,12 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
     Box(
         Modifier
             .size(40.dp)
-            .shadow(8.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .shadow(
+                6.dp,
+                shape,
+                ambientColor = Color.Black.copy(alpha = 0.28f),
+                spotColor = Color.Black.copy(alpha = 0.18f),
+            )
             .clip(shape)
             .drawBackdrop(
                 backdrop = backdrop,
