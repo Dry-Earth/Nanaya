@@ -413,7 +413,6 @@ fun Pill(
     val shape = CircleShape
     Row(
         modifier = Modifier
-            .shadow(4.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
             .background(
                 Brush.linearGradient(
