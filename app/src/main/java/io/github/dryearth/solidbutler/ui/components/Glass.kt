@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -73,7 +74,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 @Composable
-fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: Boolean = false) {
+fun AmbientBackground(
+    style: String = "stars",
+    imageUri: String = "",
+    aiReady: Boolean = false,
+    soften: Boolean = false,
+) {
     val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, style, imageUri) {
         value = if (style == "image" && imageUri.isNotBlank()) {
@@ -84,15 +90,16 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
                     resolver.openInputStream(Uri.parse(imageUri))?.use {
                         BitmapFactory.decodeStream(it, null, bounds)
                     }
-                    val maxW = context.resources.displayMetrics.widthPixels.coerceAtMost(1440)
-                    val maxH = context.resources.displayMetrics.heightPixels.coerceAtMost(2560)
+                    val metrics = context.resources.displayMetrics
+                    val maxW = metrics.widthPixels.coerceAtMost(2560)
+                    val maxH = metrics.heightPixels.coerceAtMost(3840)
                     var sample = 1
                     while (bounds.outWidth / sample > maxW || bounds.outHeight / sample > maxH) {
                         sample *= 2
                     }
                     val options = BitmapFactory.Options().apply {
                         inSampleSize = sample
-                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                        inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
                     }
                     resolver.openInputStream(Uri.parse(imageUri))?.use {
                         BitmapFactory.decodeStream(it, null, options)?.asImageBitmap()
@@ -107,7 +114,9 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
             Image(
                 bitmap = bitmap!!,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize().alpha(0.92f),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (soften) Modifier.blur(10.dp) else Modifier),
                 contentScale = ContentScale.Crop,
             )
         }
@@ -142,9 +151,9 @@ fun AmbientBackground(style: String = "stars", imageUri: String = "", aiReady: B
             drawRect(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.26f else 1f),
-                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.34f else 1f),
-                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.48f else 1f),
+                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.12f else 1f),
+                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.18f else 1f),
+                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.26f else 1f),
                     )
                 )
             )

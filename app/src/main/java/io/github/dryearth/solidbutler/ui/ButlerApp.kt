@@ -207,7 +207,7 @@ fun ButlerApp(
                 .layerBackdrop(contentBackdrop),
         ) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
-                AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+                AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
             }
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Box(Modifier.weight(1f)) {
@@ -314,7 +314,7 @@ fun ButlerApp(
     if (chat) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
-            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
             AssistantScreen(
                 vm = vm,
@@ -328,7 +328,7 @@ fun ButlerApp(
     if (settings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
-            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
             SettingsScreen(
                 vm = vm,
@@ -344,7 +344,7 @@ fun ButlerApp(
     if (aiSettings) {
         Box(Modifier.fillMaxSize().background(Glass.Ink)) {
             Box(Modifier.fillMaxSize().then(if (glassBackdrop != null) Modifier.layerBackdrop(glassBackdrop) else Modifier)) {
-            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured)
+            AmbientBackground(appearance.style, appearance.uri, vm.aiConfigured, appearance.soften)
         }
             AiSettingsScreen(
                 vm = vm,

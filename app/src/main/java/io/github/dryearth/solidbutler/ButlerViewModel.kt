@@ -81,7 +81,9 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     private val _autostart = MutableStateFlow(AutostartUiState())
     val autostart = _autostart.asStateFlow()
 
-    private val _appearance = MutableStateFlow(Appearance(prefs.backgroundStyle, prefs.backgroundUri))
+    private val _appearance = MutableStateFlow(
+        Appearance(prefs.backgroundStyle, prefs.backgroundUri, prefs.backgroundSoften),
+    )
     val appearance = _appearance.asStateFlow()
 
     private val _navigate = MutableStateFlow<String?>(null)
@@ -718,7 +720,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     fun setBackground(style: String, uri: String = prefs.backgroundUri) {
         prefs.backgroundStyle = style
         prefs.backgroundUri = uri
-        _appearance.value = Appearance(style, uri)
+        _appearance.value = Appearance(style, uri, prefs.backgroundSoften)
+    }
+
+    fun setBackgroundSoften(enabled: Boolean) {
+        prefs.backgroundSoften = enabled
+        _appearance.value = Appearance(prefs.backgroundStyle, prefs.backgroundUri, enabled)
     }
 
     fun sendChat(

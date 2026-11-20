@@ -96,6 +96,7 @@ fun SettingsScreen(
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     ToastEffect(chat.toast) { vm.clearChatToast() }
     var bgStyle by remember { mutableStateOf(appearance.style) }
+    var bgSoften by remember { mutableStateOf(appearance.soften) }
     val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -272,9 +273,19 @@ fun SettingsScreen(
                     onClick = { imagePicker.launch(arrayOf("image/*")) },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            SettingRow(
+                "背景柔化",
+                "清晰模式按屏幕分辨率解码；开启后做轻度柔化",
+                if (bgSoften) "已开启" else "已关闭",
+                bgSoften,
+            ) {
+                bgSoften = !bgSoften
+                vm.setBackgroundSoften(bgSoften)
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "自定义图片会以低透明度模糊背景显示；不申请相册权限，只读取你选中的这一张。",
+                "自定义图片按屏幕分辨率解码，不再强制低分辨率；不申请相册权限，只读取你选中的这一张。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )

@@ -77,4 +77,4 @@ data class AutostartUiState(
 )
 
 
-data class Appearance(val style: String = "stars", val uri: String = "")
+data class Appearance(val style: String = "stars", val uri: String = "", val soften: Boolean = false)

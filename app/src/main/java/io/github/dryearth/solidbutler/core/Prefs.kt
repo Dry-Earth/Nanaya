@@ -87,6 +87,10 @@ class Prefs(context: Context) {
         get() = sp.getString("bg_uri", "") ?: ""
         set(value) = sp.edit().putString("bg_uri", value).apply()
 
+    var backgroundSoften: Boolean
+        get() = sp.getBoolean("bg_soften", false)
+        set(value) = sp.edit().putBoolean("bg_soften", value).apply()
+
     var aiConfigured: Boolean
         get() = aiApiKey.isNotBlank()
         set(value) = sp.edit().putBoolean("ai_configured", value).apply()

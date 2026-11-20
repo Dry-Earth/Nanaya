@@ -24,6 +24,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -473,6 +474,7 @@ private fun OverlayAssistant(
     val glow = remember { Animatable(0f) }
     val dim = remember { Animatable(0f) }
     val entrance = remember { Animatable(0f) }
+    val orbit = remember { Animatable(0f) }
     val sheetEntry = remember { Animatable(0f) }
     var wakeSerial by remember { mutableIntStateOf(0) }
     var wakeToken by remember { mutableIntStateOf(0) }
@@ -502,6 +504,7 @@ private fun OverlayAssistant(
         if (wakeSerial == 0) return@LaunchedEffect
         dim.snapTo(0f)
         entrance.snapTo(0f)
+        orbit.snapTo(0f)
         entry.snapTo(0f)
         glow.snapTo(0f)
         launch { dim.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
@@ -509,6 +512,10 @@ private fun OverlayAssistant(
         launch {
             glow.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
             glow.animateTo(0.52f, tween(1100, easing = FastOutSlowInEasing))
+        }
+        launch {
+            kotlinx.coroutines.delay(520)
+            orbit.animateTo(1f, tween(2800, easing = LinearEasing))
         }
         kotlinx.coroutines.delay(160)
         entry.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
@@ -960,6 +967,7 @@ private fun OverlayAssistant(
         WakeStreamerLayer(
             modifier = Modifier.fillMaxSize(),
             entrance = entrance.value,
+            orbit = orbit.value,
             layerAlpha = 1f - exit.value,
         )
     }
@@ -1061,6 +1069,7 @@ private fun WakeAmbient(
 private fun WakeStreamerLayer(
     modifier: Modifier = Modifier,
     entrance: Float,
+    orbit: Float,
     layerAlpha: Float,
 ) {
     if (entrance <= 0.02f || layerAlpha <= 0.001f) return
@@ -1121,13 +1130,13 @@ private fun WakeStreamerLayer(
                             Color(0xFFFFE4B5),
                         ),
                     ),
-                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
                     alpha = (1f - e * 0.18f) * layerAlpha,
                 )
             }
             if (head > 0f) {
                 val point = edgeMeasure.getPosition(head)
-                bloom(point.x, point.y, 32.dp.toPx(), Color(0xFFFFF3D6), 0.9f)
+                bloom(point.x, point.y, 18.dp.toPx(), Color(0xFFFFF3D6), 0.65f)
                 // Small sparks trail behind the head.
                 for (i in 1..6) {
                     val d = (head - i * 15.dp.toPx()).coerceAtLeast(0f)
@@ -1135,7 +1144,7 @@ private fun WakeStreamerLayer(
                     val p = edgeMeasure.getPosition(d)
                     drawCircle(
                         color = if (i % 2 == 0) Color(0xFFFF9ECB) else Color(0xFFBFE0FF),
-                        radius = (2.4.dp.toPx()) * (1f - i * 0.11f),
+                        radius = (1.3.dp.toPx()) * (1f - i * 0.11f),
                         center = Offset(p.x, p.y),
                         alpha = (0.50f - i * 0.06f).coerceAtLeast(0f) * layerAlpha,
                     )
@@ -1143,9 +1152,9 @@ private fun WakeStreamerLayer(
             }
         }
 
-        // 2. Ribbon travels around the capsule outline.
-        val orbit = ((e - 0.42f) / 0.38f).coerceIn(0f, 1f)
-        if (orbit > 0f) {
+        // 2. Thin ribbon travels slowly around the capsule outline.
+        val ribbon = orbit.coerceIn(0f, 1f)
+        if (ribbon > 0f) {
             val capsule = Path().apply {
                 addRoundRect(
                     RoundRect(
@@ -1161,7 +1170,7 @@ private fun WakeStreamerLayer(
             val measure = PathMeasure().apply { setPath(capsule, false) }
             val perimeter = measure.length
             if (perimeter > 1f) {
-                val fade = if (orbit < 0.82f) 1f else (1f - (orbit - 0.82f) / 0.18f).coerceIn(0f, 1f)
+                val fade = if (ribbon < 0.86f) 1f else (1f - (ribbon - 0.86f) / 0.14f).coerceIn(0f, 1f)
                 val ringBrush = Brush.sweepGradient(
                     colors = listOf(
                         Color(0xFF4F8BFF),
@@ -1175,19 +1184,19 @@ private fun WakeStreamerLayer(
                 drawPath(
                     path = capsule,
                     brush = ringBrush,
-                    style = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round),
-                    alpha = 0.10f * orbit * fade * layerAlpha,
+                    style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.06f * ribbon * fade * layerAlpha,
                 )
                 drawPath(
                     path = capsule,
                     brush = ringBrush,
-                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
-                    alpha = 0.20f * orbit * fade * layerAlpha,
+                    style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.16f * ribbon * fade * layerAlpha,
                 )
 
                 val startOffset = perimeter * 0.25f
-                val head = (startOffset + perimeter * orbit) % perimeter
-                val tailLength = perimeter * 0.30f
+                val head = (startOffset + perimeter * ribbon) % perimeter
+                val tailLength = perimeter * 0.45f
                 fun drawSegment(from: Float, to: Float) {
                     if (to <= from + 0.5f) return
                     val part = Path()
@@ -1195,8 +1204,8 @@ private fun WakeStreamerLayer(
                         drawPath(
                             path = part,
                             brush = ringBrush,
-                            style = Stroke(width = 5.5.dp.toPx(), cap = StrokeCap.Round),
-                            alpha = 0.95f * fade * layerAlpha,
+                            style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round),
+                            alpha = 0.82f * fade * layerAlpha,
                         )
                     }
                 }
@@ -1207,8 +1216,8 @@ private fun WakeStreamerLayer(
                     drawSegment(perimeter + (head - tailLength), perimeter)
                 }
                 val point = measure.getPosition(head)
-                bloom(point.x, point.y, 42.dp.toPx(), Color(0xFFFFF3D6), 0.9f * fade)
-                bloom(point.x, point.y, 22.dp.toPx(), Color(0xFFFF9ECB), 0.55f * fade)
+                bloom(point.x, point.y, 20.dp.toPx(), Color(0xFFFFF3D6), 0.55f * fade)
+                bloom(point.x, point.y, 10.dp.toPx(), Color(0xFFFF9ECB), 0.30f * fade)
             }
         }
 
