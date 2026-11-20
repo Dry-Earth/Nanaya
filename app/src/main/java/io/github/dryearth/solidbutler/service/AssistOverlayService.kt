@@ -1102,7 +1102,7 @@ private fun OverlayAssistant(
                             }
                         }
                         .navigationBarsPadding()
-                        .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 18.dp),
+                        .padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 18.dp),
                 ) {
                 Box(Modifier.fillMaxWidth().height(30.dp).then(dragModifier)) {
                     Box(
