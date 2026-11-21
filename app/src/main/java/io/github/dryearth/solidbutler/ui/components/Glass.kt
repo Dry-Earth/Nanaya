@@ -101,7 +101,6 @@ fun AmbientBackground(
         imageUri,
         cacheKey,
     ) {
-        if (value != null) return@produceState
         val decoded = if (style == "image" && imageUri.isNotBlank()) {
             withContext(Dispatchers.IO) {
                 runCatching {
