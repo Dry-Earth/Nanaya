@@ -17,7 +17,7 @@ object ProxyStarter {
             "'exec app_process -Djava.class.path=$apk /system/bin " +
             "--nice-name=$PROCESS_NAME $MAIN_CLASS' " +
             ">$scriptPath; chmod 755 $scriptPath; " +
-            "sh -c 'setsid sh $scriptPath >$LOG_PATH 2>&1 </dev/null &'"
+            "sh -c 'setsid sh $scriptPath >$LOG_PATH 2>&1 </dev/null &'; sleep 3"
         val first = Shell.runAs(backend(), script, 8_000)
         if (!first.ok) {
             return first.text.ifBlank { "启动命令执行失败" }
