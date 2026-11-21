@@ -49,10 +49,26 @@ class AdbPairingService : Service() {
                     ?.toString()
                     ?.trim()
                     .orEmpty()
+                val pairing = buildNotification(
+                    title = "正在配对无线 ADB",
+                    text = "正在读取配对码…",
+                    ongoing = true,
+                )
+                if (Build.VERSION.SDK_INT >= 34) {
+                    startForeground(
+                        CODE_NOTIFICATION_ID,
+                        pairing,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                    )
+                } else {
+                    startForeground(CODE_NOTIFICATION_ID, pairing)
+                }
+                loadPending()
                 submitCode(code)
                 return START_NOT_STICKY
             }
             ACTION_CANCEL -> {
+                clearPending()
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -87,6 +103,12 @@ class AdbPairingService : Service() {
             if (!running) return@discoverPairing
             host = foundHost
             port = foundPort
+            if (foundHost != null && foundPort != null) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putString("host", foundHost)
+                    .putInt("port", foundPort)
+                    .apply()
+            }
             if (foundHost == null || foundPort == null) {
                 showNotification(
                     buildNotification(
@@ -100,16 +122,17 @@ class AdbPairingService : Service() {
                 stopSelf()
                 return@discoverPairing
             }
-            showNotification(
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            getSystemService(NotificationManager::class.java).notify(
+                CODE_NOTIFICATION_ID,
                 buildNotification(
-                    title = "已找到配对端口",
-                    text = "$foundHost:$foundPort · 在通知里输入 6 位配对码",
+                    title = "输入配对码",
+                    text = "已找到 $foundHost:$foundPort，点下面输入 6 位配对码",
                     ongoing = false,
                     contentIntent = appIntent(),
                     withCodeInput = true,
                 ),
             )
-            stopForeground(STOP_FOREGROUND_DETACH)
         }
     }
 
@@ -125,6 +148,7 @@ class AdbPairingService : Service() {
                     contentIntent = appIntent(),
                     withCodeInput = true,
                 ),
+                id = CODE_NOTIFICATION_ID,
             )
             return
         }
@@ -136,6 +160,7 @@ class AdbPairingService : Service() {
                     ongoing = false,
                     contentIntent = appIntent(),
                 ),
+                id = CODE_NOTIFICATION_ID,
             )
             return
         }
@@ -145,6 +170,7 @@ class AdbPairingService : Service() {
                 text = "$foundHost:$foundPort",
                 ongoing = true,
             ),
+            id = CODE_NOTIFICATION_ID,
         )
         scope.launch {
             val pairError = AdbManager.pairDevice(this@AdbPairingService, foundHost, foundPort, code)
@@ -163,6 +189,16 @@ class AdbPairingService : Service() {
         }
     }
 
+    private fun loadPending() {
+        val sp = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (host == null) host = sp.getString("host", null)
+        if (port == null) port = sp.getInt("port", 0).takeIf { it > 0 }
+    }
+
+    private fun clearPending() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().clear().apply()
+    }
+
     private fun finish(title: String, text: String) {
         showNotification(
             buildNotification(
@@ -171,13 +207,14 @@ class AdbPairingService : Service() {
                 ongoing = false,
                 contentIntent = appIntent(),
             ),
+            id = CODE_NOTIFICATION_ID,
         )
         stopForeground(STOP_FOREGROUND_DETACH)
         Handler(Looper.getMainLooper()).postDelayed({ stopSelf() }, 8_000)
     }
 
-    private fun showNotification(notification: Notification) {
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+    private fun showNotification(notification: Notification, id: Int = NOTIFICATION_ID) {
+        getSystemService(NotificationManager::class.java).notify(id, notification)
     }
 
     private fun buildNotification(
@@ -195,6 +232,8 @@ class AdbPairingService : Service() {
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(false)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
         if (contentIntent != null) builder.setContentIntent(contentIntent)
@@ -215,19 +254,16 @@ class AdbPairingService : Service() {
                     submit,
                 ).addRemoteInput(remoteInput).build(),
             )
-        }
-        builder.addAction(
-            NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "取消",
+        } else if (!ongoing) {
+            builder.setDeleteIntent(
                 PendingIntent.getService(
                     this,
                     11,
                     Intent(this, AdbPairingService::class.java).setAction(ACTION_CANCEL),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 ),
-            ).build(),
-        )
+            )
+        }
         return builder.build()
     }
 
@@ -249,6 +285,8 @@ class AdbPairingService : Service() {
     companion object {
         private const val CHANNEL_ID = "adb_pairing_v2"
         private const val NOTIFICATION_ID = 12020
+        private const val CODE_NOTIFICATION_ID = 12021
+        private const val PREFS = "adb_pairing"
         private const val KEY_CODE = "adb_pairing_code"
         private const val ACTION_START = "io.github.dryearth.solidbutler.ADB_PAIR_START"
         private const val ACTION_SUBMIT = "io.github.dryearth.solidbutler.ADB_PAIR_SUBMIT"
