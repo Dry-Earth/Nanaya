@@ -76,6 +76,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -647,7 +649,8 @@ private fun TopBar(
         animationSpec = tween(140),
         label = "topbar-progress",
     )
-    val blurProgress = (progress / 0.30f).coerceIn(0f, 1f)
+    val blurRaw = (progress / 0.42f).coerceIn(0f, 1f)
+    val blurProgress = blurRaw * blurRaw * (3f - 2f * blurRaw)
     val aura = rememberInfiniteTransition(label = "topbar-aura")
     val time by aura.animateFloat(
         initialValue = 0f,
@@ -655,32 +658,60 @@ private fun TopBar(
         animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
         label = "topbar-time",
     )
-    val particles = remember {
-        val random = kotlin.random.Random(7)
-        List(220) {
-            val lane = random.nextFloat()
-            val x: Float
-            val y: Float
-            val size: Float
-            when {
-                lane < 0.62f -> {
-                    x = 0.04f + random.nextFloat() * 0.52f
-                    y = 0.05f + random.nextFloat() * 0.25f
-                    size = 0.45f + random.nextFloat() * 0.85f
-                }
-                lane < 0.85f -> {
-                    x = 0.04f + random.nextFloat() * 0.62f
-                    y = 0.30f + random.nextFloat() * 0.16f
-                    size = 0.55f + random.nextFloat() * 1.0f
-                }
-                else -> {
-                    x = 0.04f + random.nextFloat() * 0.76f
-                    y = 0.50f + random.nextFloat() * 0.28f
-                    size = 0.65f + random.nextFloat() * 1.1f
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val titleStyle = MaterialTheme.typography.headlineLarge.copy(
+        letterSpacing = 1.5.sp,
+        fontWeight = FontWeight.Light,
+    )
+    val bodyStyle = MaterialTheme.typography.bodySmall
+    val titleLayout = remember(titleStyle, caps.device, caps.android) {
+        textMeasurer.measure(AnnotatedString("Nanaya"), titleStyle)
+    }
+    val bodyText = "${caps.device} · ${caps.android}"
+    val bodyLayout = remember(bodyStyle, bodyText) {
+        textMeasurer.measure(AnnotatedString(bodyText), bodyStyle)
+    }
+    val particles = remember(titleLayout, bodyLayout, density.density) {
+        val random = kotlin.random.Random(13)
+        val list = mutableListOf<FloatArray>()
+        val startX = with(density) { 18.dp.toPx() }
+        val subtitleY = titleLayout.size.height.toFloat() + with(density) { 9.dp.toPx() }
+
+        fun addGlyphs(
+            layout: androidx.compose.ui.text.TextLayoutResult,
+            yOffset: Float,
+            maxPerChar: Int,
+            areaDivisor: Float,
+        ) {
+            for (index in 0 until layout.layoutInput.text.length) {
+                val box = layout.getBoundingBox(index)
+                if (box.width <= 0f || box.height <= 0f) continue
+                val areaDp = (box.width / density.density) * (box.height / density.density)
+                val count = (areaDp / areaDivisor).toInt().coerceIn(1, maxPerChar)
+                repeat(count) {
+                    list += floatArrayOf(
+                        startX + box.left + random.nextFloat() * box.width,
+                        yOffset + box.top + random.nextFloat() * box.height,
+                        random.nextFloat(),
+                        0.14f + random.nextFloat() * 0.38f,
+                    )
                 }
             }
-            floatArrayOf(x, y, random.nextFloat(), size)
         }
+
+        addGlyphs(titleLayout, 0f, 8, 55f)
+        addGlyphs(bodyLayout, subtitleY, 3, 90f)
+        val pillsY = subtitleY + bodyLayout.size.height.toFloat() + with(density) { 12.dp.toPx() }
+        repeat(22) {
+            list += floatArrayOf(
+                startX + random.nextFloat() * with(density) { 230.dp.toPx() },
+                pillsY + random.nextFloat() * with(density) { 24.dp.toPx() },
+                random.nextFloat(),
+                0.14f + random.nextFloat() * 0.30f,
+            )
+        }
+        list
     }
     val auraColors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Ice)
 
@@ -745,20 +776,17 @@ private fun TopBar(
             val w = size.width
             val h = size.height
             val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
-            if (progress > 0.30f) {
-                val appear = ((progress - 0.30f) / 0.12f).coerceIn(0f, 1f)
+            if (progress > 0.05f) {
+                val appear = ((progress - 0.05f) / 0.25f).coerceIn(0f, 1f)
+                val flow = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
                 particles.forEachIndexed { index, p ->
-                    val start = Offset(
-                        x = 18.dp.toPx() + p[0] * (w - 36.dp.toPx()),
-                        y = p[1] * h,
-                    )
-                    val flow = ((progress - 0.30f) / 0.70f).coerceIn(0f, 1f)
+                    val start = Offset(p[0], p[1])
                     val rawT = (flow * 1.2f - p[2] * 0.18f).coerceIn(0f, 1f)
                     val eased = rawT * rawT * (3f - 2f * rawT)
-                    val wobble = sin(time * 2.4f + p[2] * 6.28318f) * (1f - eased) * 12.dp.toPx()
-                    val pulse = 0.5f + 0.5f * sin(time * 2.8f + p[2] * 6.28318f)
-                    val angle = p[2] * 6.28318f + time * 0.30f
-                    val ringRadius = (17f + p[3] * 7f + pulse * 2.5f).dp.toPx()
+                    val wobble = sin(time * 2.4f + p[2] * 6.28318f) * (1f - eased) * 10.dp.toPx()
+                    val pulse = 0.5f + 0.5f * sin(time * 2.6f + p[2] * 6.28318f)
+                    val angle = index.toFloat() / particles.size * 6.28318f + time * 0.32f
+                    val ringRadius = (17f + p[2] * 5f + pulse * 2.5f).dp.toPx()
                     val target = Offset(
                         x = icon.x + cos(angle) * ringRadius,
                         y = icon.y + sin(angle) * ringRadius,
@@ -767,12 +795,19 @@ private fun TopBar(
                         x = start.x + (target.x - start.x) * eased,
                         y = start.y + (target.y - start.y) * eased + wobble,
                     )
-                    val color = auraColors[index % auraColors.size]
+                    val color = if (index % 6 == 0) Color.White else auraColors[index % auraColors.size]
+                    val radius = p[3].dp.toPx()
                     drawCircle(
                         color = color,
-                        radius = (0.16f + p[3] * 0.42f).dp.toPx(),
+                        radius = radius * 1.9f,
                         center = pos,
-                        alpha = (appear * (0.42f + 0.38f * progress) * (1f - eased * 0.10f)).coerceIn(0f, 1f),
+                        alpha = (appear * 0.16f * (0.5f + progress * 0.5f)).coerceIn(0f, 1f),
+                    )
+                    drawCircle(
+                        color = color,
+                        radius = radius,
+                        center = pos,
+                        alpha = (appear * (0.62f + progress * 0.30f) * (1f - eased * 0.06f)).coerceIn(0f, 1f),
                     )
                 }
             }
