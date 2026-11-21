@@ -1114,7 +1114,7 @@ private fun OverlayAssistant(
                             .background(palette.secondaryText.copy(alpha = 0.45f)),
                     )
                     Box(
-                        Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         GlassIconButton(
@@ -1132,7 +1132,7 @@ private fun OverlayAssistant(
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = dragModifier.fillMaxWidth(),
+                    modifier = dragModifier.fillMaxWidth().padding(horizontal = 10.dp),
                 ) {
                     FlowingAiIcon(Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
@@ -1184,10 +1184,14 @@ private fun OverlayAssistant(
                         style = MaterialTheme.typography.labelSmall,
                         color = if (busListening) palette.danger else palette.secondaryText,
                         maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 10.dp),
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                ) {
                     Box(
                         Modifier.weight(1f)
                             .overlayGlass(
@@ -1280,7 +1284,10 @@ private fun OverlayAssistant(
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Spacer(Modifier.weight(1f))
                     Text(
                         "完整对话",
