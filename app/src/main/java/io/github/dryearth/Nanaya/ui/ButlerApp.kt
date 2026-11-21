@@ -650,7 +650,7 @@ private fun TopBar(
         animationSpec = tween(140),
         label = "topbar-progress",
     )
-    val blurRaw = (progress / 0.18f).coerceIn(0f, 1f)
+    val blurRaw = (progress / 0.38f).coerceIn(0f, 1f)
     val blurProgress = blurRaw * blurRaw * (3f - 2f * blurRaw)
     val aura = rememberInfiniteTransition(label = "topbar-aura")
     val time by aura.animateFloat(
@@ -688,8 +688,8 @@ private fun TopBar(
             for (index in 0 until layout.layoutInput.text.length) {
                 val box = layout.getBoundingBox(index)
                 if (box.width <= 0f || box.height <= 0f) continue
-                val areaDp = (box.width / density.density) * (box.height / density.density)
-                val count = (areaDp / areaDivisor).toInt().coerceIn(1, maxPerChar)
+                val areaPx = box.width * box.height
+                val count = (areaPx / areaDivisor).toInt().coerceIn(1, maxPerChar)
                 repeat(count) {
                     list += floatArrayOf(
                         startX + box.left + random.nextFloat() * box.width,
@@ -701,35 +701,24 @@ private fun TopBar(
             }
         }
 
-        addGlyphs(titleLayout, 0f, 8, 55f)
-        addGlyphs(bodyLayout, subtitleY, 3, 90f)
-        val pillsY = subtitleY + bodyLayout.size.height.toFloat() + with(density) { 12.dp.toPx() }
-        repeat(22) {
-            list += floatArrayOf(
-                startX + random.nextFloat() * with(density) { 230.dp.toPx() },
-                pillsY + random.nextFloat() * with(density) { 24.dp.toPx() },
-                random.nextFloat(),
-                0.14f + random.nextFloat() * 0.30f,
-            )
-        }
+        addGlyphs(titleLayout, 0f, 18, 700f)
+        addGlyphs(bodyLayout, subtitleY, 5, 900f)
         list
     }
     val debris = remember(particles) {
         particles.mapIndexed { index, p ->
-            val chunk = index < 26
             val baseAngle = p[2] * 6.28318f
-            val orbit = 18f + p[2] * 28f
-            val speed = 2.4f - ((orbit - 18f) / 46f) * 1.5f
+            val orbit = 20f + p[2] * 32f
+            val speed = 2.3f - ((orbit - 20f) / 52f) * 1.5f
             floatArrayOf(
                 p[0],
                 p[1],
                 p[2],
-                if (chunk) 1.6f + p[2] * 2.0f else 0.12f + p[2] * 0.30f,
+                0.14f + p[2] * 0.38f,
                 baseAngle,
                 orbit,
-                if (chunk) 0.015f else 0.12f + p[2] * 0.22f,
+                p[2] * 0.10f,
                 speed,
-                if (chunk) 1f else 0f,
             )
         }
     }
@@ -796,13 +785,12 @@ private fun TopBar(
             val w = size.width
             val h = size.height
             val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
-            if (progress > 0.02f) {
-                val dustAppear = ((progress - 0.14f) / 0.24f).coerceIn(0f, 1f)
+            if (progress > 0.005f) {
+                val appear = (progress / 0.08f).coerceIn(0f, 1f)
                 debris.forEachIndexed { index, d ->
                     val start = Offset(d[0], d[1])
-                    val chunk = d[8] > 0.5f
-                    val distanceToIcon = (1f - ((icon.x - start.x) / w).coerceIn(0f, 1f))
-                    val speedFactor = 0.65f + distanceToIcon * 1.55f
+                    val distanceToIcon = 1f - ((icon.x - start.x) / w).coerceIn(0f, 1f)
+                    val speedFactor = 0.55f + distanceToIcon * 1.35f
                     val delay = d[6]
                     val rawT = (((progress - delay) / (1f - delay)) * speedFactor).coerceIn(0f, 1f)
                     val t = rawT * rawT * (3f - 2f * rawT)
@@ -810,45 +798,40 @@ private fun TopBar(
                     val orbit = d[5].dp.toPx()
                     val target = Offset(
                         x = icon.x + cos(angle) * orbit,
-                        y = icon.y + sin(angle) * orbit * 0.34f,
+                        y = icon.y + sin(angle) * orbit * 0.30f,
                     )
-                    val wobble = sin(time * 2.2f + d[2] * 6.28318f) * (1f - t) * 8.dp.toPx()
+                    val wobble = sin(time * 2.2f + d[2] * 6.28318f) * (1f - t) * 7.dp.toPx()
                     val pos = Offset(
                         x = start.x + (target.x - start.x) * t,
                         y = start.y + (target.y - start.y) * t + wobble,
                     )
                     val tx = -sin(angle) * orbit
-                    val ty = cos(angle) * orbit * 0.34f
+                    val ty = cos(angle) * orbit * 0.30f
                     val length = sqrt(tx * tx + ty * ty).coerceAtLeast(0.001f)
                     val tangent = Offset(tx / length, ty / length)
                     val radius = d[3].dp.toPx()
-                    val alpha = if (chunk) {
-                        (1f - t * 0.85f).coerceIn(0f, 1f)
-                    } else {
-                        dustAppear * (0.55f + 0.30f * t)
-                    }
-                    if (alpha <= 0.01f) return@forEachIndexed
-                    val color = if (index % 7 == 0) Color.White else auraColors[index % auraColors.size]
-                    if (chunk) {
-                        drawCircle(
-                            color = color,
-                            radius = radius * (1f - t * 0.55f),
-                            center = pos,
-                            alpha = alpha * 0.9f,
-                        )
-                    }
-                    val streak = if (chunk) {
-                        radius * (1.2f + t * 2.4f)
-                    } else {
-                        (1.2f + t * 6.5f).dp.toPx() * (0.6f + d[2] * 0.8f)
-                    }
+                    val alpha = (appear * (0.55f + progress * 0.35f)).coerceIn(0f, 1f)
+                    val color = if (index % 5 == 0) Color.White else auraColors[index % auraColors.size]
+                    drawCircle(
+                        color = color,
+                        radius = radius * 1.8f,
+                        center = pos,
+                        alpha = alpha * 0.12f,
+                    )
+                    drawCircle(
+                        color = color,
+                        radius = radius,
+                        center = pos,
+                        alpha = alpha,
+                    )
+                    val streak = (1.0f + t * 6.0f).dp.toPx() * (0.55f + d[2] * 0.9f)
                     drawLine(
                         color = color,
                         start = pos - tangent * streak,
                         end = pos,
-                        strokeWidth = (if (chunk) radius * 1.1f else radius * 0.9f).coerceAtLeast(0.35f),
+                        strokeWidth = (radius * 0.9f).coerceAtLeast(0.3f),
                         cap = StrokeCap.Round,
-                        alpha = alpha,
+                        alpha = alpha * 0.9f,
                     )
                 }
             }
