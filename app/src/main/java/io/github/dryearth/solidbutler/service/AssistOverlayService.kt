@@ -1012,16 +1012,16 @@ private fun OverlayAssistant(
                             shape = { shape },
                             effects = {
                                 vibrancy()
-                                blur(6.dp.toPx(), 6.dp.toPx())
+                                blur(5.dp.toPx(), 5.dp.toPx())
                                 lens(
-                                    refractionHeight = 18.dp.toPx(),
-                                    refractionAmount = 16.dp.toPx(),
+                                    refractionHeight = 22.dp.toPx(),
+                                    refractionAmount = 24.dp.toPx(),
                                     depthEffect = true,
-                                    chromaticAberration = 0f,
+                                    chromaticAberration = 0.03f,
                                 )
                             },
                             onDrawSurface = {
-                                drawRect(palette.glass)
+                                drawRect(palette.glass.copy(alpha = 0.19f))
                                 drawRect(Color(0x0AFFFFFF))
                             },
                         )
