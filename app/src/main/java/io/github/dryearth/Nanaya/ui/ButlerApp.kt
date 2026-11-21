@@ -81,7 +81,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
@@ -752,12 +751,10 @@ private fun TopBar(
                     )
                     val rawT = (progress * 1.25f - p[2] * 0.18f).coerceIn(0f, 1f)
                     val eased = rawT * rawT * (3f - 2f * rawT)
-                    val wobble = sin(time * 2.1f + p[2] * 6.28318f) * (1f - eased) * 10.dp.toPx()
-                    val angle = p[2] * 6.28318f + time * 0.42f
-                    val ringRadius = (17f + p[3] * 6f + 2f * sin(time * 2.4f + p[2])).dp.toPx()
+                    val wobble = sin(time * 2.1f + p[2] * 6.28318f) * (1f - eased) * 9.dp.toPx()
                     val target = Offset(
-                        x = icon.x + cos(angle) * ringRadius,
-                        y = icon.y + sin(angle) * ringRadius,
+                        x = icon.x + (p[2] - 0.5f) * 10.dp.toPx(),
+                        y = icon.y + (p[3] - 0.5f) * 8.dp.toPx(),
                     )
                     val pos = Offset(
                         x = start.x + (target.x - start.x) * eased,
@@ -766,61 +763,9 @@ private fun TopBar(
                     val color = auraColors[index % auraColors.size]
                     drawCircle(
                         color = color,
-                        radius = p[3].dp.toPx(),
+                        radius = (0.22f + p[3] * 0.55f).dp.toPx(),
                         center = pos,
-                        alpha = ((0.22f + progress * 0.62f) * (1f - eased * 0.08f)).coerceIn(0f, 1f),
-                    )
-                }
-            }
-            if (progress > 0.30f) {
-                val ribbonAlpha = ((progress - 0.30f) / 0.70f).coerceIn(0f, 1f)
-                val path = Path().apply {
-                    moveTo(w * 0.08f, 32.dp.toPx())
-                    cubicTo(
-                        w * 0.32f, 78.dp.toPx(),
-                        w * 0.62f, 4.dp.toPx(),
-                        icon.x, icon.y,
-                    )
-                }
-                drawPath(
-                    path = path,
-                    brush = Brush.linearGradient(
-                        auraColors,
-                        start = Offset(w * 0.08f, 32.dp.toPx()),
-                        end = icon,
-                    ),
-                    style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round),
-                    alpha = 0.40f * ribbonAlpha,
-                )
-                drawPath(
-                    path = path,
-                    brush = Brush.linearGradient(
-                        auraColors,
-                        start = Offset(w * 0.08f, 32.dp.toPx()),
-                        end = icon,
-                    ),
-                    style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round),
-                    alpha = 0.10f * ribbonAlpha,
-                )
-            }
-            if (progress > 0.55f) {
-                val ringAlpha = ((progress - 0.55f) / 0.45f).coerceIn(0f, 1f)
-                val pulse = 0.5f + 0.5f * sin(time * 2.4f)
-                val ringRadius = (20f + pulse * 2.5f).dp.toPx()
-                rotate(Math.toDegrees(time.toDouble()).toFloat(), pivot = icon) {
-                    drawCircle(
-                        brush = Brush.sweepGradient(auraColors, center = icon),
-                        radius = ringRadius,
-                        center = icon,
-                        style = Stroke(width = (1.8f + pulse * 0.8f).dp.toPx(), cap = StrokeCap.Round),
-                        alpha = (0.62f + pulse * 0.28f) * ringAlpha,
-                    )
-                    drawCircle(
-                        brush = Brush.sweepGradient(auraColors, center = icon),
-                        radius = ringRadius + 5.dp.toPx(),
-                        center = icon,
-                        style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round),
-                        alpha = (0.08f + pulse * 0.08f) * ringAlpha,
+                        alpha = ((0.18f + progress * 0.55f) * (1f - eased * 0.82f)).coerceIn(0f, 1f),
                     )
                 }
             }
