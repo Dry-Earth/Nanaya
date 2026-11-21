@@ -1022,7 +1022,6 @@ private fun OverlayAssistant(
                             },
                             onDrawSurface = {
                                 drawRect(palette.glass.copy(alpha = 0.19f))
-                                drawRect(Color(0x0AFFFFFF))
                             },
                         )
                         .drawWithContent {
@@ -1035,6 +1034,7 @@ private fun OverlayAssistant(
                                     ),
                                 ),
                             )
+                            drawRect(Color(0x0AFFFFFF))
                             drawContent()
                             val radius = 30.dp.toPx()
                             val borderPath = Path().apply {
