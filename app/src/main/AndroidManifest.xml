@@ -115,6 +115,15 @@
         </service>
 
         <service
+            android:name=".service.AdbPairingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="wireless_adb_pairing" />
+        </service>
+
+        <service
             android:name=".service.AssistOverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse|microphone">
