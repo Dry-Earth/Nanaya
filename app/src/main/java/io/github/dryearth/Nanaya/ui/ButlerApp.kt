@@ -81,6 +81,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
@@ -643,9 +644,10 @@ private fun TopBar(
 ) {
     val progress by animateFloatAsState(
         targetValue = scrollProgress.coerceIn(0f, 1f),
-        animationSpec = tween(160),
+        animationSpec = tween(140),
         label = "topbar-progress",
     )
+    val blurProgress = (progress / 0.30f).coerceIn(0f, 1f)
     val aura = rememberInfiniteTransition(label = "topbar-aura")
     val time by aura.animateFloat(
         initialValue = 0f,
@@ -655,13 +657,13 @@ private fun TopBar(
     )
     val particles = remember {
         val random = kotlin.random.Random(7)
-        List(112) {
+        List(220) {
             val lane = random.nextFloat()
             val x: Float
             val y: Float
             val size: Float
             when {
-                lane < 0.60f -> {
+                lane < 0.62f -> {
                     x = 0.04f + random.nextFloat() * 0.52f
                     y = 0.05f + random.nextFloat() * 0.25f
                     size = 0.45f + random.nextFloat() * 0.85f
@@ -688,11 +690,11 @@ private fun TopBar(
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .graphicsLayer {
-                    alpha = 1f - progress * 0.96f
-                    translationX = -progress * 26.dp.toPx()
+                    alpha = 1f - blurProgress
+                    translationX = -blurProgress * 28.dp.toPx()
                 }
                 .then(
-                    if (progress > 0.01f) Modifier.blur((progress * 6).dp) else Modifier,
+                    if (blurProgress > 0.01f) Modifier.blur((blurProgress * 12).dp) else Modifier,
                 ),
         ) {
             Row(
@@ -743,18 +745,23 @@ private fun TopBar(
             val w = size.width
             val h = size.height
             val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
-            if (progress > 0.01f) {
+            if (progress > 0.30f) {
+                val appear = ((progress - 0.30f) / 0.12f).coerceIn(0f, 1f)
                 particles.forEachIndexed { index, p ->
                     val start = Offset(
                         x = 18.dp.toPx() + p[0] * (w - 36.dp.toPx()),
                         y = p[1] * h,
                     )
-                    val rawT = (progress * 1.25f - p[2] * 0.18f).coerceIn(0f, 1f)
+                    val flow = ((progress - 0.30f) / 0.70f).coerceIn(0f, 1f)
+                    val rawT = (flow * 1.2f - p[2] * 0.18f).coerceIn(0f, 1f)
                     val eased = rawT * rawT * (3f - 2f * rawT)
-                    val wobble = sin(time * 2.1f + p[2] * 6.28318f) * (1f - eased) * 9.dp.toPx()
+                    val wobble = sin(time * 2.4f + p[2] * 6.28318f) * (1f - eased) * 12.dp.toPx()
+                    val pulse = 0.5f + 0.5f * sin(time * 2.8f + p[2] * 6.28318f)
+                    val angle = p[2] * 6.28318f + time * 0.30f
+                    val ringRadius = (17f + p[3] * 7f + pulse * 2.5f).dp.toPx()
                     val target = Offset(
-                        x = icon.x + (p[2] - 0.5f) * 10.dp.toPx(),
-                        y = icon.y + (p[3] - 0.5f) * 8.dp.toPx(),
+                        x = icon.x + cos(angle) * ringRadius,
+                        y = icon.y + sin(angle) * ringRadius,
                     )
                     val pos = Offset(
                         x = start.x + (target.x - start.x) * eased,
@@ -763,9 +770,9 @@ private fun TopBar(
                     val color = auraColors[index % auraColors.size]
                     drawCircle(
                         color = color,
-                        radius = (0.22f + p[3] * 0.55f).dp.toPx(),
+                        radius = (0.16f + p[3] * 0.42f).dp.toPx(),
                         center = pos,
-                        alpha = ((0.18f + progress * 0.55f) * (1f - eased * 0.82f)).coerceIn(0f, 1f),
+                        alpha = (appear * (0.42f + 0.38f * progress) * (1f - eased * 0.10f)).coerceIn(0f, 1f),
                     )
                 }
             }
