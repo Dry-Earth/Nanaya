@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,7 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +74,7 @@ fun HomeScreen(
     onOpenAutostart: () -> Unit,
     onOpenMemory: () -> Unit,
     onOpenAutomation: () -> Unit,
+    onScrollProgress: (Float) -> Unit = {},
 ) {
     val caps by vm.caps.collectAsStateWithLifecycle()
     val storage by vm.storage.collectAsStateWithLifecycle()
@@ -79,9 +83,18 @@ fun HomeScreen(
 
     ToastEffect(perf.toast) { vm.clearPerfToast() }
     val topInset = statusBarInset()
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.firstVisibleItemIndex * 1000 + listState.firstVisibleItemScrollOffset
+        }.collect { raw ->
+            onScrollProgress((raw / 700f).coerceIn(0f, 1f))
+        }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(start = 16.dp, top = topInset + 84.dp, end = 16.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

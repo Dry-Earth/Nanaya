@@ -55,6 +55,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
@@ -69,6 +70,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -76,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.sin
 import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -132,6 +137,7 @@ fun ButlerApp(
     val caps by vm.caps.collectAsStateWithLifecycle()
     val perf by vm.perf.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf("home") }
+    var homeScroll by remember { mutableFloatStateOf(0f) }
     var chat by rememberSaveable { mutableStateOf(startWithChat) }
     var autoVoice by remember { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
@@ -240,6 +246,7 @@ fun ButlerApp(
                             onOpenAutostart = { sub = "autostart" },
                             onOpenMemory = { sub = "memory" },
                             onOpenAutomation = { sub = "automation" },
+                            onScrollProgress = { homeScroll = it },
                         )
                         "storage" -> StorageScreen(vm)
                         "apps" -> AppsScreen(
@@ -282,6 +289,7 @@ fun ButlerApp(
                     caps = caps,
                     perf = perf,
                     aiConfigured = vm.aiConfigured,
+                    scrollProgress = homeScroll,
                     onChat = { chat = true },
                 )
             }
@@ -629,50 +637,170 @@ private fun TopBar(
     caps: Capabilities,
     perf: PerfUiState,
     aiConfigured: Boolean,
+    scrollProgress: Float,
     onChat: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AiTitle(aiConfigured)
-                    Spacer(Modifier.width(8.dp))
-                    BreathingDot(ready = aiConfigured, active = caps.privileged)
+    val progress by animateFloatAsState(
+        targetValue = scrollProgress.coerceIn(0f, 1f),
+        animationSpec = tween(160),
+        label = "topbar-progress",
+    )
+    val aura = rememberInfiniteTransition(label = "topbar-aura")
+    val time by aura.animateFloat(
+        initialValue = 0f,
+        targetValue = (Math.PI * 2).toFloat(),
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
+        label = "topbar-time",
+    )
+    val particles = remember {
+        val random = kotlin.random.Random(7)
+        List(64) {
+            listOf(
+                random.nextFloat(),
+                random.nextFloat(),
+                random.nextFloat(),
+            )
+        }
+    }
+    val auraColors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Ice)
+
+    Box(Modifier.fillMaxWidth().height(104.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .graphicsLayer {
+                    alpha = 1f - progress * 0.96f
+                    translationX = -progress * 26.dp.toPx()
+                },
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(end = 46.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AiTitle(aiConfigured)
+                        Spacer(Modifier.width(8.dp))
+                        BreathingDot(ready = aiConfigured, active = caps.privileged)
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "${caps.device} · ${caps.android}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "${caps.device} · ${caps.android}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Glass.Muted,
-                )
             }
-            IconButton(onClick = onChat) {
-                FlowingAiIcon(modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val b = perf.snapshot.battery
+                Pill(
+                    text = if (b.level > 0) "${b.level}% ${if (b.charging) "充电中" else "电量"}" else "读取中",
+                    selected = b.charging,
+                    color = if (b.charging) Glass.Mint else Glass.Accent,
+                )
+                if (perf.snapshot.ramTotal > 0) {
+                    val ramPct = (perf.snapshot.ramUsed.toDouble() / perf.snapshot.ramTotal.toDouble() * 100).toInt()
+                    Pill("内存 $ramPct%", color = Glass.Ice)
+                }
+                if (caps.root) {
+                    Pill("Root", selected = true, color = Glass.Mint)
+                } else if (caps.adbConnected) {
+                    Pill("无线 ADB", selected = true, color = Glass.Accent)
+                }
+                if (aiConfigured) {
+                    Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+
+        Canvas(Modifier.matchParentSize()) {
+            val w = size.width
+            val h = size.height
+            val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
+            if (progress > 0.01f) {
+                particles.forEachIndexed { index, p ->
+                    val start = Offset(
+                        x = 18.dp.toPx() + p[0] * (w * 0.55f),
+                        y = 10.dp.toPx() + p[1] * 64.dp.toPx(),
+                    )
+                    val rawT = (progress * 1.35f - p[2] * 0.25f).coerceIn(0f, 1f)
+                    val eased = rawT * rawT * (3f - 2f * rawT)
+                    val wobble = sin(time * 2.1f + p[2] * 6.28318f) * (1f - eased) * 9.dp.toPx()
+                    val pos = Offset(
+                        x = start.x + (icon.x - start.x) * eased,
+                        y = start.y + (icon.y - start.y) * eased + wobble,
+                    )
+                    val color = auraColors[index % auraColors.size]
+                    drawCircle(
+                        color = color,
+                        radius = (0.7f + p[2] * 1.5f).dp.toPx(),
+                        center = pos,
+                        alpha = ((0.25f + progress * 0.65f) * (1f - eased * 0.15f)).coerceIn(0f, 1f),
+                    )
+                }
+            }
+            if (progress > 0.30f) {
+                val ribbonAlpha = ((progress - 0.30f) / 0.70f).coerceIn(0f, 1f)
+                val path = Path().apply {
+                    moveTo(w * 0.08f, 32.dp.toPx())
+                    cubicTo(
+                        w * 0.32f, 78.dp.toPx(),
+                        w * 0.62f, 4.dp.toPx(),
+                        icon.x, icon.y,
+                    )
+                }
+                drawPath(
+                    path = path,
+                    brush = Brush.linearGradient(
+                        auraColors,
+                        start = Offset(w * 0.08f, 32.dp.toPx()),
+                        end = icon,
+                    ),
+                    style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.72f * ribbonAlpha,
+                )
+                drawPath(
+                    path = path,
+                    brush = Brush.linearGradient(
+                        auraColors,
+                        start = Offset(w * 0.08f, 32.dp.toPx()),
+                        end = icon,
+                    ),
+                    style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round),
+                    alpha = 0.16f * ribbonAlpha,
+                )
+            }
+            if (progress > 0.55f) {
+                val ringAlpha = ((progress - 0.55f) / 0.45f).coerceIn(0f, 1f)
+                rotate(Math.toDegrees(time.toDouble()).toFloat(), pivot = icon) {
+                    drawCircle(
+                        brush = Brush.sweepGradient(auraColors, center = icon),
+                        radius = 20.dp.toPx(),
+                        center = icon,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+                        alpha = 0.85f * ringAlpha,
+                    )
+                    drawCircle(
+                        brush = Brush.sweepGradient(auraColors, center = icon),
+                        radius = 25.dp.toPx(),
+                        center = icon,
+                        style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round),
+                        alpha = 0.14f * ringAlpha,
+                    )
+                }
+            }
+        }
+
+        IconButton(
+            onClick = onChat,
+            modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
         ) {
-            val b = perf.snapshot.battery
-            Pill(
-                text = if (b.level > 0) "${b.level}% ${if (b.charging) "充电中" else "电量"}" else "读取中",
-                selected = b.charging,
-                color = if (b.charging) Glass.Mint else Glass.Accent,
-            )
-            if (perf.snapshot.ramTotal > 0) {
-                val ramPct = (perf.snapshot.ramUsed.toDouble() / perf.snapshot.ramTotal.toDouble() * 100).toInt()
-                Pill("内存 $ramPct%", color = Glass.Ice)
-            }
-            if (caps.root) {
-                Pill("Root", selected = true, color = Glass.Mint)
-            } else if (caps.adbConnected) {
-                Pill("无线 ADB", selected = true, color = Glass.Accent)
-            }
-            if (aiConfigured) {
-                Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
-            }
+            FlowingAiIcon(modifier = Modifier.size(24.dp))
         }
     }
 }
