@@ -646,100 +646,11 @@ private fun TopBar(
 ) {
     val progress by animateFloatAsState(
         targetValue = scrollProgress.coerceIn(0f, 1f),
-        animationSpec = tween(140),
+        animationSpec = tween(180),
         label = "topbar-progress",
     )
-    val blurRaw = (progress / 0.38f).coerceIn(0f, 1f)
-    val blurProgress = blurRaw * blurRaw * (3f - 2f * blurRaw)
-    val aura = rememberInfiniteTransition(label = "topbar-aura")
-    val time by aura.animateFloat(
-        initialValue = 0f,
-        targetValue = (Math.PI * 2).toFloat(),
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
-        label = "topbar-time",
-    )
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val titleSizePx = with(density) { MaterialTheme.typography.headlineLarge.fontSize.toPx() }
-    val bodySizePx = with(density) { MaterialTheme.typography.bodySmall.fontSize.toPx() }
-    val keyHint = "${caps.device}|${caps.android}"
-    val particles = remember(keyHint, density.density, screenWidthPx, titleSizePx, bodySizePx) {
-        val width = screenWidthPx.toInt().coerceAtLeast(1)
-        val height = with(density) { 104.dp.toPx() }.toInt().coerceAtLeast(1)
-        val bitmap = android.graphics.Bitmap.createBitmap(
-            width,
-            height,
-            android.graphics.Bitmap.Config.ARGB_8888,
-        )
-        val canvas = android.graphics.Canvas(bitmap)
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
-            textSize = titleSizePx
-            letterSpacing = with(density) { 1.5.dp.toPx() } / titleSizePx
-        }
-        val titleMetrics = paint.fontMetrics
-        val titleBaseline = -titleMetrics.top
-        val x = with(density) { 18.dp.toPx() }
-        canvas.drawText("Nanaya", x, titleBaseline, paint)
-        paint.textSize = bodySizePx
-        paint.letterSpacing = 0f
-        val bodyMetrics = paint.fontMetrics
-        val bodyTop = titleBaseline + titleMetrics.descent + with(density) { 2.dp.toPx() }
-        val bodyBaseline = bodyTop - bodyMetrics.top
-        canvas.drawText("${caps.device} · ${caps.android}", x, bodyBaseline, paint)
-
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        val points = ArrayList<Int>(width * height / 16)
-        var py = 0
-        while (py < height) {
-            var px = 0
-            while (px < width) {
-                val alpha = android.graphics.Color.alpha(pixels[py * width + px])
-                if (alpha > 90) points += py * width + px
-                px += 2
-            }
-            py += 2
-        }
-        val random = kotlin.random.Random(17)
-        val sampleStep = (points.size / 360).coerceAtLeast(1)
-        buildList {
-            var i = 0
-            while (i < points.size) {
-                val index = points[i]
-                val px = index % width
-                val py = index / width
-                add(
-                    floatArrayOf(
-                        px.toFloat(),
-                        py.toFloat(),
-                        random.nextFloat(),
-                        0.12f + random.nextFloat() * 0.30f,
-                    ),
-                )
-                i += sampleStep
-            }
-        }
-    }
-    val debris = remember(particles) {
-        particles.mapIndexed { index, p ->
-            val baseAngle = p[2] * 6.28318f
-            val orbit = 18f + p[2] * 30f
-            val speed = 2.4f - ((orbit - 18f) / 48f) * 1.6f
-            floatArrayOf(
-                p[0],
-                p[1],
-                p[2],
-                0.14f + p[2] * 0.34f,
-                baseAngle,
-                orbit,
-                speed,
-            )
-        }
-    }
-    val auraColors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Ice)
+    val raw = (progress / 0.75f).coerceIn(0f, 1f)
+    val eased = raw * raw * (3f - 2f * raw)
 
     Box(Modifier.fillMaxWidth().height(104.dp)) {
         Column(
@@ -747,11 +658,11 @@ private fun TopBar(
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .graphicsLayer {
-                    alpha = 1f - blurProgress
-                    translationX = -blurProgress * 28.dp.toPx()
+                    alpha = 1f - eased
+                    translationY = -eased * 6.dp.toPx()
                 }
                 .then(
-                    if (blurProgress > 0.01f) Modifier.blur((blurProgress * 12).dp) else Modifier,
+                    if (eased > 0.01f) Modifier.blur((eased * 10).dp) else Modifier,
                 ),
         ) {
             Row(
@@ -794,81 +705,6 @@ private fun TopBar(
                 }
                 if (aiConfigured) {
                     Pill("AI 就绪", selected = true, color = Glass.Violet, onClick = onChat)
-                }
-            }
-        }
-
-        Canvas(Modifier.matchParentSize()) {
-            val w = size.width
-            val h = size.height
-            val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
-            if (progress > 0.005f) {
-                fun smooth(x: Float): Float {
-                    val v = x.coerceIn(0f, 1f)
-                    return v * v * (3f - 2f * v)
-                }
-                val appear = (progress / 0.06f).coerceIn(0f, 1f)
-                debris.forEachIndexed { index, d ->
-                    val start = Offset(d[0], d[1])
-                    val delay = d[2] * 0.06f
-                    val rise = smooth((progress - delay) / 0.30f)
-                    val along = smooth((progress - 0.28f) / 0.34f)
-                    val fall = smooth((progress - 0.60f) / 0.40f)
-                    val topA = Offset(
-                        x = start.x + (icon.x - start.x) * 0.08f * rise,
-                        y = start.y * (1f - rise),
-                    )
-                    val topB = Offset(
-                        x = icon.x + (d[2] - 0.5f) * 2.5f.dp.toPx(),
-                        y = 0f,
-                    )
-                    val angle = d[4] + time * d[6]
-                    val orbit = d[5].dp.toPx()
-                    val target = Offset(
-                        x = icon.x + cos(angle) * orbit,
-                        y = icon.y + sin(angle) * orbit * 0.30f,
-                    )
-                    val p1 = Offset(
-                        x = start.x + (topA.x - start.x) * rise,
-                        y = start.y + (topA.y - start.y) * rise,
-                    )
-                    val p2 = Offset(
-                        x = p1.x + (topB.x - p1.x) * along,
-                        y = p1.y + (topB.y - p1.y) * along,
-                    )
-                    val pos = Offset(
-                        x = p2.x + (target.x - p2.x) * fall,
-                        y = p2.y + (target.y - p2.y) * fall,
-                    )
-                    val radius = d[3].dp.toPx()
-                    val color = if (index % 5 == 0) Color.White else auraColors[index % auraColors.size]
-                    val alpha = (appear * (0.55f + progress * 0.40f)).coerceIn(0f, 1f)
-                    drawCircle(
-                        color = color,
-                        radius = radius * 1.7f,
-                        center = pos,
-                        alpha = alpha * 0.12f,
-                    )
-                    drawCircle(
-                        color = color,
-                        radius = radius,
-                        center = pos,
-                        alpha = alpha,
-                    )
-                    if (fall > 0.15f) {
-                        val tx = -sin(angle) * orbit
-                        val ty = cos(angle) * orbit * 0.30f
-                        val length = sqrt(tx * tx + ty * ty).coerceAtLeast(0.001f)
-                        val streak = (0.8f + fall * 5.5f).dp.toPx() * (0.55f + d[2] * 0.9f)
-                        drawLine(
-                            color = color,
-                            start = pos - Offset(tx / length, ty / length) * streak,
-                            end = pos,
-                            strokeWidth = (radius * 0.9f).coerceAtLeast(0.3f),
-                            cap = StrokeCap.Round,
-                            alpha = alpha * 0.9f * fall,
-                        )
-                    }
                 }
             }
         }
