@@ -21,3 +21,9 @@
 -keep class android.sun.security.** { *; }
 -keep class io.github.muntashirakon.crypto.spake2.** { *; }
 -keep class android.sun.misc.** { *; }
+
+# Nanaya shell proxy entry point (launched by app_process)
+-keep class io.github.dryearth.solidbutler.proxy.ProxyMainKt {
+    public static void main(java.lang.String[]);
+}
+-keep class io.github.dryearth.solidbutler.proxy.** { *; }
