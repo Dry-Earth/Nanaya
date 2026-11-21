@@ -18,17 +18,20 @@ object ProxyStarter {
         if (!first.ok) {
             return first.text.ifBlank { "启动命令执行失败" }
         }
-        val check = Shell.runAs(
+        val ps = Shell.runAs(
             backend(),
-            "sleep 1; if ps -A | grep -q $PROCESS_NAME; then echo nanaya_proxy_started; " +
-                "else cat $LOG_PATH 2>/dev/null; fi",
+            "sleep 1; ps -A | grep -E '$PROCESS_NAME|ProxyMainKt|app_process' | grep -v grep",
+            10_000,
+        )
+        if (ps.text.isNotBlank()) return null
+        val diagnostics = Shell.runAs(
+            backend(),
+            "echo '--- log file'; ls -l $LOG_PATH 2>&1; cat $LOG_PATH 2>&1; " +
+                "echo '--- logcat'; logcat -d -t 120 2>/dev/null | " +
+                "grep -E 'ProxyMain|nanaya_proxy|AndroidRuntime|ClassNotFound|SELinux' | tail -30",
             12_000,
         )
-        return if (check.ok && check.text.contains("nanaya_proxy_started")) {
-            null
-        } else {
-            check.text.ifBlank { "命令已执行，但没有检测到进程" }
-        }
+        return diagnostics.text.ifBlank { "进程未启动，日志为空" }
     }
 
     fun stop(): String? {
