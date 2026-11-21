@@ -194,6 +194,8 @@ class AdbPairingService : Service() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
         if (contentIntent != null) builder.setContentIntent(contentIntent)
         if (withCodeInput) {
@@ -240,12 +242,12 @@ class AdbPairingService : Service() {
 
     private fun createChannel() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "无线 ADB 配对", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, "无线 ADB 配对", NotificationManager.IMPORTANCE_HIGH),
         )
     }
 
     companion object {
-        private const val CHANNEL_ID = "adb_pairing"
+        private const val CHANNEL_ID = "adb_pairing_v2"
         private const val NOTIFICATION_ID = 12020
         private const val KEY_CODE = "adb_pairing_code"
         private const val ACTION_START = "io.github.dryearth.solidbutler.ADB_PAIR_START"

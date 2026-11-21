@@ -128,6 +128,27 @@ fun SettingsScreen(
     var adbConnectPort by rememberSaveable { mutableStateOf("") }
     var adbMessage by remember { mutableStateOf<String?>(null) }
 
+    fun startAutoPairScan() {
+        adbExpanded = true
+        adbMessage = "已发送扫描通知，请在系统配对弹窗打开后在通知栏输入配对码"
+        AdbPairingService.start(context)
+        openFirst(
+            context,
+            Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS"),
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+        )
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startAutoPairScan()
+        } else {
+            Toast.makeText(context, "没有通知权限，配对码输入框不会显示", Toast.LENGTH_LONG).show()
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -414,7 +435,14 @@ fun SettingsScreen(
                 enabled = !adbBusy,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                    val needsRuntimePermission = Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (needsRuntimePermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
                         Toast.makeText(context, "请先允许通知，配对码需要在通知栏输入", Toast.LENGTH_LONG).show()
                         openFirst(
                             context,
@@ -423,14 +451,7 @@ fun SettingsScreen(
                             Intent(Settings.ACTION_SETTINGS),
                         )
                     } else {
-                        adbExpanded = true
-                        adbMessage = "已发送扫描通知，请在系统配对弹窗打开后在通知栏输入配对码"
-                        AdbPairingService.start(context)
-                        openFirst(
-                            context,
-                            Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS"),
-                            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-                        )
+                        startAutoPairScan()
                     }
                 },
             )
