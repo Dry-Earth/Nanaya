@@ -49,6 +49,7 @@ import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
 import io.github.dryearth.solidbutler.ui.components.Pill
 import io.github.dryearth.solidbutler.ui.theme.Glass
+import io.github.dryearth.solidbutler.proxy.ProxyStarter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +65,9 @@ fun SpecialPermissionsScreen(onBack: () -> Unit) {
     var groups by remember { mutableStateOf<List<SpecialGroup>>(emptyList()) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var proxyRunning by remember { mutableStateOf(false) }
+    var proxyBusy by remember { mutableStateOf(false) }
+    var proxyMessage by remember { mutableStateOf<String?>(null) }
 
     fun load() {
         scope.launch {
@@ -73,7 +77,10 @@ fun SpecialPermissionsScreen(onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(Unit) {
+        load()
+        proxyRunning = withContext(Dispatchers.IO) { ProxyStarter.running() }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -98,6 +105,69 @@ fun SpecialPermissionsScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Glass.Muted,
                 )
+            }
+        }
+
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Shizuku 兼容代理", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            if (proxyRunning) "shell 进程在线 · 兼容层开发中" else "未启动 · 当前阶段只验证进程启动",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (proxyRunning) Glass.Mint else Glass.Muted,
+                        )
+                    }
+                    Pill(
+                        if (proxyBusy) "处理中" else if (proxyRunning) "在线" else "未启动",
+                        selected = proxyRunning,
+                        color = if (proxyRunning) Glass.Mint else Glass.Faint,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "当前只启动 shell 进程，尚未分发 Shizuku Binder。下一步才是授权、Binder 兼容和调用监管。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        "启动代理",
+                        accent = true,
+                        enabled = !proxyBusy,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            proxyBusy = true
+                            proxyMessage = "正在启动 shell 进程…"
+                            scope.launch {
+                                val error = withContext(Dispatchers.IO) { ProxyStarter.start(context) }
+                                proxyRunning = withContext(Dispatchers.IO) { ProxyStarter.running() }
+                                proxyBusy = false
+                                proxyMessage = error ?: if (proxyRunning) "代理进程已启动" else "命令已执行，但没有检测到进程"
+                            }
+                        },
+                    )
+                    ActionButton(
+                        "停止",
+                        enabled = !proxyBusy && proxyRunning,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            proxyBusy = true
+                            scope.launch {
+                                val error = withContext(Dispatchers.IO) { ProxyStarter.stop() }
+                                proxyRunning = withContext(Dispatchers.IO) { ProxyStarter.running() }
+                                proxyBusy = false
+                                proxyMessage = error ?: "代理进程已停止"
+                            }
+                        },
+                    )
+                }
+                proxyMessage?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = if (proxyRunning) Glass.Mint else Glass.Amber)
+                }
             }
         }
 
