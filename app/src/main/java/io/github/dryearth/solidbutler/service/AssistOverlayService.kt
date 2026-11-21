@@ -1014,7 +1014,7 @@ private fun OverlayAssistant(
                                 vibrancy()
                                 blur(6.dp.toPx(), 6.dp.toPx())
                                 lens(
-                                    refractionHeight = 24.dp.toPx(),
+                                    refractionHeight = 18.dp.toPx(),
                                     refractionAmount = 16.dp.toPx(),
                                     depthEffect = true,
                                     chromaticAberration = 0f,
