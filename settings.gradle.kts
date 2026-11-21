@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SolidButler"
+rootProject.name = "Nanaya"
 include(":app")

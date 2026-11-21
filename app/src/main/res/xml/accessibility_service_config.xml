@@ -6,4 +6,4 @@
     android:canRetrieveWindowContent="false"
     android:description="@string/app_lock_description"
     android:notificationTimeout="120"
-    android:settingsActivity="io.github.dryearth.solidbutler.MainActivity" />
+    android:settingsActivity="io.github.dryearth.Nanaya.MainActivity" />

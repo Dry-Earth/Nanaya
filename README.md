@@ -122,7 +122,7 @@ BUTLER_KEY_PASSWORD
 ## 目录
 
 ```
-app/src/main/java/io/github/dryearth/solidbutler/
+app/src/main/java/io/github/dryearth/Nanaya/
 ├── ai/            OpenAI 兼容客户端与响应解析
 ├── core/          Shell、无线 ADB、能力探测、Lineage 服务、偏好设置
 ├── data/          存储 / 应用 / 性能 / 安全 / 自动化仓库

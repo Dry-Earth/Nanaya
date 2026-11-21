@@ -9,14 +9,14 @@ val compileSdkValue = (((findProperty("butlerCompileSdk") as String?)?.toIntOrNu
 val targetSdkValue = (findProperty("butlerTargetSdk") as String?)?.toIntOrNull() ?: compileSdkValue
 
 android {
-    namespace = "io.github.dryearth.solidbutler"
+    namespace = "io.github.dryearth.Nanaya"
     compileSdk = compileSdkValue
 
     defaultConfig {
-        applicationId = "io.github.dryearth.solidbutler"
+        applicationId = "io.github.dryearth.Nanaya"
         minSdk = 33
         targetSdk = targetSdkValue
-        versionCode = 129
+        versionCode = 130
         versionName = "0.8.51"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "Nanaya")
