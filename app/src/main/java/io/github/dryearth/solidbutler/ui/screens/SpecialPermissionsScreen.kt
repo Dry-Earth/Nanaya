@@ -1,5 +1,7 @@
 package io.github.dryearth.solidbutler.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -164,9 +167,29 @@ fun SpecialPermissionsScreen(onBack: () -> Unit) {
                         },
                     )
                 }
-                proxyMessage?.let {
+                proxyMessage?.let { message ->
                     Spacer(Modifier.height(6.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = if (proxyRunning) Glass.Mint else Glass.Amber)
+                    SelectionContainer {
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (proxyRunning) Glass.Mint else Glass.Amber,
+                            maxLines = 14,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    ActionButton(
+                        "复制日志",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val clipboard = context.getSystemService(ClipboardManager::class.java)
+                            clipboard?.setPrimaryClip(
+                                ClipData.newPlainText("Nanaya proxy log", message),
+                            )
+                            toast = "日志已复制"
+                        },
+                    )
                 }
             }
         }
