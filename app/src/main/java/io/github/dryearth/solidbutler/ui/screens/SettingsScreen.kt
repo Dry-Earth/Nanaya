@@ -123,6 +123,14 @@ fun SettingsScreen(
     var adbExpanded by rememberSaveable { mutableStateOf(false) }
     var adbDialog by remember { mutableStateOf(false) }
     var adbMode by remember { mutableStateOf<String?>(null) }
+    var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
+    var adbBusy by remember { mutableStateOf(false) }
+    var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
+    var adbPort by rememberSaveable { mutableStateOf("") }
+    var adbCode by rememberSaveable { mutableStateOf("") }
+    var adbConnectPort by rememberSaveable { mutableStateOf("") }
+    var adbMessage by remember { mutableStateOf<String?>(null) }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -134,13 +142,6 @@ fun SettingsScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
-    var adbBusy by remember { mutableStateOf(false) }
-    var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
-    var adbPort by rememberSaveable { mutableStateOf("") }
-    var adbCode by rememberSaveable { mutableStateOf("") }
-    var adbConnectPort by rememberSaveable { mutableStateOf("") }
-    var adbMessage by remember { mutableStateOf<String?>(null) }
 
     fun startAutoPairScan() {
         adbExpanded = true
