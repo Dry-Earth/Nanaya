@@ -12,16 +12,22 @@ object ProxyStarter {
 
     fun start(context: Context): String? {
         val apk = context.applicationInfo.sourceDir
-        val command = "rm -f $LOG_PATH; " +
-            "nohup sh -c 'export CLASSPATH=$apk; exec app_process /system/bin " +
-            "--nice-name=$PROCESS_NAME $MAIN_CLASS' >$LOG_PATH 2>&1 & " +
+        val launch = "CLASSPATH=$apk nohup app_process /system/bin " +
+            "--nice-name=$PROCESS_NAME $MAIN_CLASS >$LOG_PATH 2>&1 &"
+        val first = Shell.runAs(backend(), launch, 8_000)
+        if (!first.ok) {
+            return first.text.ifBlank { "启动命令执行失败" }
+        }
+        val check = Shell.runAs(
+            backend(),
             "sleep 1; if ps -A | grep -q $PROCESS_NAME; then echo nanaya_proxy_started; " +
-            "else cat $LOG_PATH 2>/dev/null || echo '进程启动后立即退出'; fi"
-        val result = Shell.runAs(backend(), command, 15_000)
-        return if (result.ok && result.text.contains("nanaya_proxy_started")) {
+                "else cat $LOG_PATH 2>/dev/null; fi",
+            12_000,
+        )
+        return if (check.ok && check.text.contains("nanaya_proxy_started")) {
             null
         } else {
-            result.text.ifBlank { "启动失败，没有返回输出" }
+            check.text.ifBlank { "命令已执行，但没有检测到进程" }
         }
     }
 
