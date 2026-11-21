@@ -75,9 +75,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -660,64 +659,82 @@ private fun TopBar(
         label = "topbar-time",
     )
     val density = LocalDensity.current
-    val textMeasurer = rememberTextMeasurer()
-    val titleStyle = MaterialTheme.typography.headlineLarge.copy(
-        letterSpacing = 1.5.sp,
-        fontWeight = FontWeight.Light,
-    )
-    val bodyStyle = MaterialTheme.typography.bodySmall
-    val titleLayout = remember(titleStyle, caps.device, caps.android) {
-        textMeasurer.measure(AnnotatedString("Nanaya"), titleStyle)
-    }
-    val bodyText = "${caps.device} · ${caps.android}"
-    val bodyLayout = remember(bodyStyle, bodyText) {
-        textMeasurer.measure(AnnotatedString(bodyText), bodyStyle)
-    }
-    val particles = remember(titleLayout, bodyLayout, density.density) {
-        val random = kotlin.random.Random(13)
-        val list = mutableListOf<FloatArray>()
-        val startX = with(density) { 18.dp.toPx() }
-        val subtitleY = titleLayout.size.height.toFloat() + with(density) { 9.dp.toPx() }
+    val configuration = LocalConfiguration.current
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val titleSizePx = with(density) { MaterialTheme.typography.headlineLarge.fontSize.toPx() }
+    val bodySizePx = with(density) { MaterialTheme.typography.bodySmall.fontSize.toPx() }
+    val keyHint = "${caps.device}|${caps.android}"
+    val particles = remember(keyHint, density.density, screenWidthPx, titleSizePx, bodySizePx) {
+        val width = screenWidthPx.toInt().coerceAtLeast(1)
+        val height = with(density) { 104.dp.toPx() }.toInt().coerceAtLeast(1)
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            width,
+            height,
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+            textSize = titleSizePx
+            letterSpacing = with(density) { 1.5.dp.toPx() } / titleSizePx
+        }
+        val titleMetrics = paint.fontMetrics
+        val titleBaseline = -titleMetrics.top
+        val x = with(density) { 18.dp.toPx() }
+        canvas.drawText("Nanaya", x, titleBaseline, paint)
+        paint.textSize = bodySizePx
+        paint.letterSpacing = 0f
+        val bodyMetrics = paint.fontMetrics
+        val bodyTop = titleBaseline + titleMetrics.descent + with(density) { 2.dp.toPx() }
+        val bodyBaseline = bodyTop - bodyMetrics.top
+        canvas.drawText("${caps.device} · ${caps.android}", x, bodyBaseline, paint)
 
-        fun addGlyphs(
-            layout: androidx.compose.ui.text.TextLayoutResult,
-            yOffset: Float,
-            maxPerChar: Int,
-            areaDivisor: Float,
-        ) {
-            for (index in 0 until layout.layoutInput.text.length) {
-                val box = layout.getBoundingBox(index)
-                if (box.width <= 0f || box.height <= 0f) continue
-                val areaPx = box.width * box.height
-                val count = (areaPx / areaDivisor).toInt().coerceIn(1, maxPerChar)
-                repeat(count) {
-                    list += floatArrayOf(
-                        startX + box.left + random.nextFloat() * box.width,
-                        yOffset + box.top + random.nextFloat() * box.height,
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val points = ArrayList<Int>(width * height / 16)
+        var py = 0
+        while (py < height) {
+            var px = 0
+            while (px < width) {
+                val alpha = android.graphics.Color.alpha(pixels[py * width + px])
+                if (alpha > 90) points += py * width + px
+                px += 2
+            }
+            py += 2
+        }
+        val random = kotlin.random.Random(17)
+        val sampleStep = (points.size / 360).coerceAtLeast(1)
+        buildList {
+            var i = 0
+            while (i < points.size) {
+                val index = points[i]
+                val px = index % width
+                val py = index / width
+                add(
+                    floatArrayOf(
+                        px.toFloat(),
+                        py.toFloat(),
                         random.nextFloat(),
-                        0.14f + random.nextFloat() * 0.38f,
-                    )
-                }
+                        0.12f + random.nextFloat() * 0.30f,
+                    ),
+                )
+                i += sampleStep
             }
         }
-
-        addGlyphs(titleLayout, 0f, 18, 700f)
-        addGlyphs(bodyLayout, subtitleY, 5, 900f)
-        list
     }
     val debris = remember(particles) {
         particles.mapIndexed { index, p ->
             val baseAngle = p[2] * 6.28318f
-            val orbit = 20f + p[2] * 32f
-            val speed = 2.3f - ((orbit - 20f) / 52f) * 1.5f
+            val orbit = 18f + p[2] * 30f
+            val speed = 2.4f - ((orbit - 18f) / 48f) * 1.6f
             floatArrayOf(
                 p[0],
                 p[1],
                 p[2],
-                0.14f + p[2] * 0.38f,
+                0.14f + p[2] * 0.34f,
                 baseAngle,
                 orbit,
-                p[2] * 0.10f,
                 speed,
             )
         }
@@ -786,35 +803,49 @@ private fun TopBar(
             val h = size.height
             val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
             if (progress > 0.005f) {
-                val appear = (progress / 0.08f).coerceIn(0f, 1f)
+                fun smooth(x: Float): Float {
+                    val v = x.coerceIn(0f, 1f)
+                    return v * v * (3f - 2f * v)
+                }
+                val appear = (progress / 0.06f).coerceIn(0f, 1f)
                 debris.forEachIndexed { index, d ->
                     val start = Offset(d[0], d[1])
-                    val distanceToIcon = 1f - ((icon.x - start.x) / w).coerceIn(0f, 1f)
-                    val speedFactor = 0.55f + distanceToIcon * 1.35f
-                    val delay = d[6]
-                    val rawT = (((progress - delay) / (1f - delay)) * speedFactor).coerceIn(0f, 1f)
-                    val t = rawT * rawT * (3f - 2f * rawT)
-                    val angle = d[4] + time * d[7]
+                    val delay = d[2] * 0.06f
+                    val rise = smooth((progress - delay) / 0.30f)
+                    val along = smooth((progress - 0.28f) / 0.34f)
+                    val fall = smooth((progress - 0.60f) / 0.40f)
+                    val topA = Offset(
+                        x = start.x + (icon.x - start.x) * 0.08f * rise,
+                        y = start.y * (1f - rise),
+                    )
+                    val topB = Offset(
+                        x = icon.x + (d[2] - 0.5f) * 2.5f.dp.toPx(),
+                        y = 0f,
+                    )
+                    val angle = d[4] + time * d[6]
                     val orbit = d[5].dp.toPx()
                     val target = Offset(
                         x = icon.x + cos(angle) * orbit,
                         y = icon.y + sin(angle) * orbit * 0.30f,
                     )
-                    val wobble = sin(time * 2.2f + d[2] * 6.28318f) * (1f - t) * 7.dp.toPx()
-                    val pos = Offset(
-                        x = start.x + (target.x - start.x) * t,
-                        y = start.y + (target.y - start.y) * t + wobble,
+                    val p1 = Offset(
+                        x = start.x + (topA.x - start.x) * rise,
+                        y = start.y + (topA.y - start.y) * rise,
                     )
-                    val tx = -sin(angle) * orbit
-                    val ty = cos(angle) * orbit * 0.30f
-                    val length = sqrt(tx * tx + ty * ty).coerceAtLeast(0.001f)
-                    val tangent = Offset(tx / length, ty / length)
+                    val p2 = Offset(
+                        x = p1.x + (topB.x - p1.x) * along,
+                        y = p1.y + (topB.y - p1.y) * along,
+                    )
+                    val pos = Offset(
+                        x = p2.x + (target.x - p2.x) * fall,
+                        y = p2.y + (target.y - p2.y) * fall,
+                    )
                     val radius = d[3].dp.toPx()
-                    val alpha = (appear * (0.55f + progress * 0.35f)).coerceIn(0f, 1f)
                     val color = if (index % 5 == 0) Color.White else auraColors[index % auraColors.size]
+                    val alpha = (appear * (0.55f + progress * 0.40f)).coerceIn(0f, 1f)
                     drawCircle(
                         color = color,
-                        radius = radius * 1.8f,
+                        radius = radius * 1.7f,
                         center = pos,
                         alpha = alpha * 0.12f,
                     )
@@ -824,15 +855,20 @@ private fun TopBar(
                         center = pos,
                         alpha = alpha,
                     )
-                    val streak = (1.0f + t * 6.0f).dp.toPx() * (0.55f + d[2] * 0.9f)
-                    drawLine(
-                        color = color,
-                        start = pos - tangent * streak,
-                        end = pos,
-                        strokeWidth = (radius * 0.9f).coerceAtLeast(0.3f),
-                        cap = StrokeCap.Round,
-                        alpha = alpha * 0.9f,
-                    )
+                    if (fall > 0.15f) {
+                        val tx = -sin(angle) * orbit
+                        val ty = cos(angle) * orbit * 0.30f
+                        val length = sqrt(tx * tx + ty * ty).coerceAtLeast(0.001f)
+                        val streak = (0.8f + fall * 5.5f).dp.toPx() * (0.55f + d[2] * 0.9f)
+                        drawLine(
+                            color = color,
+                            start = pos - Offset(tx / length, ty / length) * streak,
+                            end = pos,
+                            strokeWidth = (radius * 0.9f).coerceAtLeast(0.3f),
+                            cap = StrokeCap.Round,
+                            alpha = alpha * 0.9f * fall,
+                        )
+                    }
                 }
             }
         }
