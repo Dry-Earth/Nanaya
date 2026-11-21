@@ -282,7 +282,14 @@ fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit, onOpenDomain:
     }
 
     privacyDialog?.let { app ->
-        PrivacyDialog(app, onRevoke = { p -> vm.revokePermission(app.pkg, p) }, onDismiss = { privacyDialog = null })
+        PrivacyDialog(
+            app,
+            onRevoke = { p ->
+                vm.revokePermission(app.pkg, p)
+                privacyDialog = null
+            },
+            onDismiss = { privacyDialog = null },
+        )
     }
 }
 

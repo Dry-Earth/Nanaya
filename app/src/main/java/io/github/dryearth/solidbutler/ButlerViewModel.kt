@@ -332,10 +332,13 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun revokePermission(pkg: String, permission: String) {
+        val detailOpen = _apps.value.detail?.app?.pkg == pkg
         runAppAction(pkg) {
             val (ok, msg) = withContext(Dispatchers.IO) { appRepo.revoke(pkg, permission) }
-            toast(if (ok) "已收回权限" else "失败：$msg")
-            openApp(pkg)
+            val message = if (ok) "已收回权限" else "失败：$msg"
+            toast(message)
+            _security.update { it.copy(toast = message) }
+            if (detailOpen) openApp(pkg) else refreshSecurity()
         }
     }
 
