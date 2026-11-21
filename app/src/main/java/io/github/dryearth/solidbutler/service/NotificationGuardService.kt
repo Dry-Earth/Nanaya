@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.os.Process
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import io.github.dryearth.solidbutler.core.AdbPairingBus
 import io.github.dryearth.solidbutler.core.Prefs
 
 /**
@@ -29,6 +30,9 @@ class NotificationGuardService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        runCatching {
+            AdbPairingBus.publish(AdbPairingBus.textOf(sbn.notification))
+        }
         val channel = sbn.notification.channelId ?: return
         if (Prefs(this).blockedChannels().contains("${sbn.packageName}|$channel")) {
             runCatching { cancelNotification(sbn.key) }

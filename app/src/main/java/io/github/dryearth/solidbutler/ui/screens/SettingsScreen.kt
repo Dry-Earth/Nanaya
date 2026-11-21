@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,12 +68,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.solidbutler.BuildConfig
 import io.github.dryearth.solidbutler.ButlerViewModel
+import io.github.dryearth.solidbutler.core.AdbDiscovery
 import io.github.dryearth.solidbutler.core.AdbManager
+import io.github.dryearth.solidbutler.core.AdbPairingBus
 import io.github.dryearth.solidbutler.core.Capabilities
 import io.github.dryearth.solidbutler.core.Shell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import io.github.dryearth.solidbutler.ui.components.ActionButton
 import io.github.dryearth.solidbutler.ui.components.GlassBackButton
 import io.github.dryearth.solidbutler.ui.components.GlassPanel
@@ -125,6 +131,25 @@ fun SettingsScreen(
     var adbCode by rememberSaveable { mutableStateOf("") }
     var adbConnectPort by rememberSaveable { mutableStateOf("") }
     var adbMessage by remember { mutableStateOf<String?>(null) }
+    var autoPairing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(autoPairing) {
+        if (!autoPairing) return@LaunchedEffect
+        val offer = withTimeoutOrNull(30_000) {
+            AdbPairingBus.offer.filterNotNull().first()
+        }
+        if (offer != null) {
+            offer.code?.let { adbCode = it }
+            offer.host?.let { adbHost = it }
+            offer.port?.let { adbPort = it.toString() }
+            adbMessage = if (offer.code != null) {
+                "已自动填入配对信息，请点「配对并连接」"
+            } else {
+                "已识别地址/端口，请填写 6 位配对码"
+            }
+        }
+        autoPairing = false
+    }
 
     Column(
         Modifier
@@ -406,6 +431,34 @@ fun SettingsScreen(
                     onClick = { adbExpanded = !adbExpanded },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            ActionButton(
+                "自动识别配对信息",
+                enabled = !adbBusy && !autoPairing,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    if (!notificationAccessEnabled(context)) {
+                        Toast.makeText(context, "先开启通知使用权，才能读取配对码", Toast.LENGTH_LONG).show()
+                        openFirst(
+                            context,
+                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+                            Intent(Settings.ACTION_SETTINGS),
+                        )
+                    } else {
+                        AdbPairingBus.clear()
+                        autoPairing = true
+                        adbExpanded = true
+                        adbMessage = "请打开系统无线调试的配对弹窗，正在查找地址和端口…"
+                        AdbDiscovery.discoverPairing(context) { host, port ->
+                            if (host != null) adbHost = host
+                            if (port != null) adbPort = port.toString()
+                            if (host != null || port != null) {
+                                adbMessage = "已识别配对端口，等待通知里的配对码…"
+                            }
+                        }
+                    }
+                },
+            )
             if (adbExpanded) {
                 Spacer(Modifier.height(10.dp))
                 AdbField("配对地址", adbHost, "127.0.0.1 或屏幕上显示的 IP") { adbHost = it }
@@ -698,6 +751,16 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+private fun notificationAccessEnabled(context: android.content.Context): Boolean {
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        "enabled_notification_listeners",
+    ) ?: return false
+    return enabled.split(':').any { item ->
+        ComponentName.unflattenFromString(item)?.packageName == context.packageName
     }
 }
 
