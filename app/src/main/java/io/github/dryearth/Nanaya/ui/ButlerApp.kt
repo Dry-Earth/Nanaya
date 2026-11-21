@@ -55,7 +55,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
@@ -644,12 +643,8 @@ private fun TopBar(
     scrollProgress: Float,
     onChat: () -> Unit,
 ) {
-    val progress by animateFloatAsState(
-        targetValue = scrollProgress.coerceIn(0f, 1f),
-        animationSpec = tween(180),
-        label = "topbar-progress",
-    )
-    val raw = (progress / 0.75f).coerceIn(0f, 1f)
+    val progress = scrollProgress.coerceIn(0f, 1f)
+    val raw = (progress / 0.42f).coerceIn(0f, 1f)
     val eased = raw * raw * (3f - 2f * raw)
 
     Box(Modifier.fillMaxWidth().height(104.dp)) {
