@@ -14,8 +14,8 @@ object ProxyStarter {
         val apk = context.applicationInfo.sourceDir
         val scriptPath = "/data/local/tmp/nanaya_proxy.sh"
         val script = "printf '%s\\n' " +
-            "'export CLASSPATH=$apk' " +
-            "'exec app_process /system/bin --nice-name=$PROCESS_NAME $MAIN_CLASS' " +
+            "'exec app_process -Djava.class.path=$apk /system/bin " +
+            "--nice-name=$PROCESS_NAME $MAIN_CLASS' " +
             ">$scriptPath; chmod 755 $scriptPath; " +
             "setsid sh $scriptPath >$LOG_PATH 2>&1 </dev/null &"
         val first = Shell.runAs(backend(), script, 8_000)
