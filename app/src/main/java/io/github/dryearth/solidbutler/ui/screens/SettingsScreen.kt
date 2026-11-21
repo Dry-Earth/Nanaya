@@ -123,6 +123,17 @@ fun SettingsScreen(
     var adbExpanded by rememberSaveable { mutableStateOf(false) }
     var adbDialog by remember { mutableStateOf(false) }
     var adbMode by remember { mutableStateOf<String?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                adbConnected = AdbManager.connected()
+                vm.refreshCapabilities(force = true)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
     var adbBusy by remember { mutableStateOf(false) }
     var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
@@ -248,29 +259,10 @@ fun SettingsScreen(
         SectionHeader("权限与授权", "语音输入、通知与系统访问")
         PermissionSection(vm)
 
-        SectionHeader("应用图标", "切换后桌面可能需重启")
+        SectionHeader("外观", "自定义背景 / 应用图标")
         GlassPanel {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Pill("猫耳", selected = iconStyle == "xi", color = Glass.Violet) {
-                    iconStyle = "xi"; vm.prefs.iconStyle = "xi"; applyIcon(context, "IconXi")
-                }
-                Pill("红瞳", selected = iconStyle == "red", color = Glass.Rose) {
-                    iconStyle = "red"; vm.prefs.iconStyle = "red"; applyIcon(context, "IconRed")
-                }
-                Pill("狐耳", selected = iconStyle == "fox", color = Glass.Mint) {
-                    iconStyle = "fox"; vm.prefs.iconStyle = "fox"; applyIcon(context, "IconFox")
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "红耳/狐耳为代码绘制的矢量图标；Android 不允许运行时替换应用抽屉图标。",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-        }
-
-        SectionHeader("外观", "星夜 / 极简 / 自定义背景")
-        GlassPanel {
+            Text("自定义背景", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill("星夜", selected = bgStyle == "stars", color = Glass.Violet) {
                     bgStyle = "stars"; vm.setBackground("stars")
@@ -304,6 +296,26 @@ fun SettingsScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 "自定义图片按屏幕分辨率解码，不再强制低分辨率；不申请相册权限，只读取你选中的这一张。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+            DividerLine()
+            Text("应用图标", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill("猫耳", selected = iconStyle == "xi", color = Glass.Violet) {
+                    iconStyle = "xi"; vm.prefs.iconStyle = "xi"; applyIcon(context, "IconXi")
+                }
+                Pill("红瞳", selected = iconStyle == "red", color = Glass.Rose) {
+                    iconStyle = "red"; vm.prefs.iconStyle = "red"; applyIcon(context, "IconRed")
+                }
+                Pill("狐耳", selected = iconStyle == "fox", color = Glass.Mint) {
+                    iconStyle = "fox"; vm.prefs.iconStyle = "fox"; applyIcon(context, "IconFox")
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "红耳/狐耳为代码绘制的矢量图标；Android 不允许运行时替换应用抽屉图标。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -384,6 +396,7 @@ fun SettingsScreen(
                 if (adbConnected) "已连接" else "配置",
                 adbConnected,
             ) {
+                adbConnected = AdbManager.connected()
                 adbDialog = true
                 adbMode = null
             }
