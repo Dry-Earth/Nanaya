@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -649,7 +650,7 @@ private fun TopBar(
         animationSpec = tween(140),
         label = "topbar-progress",
     )
-    val blurRaw = (progress / 0.42f).coerceIn(0f, 1f)
+    val blurRaw = (progress / 0.18f).coerceIn(0f, 1f)
     val blurProgress = blurRaw * blurRaw * (3f - 2f * blurRaw)
     val aura = rememberInfiniteTransition(label = "topbar-aura")
     val time by aura.animateFloat(
@@ -712,6 +713,25 @@ private fun TopBar(
             )
         }
         list
+    }
+    val debris = remember(particles) {
+        particles.mapIndexed { index, p ->
+            val chunk = index < 26
+            val baseAngle = p[2] * 6.28318f
+            val orbit = 18f + p[2] * 28f
+            val speed = 2.4f - ((orbit - 18f) / 46f) * 1.5f
+            floatArrayOf(
+                p[0],
+                p[1],
+                p[2],
+                if (chunk) 1.6f + p[2] * 2.0f else 0.12f + p[2] * 0.30f,
+                baseAngle,
+                orbit,
+                if (chunk) 0.015f else 0.12f + p[2] * 0.22f,
+                speed,
+                if (chunk) 1f else 0f,
+            )
+        }
     }
     val auraColors = listOf(Glass.Accent, Glass.Violet, Glass.Mint, Glass.Amber, Glass.Ice)
 
@@ -776,38 +796,59 @@ private fun TopBar(
             val w = size.width
             val h = size.height
             val icon = Offset(w - 32.dp.toPx(), 26.dp.toPx())
-            if (progress > 0.05f) {
-                val appear = ((progress - 0.05f) / 0.25f).coerceIn(0f, 1f)
-                val flow = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
-                particles.forEachIndexed { index, p ->
-                    val start = Offset(p[0], p[1])
-                    val rawT = (flow * 1.2f - p[2] * 0.18f).coerceIn(0f, 1f)
-                    val eased = rawT * rawT * (3f - 2f * rawT)
-                    val wobble = sin(time * 2.4f + p[2] * 6.28318f) * (1f - eased) * 10.dp.toPx()
-                    val pulse = 0.5f + 0.5f * sin(time * 2.6f + p[2] * 6.28318f)
-                    val angle = index.toFloat() / particles.size * 6.28318f + time * 0.32f
-                    val ringRadius = (17f + p[2] * 5f + pulse * 2.5f).dp.toPx()
+            if (progress > 0.02f) {
+                val dustAppear = ((progress - 0.14f) / 0.24f).coerceIn(0f, 1f)
+                debris.forEachIndexed { index, d ->
+                    val start = Offset(d[0], d[1])
+                    val chunk = d[8] > 0.5f
+                    val distanceToIcon = (1f - ((icon.x - start.x) / w).coerceIn(0f, 1f))
+                    val speedFactor = 0.65f + distanceToIcon * 1.55f
+                    val delay = d[6]
+                    val rawT = (((progress - delay) / (1f - delay)) * speedFactor).coerceIn(0f, 1f)
+                    val t = rawT * rawT * (3f - 2f * rawT)
+                    val angle = d[4] + time * d[7]
+                    val orbit = d[5].dp.toPx()
                     val target = Offset(
-                        x = icon.x + cos(angle) * ringRadius,
-                        y = icon.y + sin(angle) * ringRadius,
+                        x = icon.x + cos(angle) * orbit,
+                        y = icon.y + sin(angle) * orbit * 0.34f,
                     )
+                    val wobble = sin(time * 2.2f + d[2] * 6.28318f) * (1f - t) * 8.dp.toPx()
                     val pos = Offset(
-                        x = start.x + (target.x - start.x) * eased,
-                        y = start.y + (target.y - start.y) * eased + wobble,
+                        x = start.x + (target.x - start.x) * t,
+                        y = start.y + (target.y - start.y) * t + wobble,
                     )
-                    val color = if (index % 6 == 0) Color.White else auraColors[index % auraColors.size]
-                    val radius = p[3].dp.toPx()
-                    drawCircle(
+                    val tx = -sin(angle) * orbit
+                    val ty = cos(angle) * orbit * 0.34f
+                    val length = sqrt(tx * tx + ty * ty).coerceAtLeast(0.001f)
+                    val tangent = Offset(tx / length, ty / length)
+                    val radius = d[3].dp.toPx()
+                    val alpha = if (chunk) {
+                        (1f - t * 0.85f).coerceIn(0f, 1f)
+                    } else {
+                        dustAppear * (0.55f + 0.30f * t)
+                    }
+                    if (alpha <= 0.01f) return@forEachIndexed
+                    val color = if (index % 7 == 0) Color.White else auraColors[index % auraColors.size]
+                    if (chunk) {
+                        drawCircle(
+                            color = color,
+                            radius = radius * (1f - t * 0.55f),
+                            center = pos,
+                            alpha = alpha * 0.9f,
+                        )
+                    }
+                    val streak = if (chunk) {
+                        radius * (1.2f + t * 2.4f)
+                    } else {
+                        (1.2f + t * 6.5f).dp.toPx() * (0.6f + d[2] * 0.8f)
+                    }
+                    drawLine(
                         color = color,
-                        radius = radius * 1.9f,
-                        center = pos,
-                        alpha = (appear * 0.16f * (0.5f + progress * 0.5f)).coerceIn(0f, 1f),
-                    )
-                    drawCircle(
-                        color = color,
-                        radius = radius,
-                        center = pos,
-                        alpha = (appear * (0.62f + progress * 0.30f) * (1f - eased * 0.06f)).coerceIn(0f, 1f),
+                        start = pos - tangent * streak,
+                        end = pos,
+                        strokeWidth = (if (chunk) radius * 1.1f else radius * 0.9f).coerceAtLeast(0.35f),
+                        cap = StrokeCap.Round,
+                        alpha = alpha,
                     )
                 }
             }
