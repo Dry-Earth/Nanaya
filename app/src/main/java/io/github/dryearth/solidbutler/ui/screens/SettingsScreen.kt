@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -120,6 +121,8 @@ fun SettingsScreen(
     var pinConfirm by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
     var adbExpanded by rememberSaveable { mutableStateOf(false) }
+    var adbDialog by remember { mutableStateOf(false) }
+    var adbMode by remember { mutableStateOf<String?>(null) }
     var adbConnected by remember { mutableStateOf(AdbManager.connected()) }
     var adbBusy by remember { mutableStateOf(false) }
     var adbHost by rememberSaveable { mutableStateOf(localWifiIp(context) ?: "127.0.0.1") }
@@ -374,6 +377,16 @@ fun SettingsScreen(
                     ),
                 )
             }
+            DividerLine()
+            SettingRow(
+                "ADB 权限",
+                if (adbConnected) "无线 ADB 已连接" else "有线调试 / 无线调试",
+                if (adbConnected) "已连接" else "配置",
+                adbConnected,
+            ) {
+                adbDialog = true
+                adbMode = null
+            }
             Spacer(Modifier.height(10.dp))
             ActionButton(
                 "重新检测权限",
@@ -382,8 +395,192 @@ fun SettingsScreen(
             )
         }
 
-        SectionHeader("无线 ADB", "用系统无线调试在机内配对")
+        SectionHeader("应用锁", "本地 PIN · 不上传")
         GlassPanel {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (lockEnabled) "已开启" else "未开启",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Glass.Text,
+                    )
+                    Text(
+                        if (vm.prefs.hasPin()) "已设置 PIN" else "需要先设置 PIN",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Pill(
+                    if (lockEnabled) "关闭" else "开启",
+                    selected = lockEnabled,
+                    color = Glass.Mint,
+                    onClick = {
+                        if (lockEnabled) {
+                            vm.prefs.appLockEnabled = false
+                            lockEnabled = false
+                        } else if (vm.prefs.hasPin()) {
+                            vm.prefs.appLockEnabled = true
+                            lockEnabled = true
+                        } else {
+                            pinDialog = true
+                        }
+                    },
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN",
+                    modifier = Modifier.weight(1f),
+                    onClick = { pinDialog = true },
+                )
+                ActionButton(
+                    "清除 PIN",
+                    modifier = Modifier.weight(1f),
+                    enabled = vm.prefs.hasPin(),
+                    onClick = { vm.prefs.clearPin(); lockEnabled = false },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "在应用详情里把应用加入锁列表。开启后，切到该应用会显示密码遮罩。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
+        SectionHeader("防火墙", "Root + 内核 netfilter")
+        GlassPanel {
+            SettingRow(
+                "开机重新应用规则",
+                "只恢复你保存过的 UID 列表",
+                if (vm.prefs.firewallPersist) "开" else "关",
+                vm.prefs.firewallPersist,
+            ) {
+                vm.prefs.firewallPersist = !vm.prefs.firewallPersist
+            }
+            DividerLine()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    "清空所有规则",
+                    modifier = Modifier.weight(1f),
+                    onClick = { vm.clearFirewall() },
+                )
+            }
+        }
+
+        SectionHeader("关于", "汐 · Solid Glass 风格")
+        GlassPanel {
+            Text(
+                "包名：${BuildConfig.APPLICATION_ID}\n版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.bodySmall,
+                color = Glass.Muted,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "接口依据：LineageOS 24.0 的 lineagehealth（充电控制/快充）、LineageSettings、AppOps、StorageStatsManager、UsageStatsManager、NetworkStats、PackageManager、VpnService、iptables。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "本应用不包含广告、不上传文件、不做云同步。",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+
+    if (pinDialog) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { pinDialog = false },
+        ) {
+            GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(18.dp)) {
+                Text(if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                Spacer(Modifier.height(10.dp))
+                GlassField("新 PIN（4–8 位数字）", pinInput, "••••", password = true, number = true) {
+                    pinInput = it.filter { c -> c.isDigit() }.take(8)
+                }
+                Spacer(Modifier.height(8.dp))
+                GlassField("再输一次", pinConfirm, "••••", password = true, number = true) {
+                    pinConfirm = it.filter { c -> c.isDigit() }.take(8)
+                }
+                pinError?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = Glass.Rose)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("取消", modifier = Modifier.weight(1f), onClick = { pinDialog = false })
+                    ActionButton(
+                        "保存",
+                        accent = true,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            when {
+                                pinInput.length < 4 -> pinError = "至少 4 位"
+                                pinInput != pinConfirm -> pinError = "两次输入不一致"
+                                else -> {
+                                    vm.prefs.setPin(pinInput)
+                                    vm.prefs.appLockEnabled = true
+                                    lockEnabled = true
+                                    pinInput = ""; pinConfirm = ""; pinError = null; pinDialog = false
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+    if (adbDialog) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { adbDialog = false }) {
+            GlassPanel(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp),
+                opaque = true,
+                padding = PaddingValues(18.dp),
+            ) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("ADB 权限", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "选择调试方式；无线调试可在机内完成配对与连接。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Muted,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Pill("有线调试", selected = adbMode == "wired", color = Glass.Accent) {
+                            adbMode = "wired"
+                        }
+                        Pill("无线调试", selected = adbMode == "wireless", color = Glass.Mint) {
+                            adbMode = "wireless"
+                            adbExpanded = true
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    when (adbMode) {
+                        "wired" -> {
+                            Text(
+                                "有线调试需要 USB 连接到电脑，由电脑执行 adb。Nanaya 无法直接作为 USB 主机，因此这里只提供说明；请使用无线调试或在电脑上执行 adb。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Muted,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            ActionButton(
+                                "打开开发者选项",
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    openFirst(
+                                        context,
+                                        Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+                                        Intent(Settings.ACTION_SETTINGS),
+                                    )
+                                },
+                            )
+                        }
+                        "wireless" -> {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -607,148 +804,28 @@ fun SettingsScreen(
                     color = if (adbConnected) Glass.Mint else Glass.Amber,
                 )
             }
-        }
-
-        SectionHeader("应用锁", "本地 PIN · 不上传")
-        GlassPanel {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (lockEnabled) "已开启" else "未开启",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Glass.Text,
-                    )
-                    Text(
-                        if (vm.prefs.hasPin()) "已设置 PIN" else "需要先设置 PIN",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Glass.Muted,
-                    )
-                }
-                Pill(
-                    if (lockEnabled) "关闭" else "开启",
-                    selected = lockEnabled,
-                    color = Glass.Mint,
-                    onClick = {
-                        if (lockEnabled) {
-                            vm.prefs.appLockEnabled = false
-                            lockEnabled = false
-                        } else if (vm.prefs.hasPin()) {
-                            vm.prefs.appLockEnabled = true
-                            lockEnabled = true
-                        } else {
-                            pinDialog = true
                         }
-                    },
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(
-                    if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN",
-                    modifier = Modifier.weight(1f),
-                    onClick = { pinDialog = true },
-                )
-                ActionButton(
-                    "清除 PIN",
-                    modifier = Modifier.weight(1f),
-                    enabled = vm.prefs.hasPin(),
-                    onClick = { vm.prefs.clearPin(); lockEnabled = false },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "在应用详情里把应用加入锁列表。开启后，切到该应用会显示密码遮罩。",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-        }
-
-        SectionHeader("防火墙", "Root + 内核 netfilter")
-        GlassPanel {
-            SettingRow(
-                "开机重新应用规则",
-                "只恢复你保存过的 UID 列表",
-                if (vm.prefs.firewallPersist) "开" else "关",
-                vm.prefs.firewallPersist,
-            ) {
-                vm.prefs.firewallPersist = !vm.prefs.firewallPersist
-            }
-            DividerLine()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(
-                    "清空所有规则",
-                    modifier = Modifier.weight(1f),
-                    onClick = { vm.clearFirewall() },
-                )
-            }
-        }
-
-        SectionHeader("关于", "汐 · Solid Glass 风格")
-        GlassPanel {
-            Text(
-                "包名：${BuildConfig.APPLICATION_ID}\n版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                style = MaterialTheme.typography.bodySmall,
-                color = Glass.Muted,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "接口依据：LineageOS 24.0 的 lineagehealth（充电控制/快充）、LineageSettings、AppOps、StorageStatsManager、UsageStatsManager、NetworkStats、PackageManager、VpnService、iptables。",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "本应用不包含广告、不上传文件、不做云同步。",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-
-    if (pinDialog) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { pinDialog = false },
-        ) {
-            GlassPanel(modifier = Modifier.fillMaxWidth(), opaque = true, padding = PaddingValues(18.dp)) {
-                Text(if (vm.prefs.hasPin()) "修改 PIN" else "设置 PIN", style = MaterialTheme.typography.titleLarge, color = Glass.Text)
-                Spacer(Modifier.height(10.dp))
-                GlassField("新 PIN（4–8 位数字）", pinInput, "••••", password = true, number = true) {
-                    pinInput = it.filter { c -> c.isDigit() }.take(8)
-                }
-                Spacer(Modifier.height(8.dp))
-                GlassField("再输一次", pinConfirm, "••••", password = true, number = true) {
-                    pinConfirm = it.filter { c -> c.isDigit() }.take(8)
-                }
-                pinError?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = Glass.Rose)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("取消", modifier = Modifier.weight(1f), onClick = { pinDialog = false })
+                        else -> {
+                            Text(
+                                "先选择“有线调试”或“无线调试”。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Muted,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
                     ActionButton(
-                        "保存",
-                        accent = true,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            when {
-                                pinInput.length < 4 -> pinError = "至少 4 位"
-                                pinInput != pinConfirm -> pinError = "两次输入不一致"
-                                else -> {
-                                    vm.prefs.setPin(pinInput)
-                                    vm.prefs.appLockEnabled = true
-                                    lockEnabled = true
-                                    pinInput = ""; pinConfirm = ""; pinError = null; pinDialog = false
-                                }
-                            }
-                        },
+                        "关闭",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { adbDialog = false },
                     )
                 }
             }
         }
     }
 }
+
+
 
 private fun applyIcon(context: android.content.Context, alias: String) {
     val pm = context.packageManager
