@@ -39,6 +39,7 @@ object NanayaStatus {
     private var musicTitle: String? = null
     private var commandDepth = 0
     private var channelReady = false
+    private var lastRenderedState: State? = null
 
     private val glyphFallbacks = mapOf(
         "𓆩♡𓆪" to "♡",
@@ -116,10 +117,17 @@ object NanayaStatus {
         val manager = NotificationManagerCompat.from(context)
         if (!started) {
             runCatching { manager.cancel(NOTIFICATION_ID) }
+            lastRenderedState = null
             return
         }
         if (!manager.areNotificationsEnabled()) return
         val effective = effectiveState()
+        if (lastRenderedState != effective) {
+            // Some OEMs cache the small icon of a notification id; cancel first so
+            // the status bar icon actually changes between states.
+            runCatching { manager.cancel(NOTIFICATION_ID) }
+            lastRenderedState = effective
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(iconFor(context, effective))
             .setContentTitle("Nanaya")
