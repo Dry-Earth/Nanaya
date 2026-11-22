@@ -52,7 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.music.InstalledPlugin
-import io.github.dryearth.Nanaya.music.MusicPluginEngine
+import io.github.dryearth.Nanaya.music.MusicFreeEngine
 import io.github.dryearth.Nanaya.music.MusicPlayback
 import io.github.dryearth.Nanaya.music.MusicPluginStore
 import io.github.dryearth.Nanaya.music.MusicQueue
@@ -88,7 +88,7 @@ fun MusicScreen(onBack: () -> Unit) {
     val nowPlaying by MusicPlayback.nowPlaying.collectAsState()
     val playing by MusicPlayback.isPlaying.collectAsState()
     val playError by MusicPlayback.error.collectAsState()
-    val debugLog by MusicPluginEngine.debugLog.collectAsState()
+    val debugLog by MusicFreeEngine.debugLog.collectAsState()
     val queueTracks by MusicQueue.tracks.collectAsState()
     val queueIndex by MusicQueue.index.collectAsState()
     val resultPlatforms = results.map { it.platform }.distinct()
@@ -97,9 +97,9 @@ fun MusicScreen(onBack: () -> Unit) {
     fun refreshPlugins() {
         scope.launch {
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
-            pluginErrors = MusicPluginEngine.errors()
-            loadedPlatforms = MusicPluginEngine.platforms()
+            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
+            pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
         }
     }
 
@@ -172,9 +172,9 @@ fun MusicScreen(onBack: () -> Unit) {
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
-            pluginErrors = MusicPluginEngine.errors()
-            loadedPlatforms = MusicPluginEngine.platforms()
+            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
+            pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
             pluginBusy = false
         }
     }
@@ -216,9 +216,9 @@ fun MusicScreen(onBack: () -> Unit) {
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
-            pluginErrors = MusicPluginEngine.errors()
-            loadedPlatforms = MusicPluginEngine.platforms()
+            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
+            pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
             pluginBusy = false
         }
     }
@@ -424,9 +424,9 @@ fun MusicScreen(onBack: () -> Unit) {
                                     scope.launch {
                                         MusicPluginStore.remove(context, target.id)
                                         plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-                                        withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
-                                        pluginErrors = MusicPluginEngine.errors()
-                                        loadedPlatforms = MusicPluginEngine.platforms()
+                                        withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
+                                        pluginErrors = MusicFreeEngine.errors()
+                                        loadedPlatforms = MusicFreeEngine.platforms()
                                         message = "已删除 ${target.platform}"
                                     }
                                 },
@@ -474,9 +474,9 @@ fun MusicScreen(onBack: () -> Unit) {
                                             scope.launch {
                                                 MusicPluginStore.setEnabled(context, plugin.id, !plugin.enabled)
                                                 plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-                                                withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
-                                                pluginErrors = MusicPluginEngine.errors()
-                                                loadedPlatforms = MusicPluginEngine.platforms()
+                                                withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
+                                                pluginErrors = MusicFreeEngine.errors()
+                                                loadedPlatforms = MusicFreeEngine.platforms()
                                             }
                                         }
                                         .padding(horizontal = 6.dp),

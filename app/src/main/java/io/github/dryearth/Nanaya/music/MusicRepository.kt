@@ -35,9 +35,9 @@ object MusicRepository {
             plugins.map { plugin ->
                 async(Dispatchers.Default) {
                     runCatching {
-                        MusicPluginEngine.search(context, plugin.platform, query)
+                        MusicFreeEngine.search(context, plugin.platform, query)
                     }.onSuccess { tracks ->
-                        MusicPluginEngine.log("插件 ${plugin.platform} 返回 ${tracks.size} 首")
+                        MusicFreeEngine.log("插件 ${plugin.platform} 返回 ${tracks.size} 首")
                     }.onFailure { error ->
                         errors[plugin.platform] = (error.message ?: error.toString())
                             .substringBefore('\n')
@@ -103,7 +103,7 @@ object MusicRepository {
     suspend fun resolveSource(context: Context, track: MusicTrack): MusicSourceInfo? {
         for (quality in listOf("standard", "high", "low")) {
             val source = runCatching {
-                MusicPluginEngine.mediaSource(context, track.platform, track, quality)
+                MusicFreeEngine.mediaSource(context, track.platform, track, quality)
             }.getOrNull()
             if (source != null) return source
         }
