@@ -5,7 +5,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 data class PlayOutcome(
@@ -17,18 +21,30 @@ data class PlayOutcome(
 object MusicRepository {
     private val randomQueries = listOf("热歌", "流行", "华语", "新歌", "轻音乐")
 
+    private val _lastErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val lastErrors: StateFlow<Map<String, String>> = _lastErrors.asStateFlow()
+
     suspend fun searchAll(context: Context, query: String, perPluginLimit: Int = 15): List<MusicTrack> {
         val plugins = MusicPluginStore.list(context).filter { it.enabled }
-        if (plugins.isEmpty()) return emptyList()
+        if (plugins.isEmpty()) {
+            _lastErrors.value = emptyMap()
+            return emptyList()
+        }
+        val errors = ConcurrentHashMap<String, String>()
         val results = coroutineScope {
             plugins.map { plugin ->
                 async(Dispatchers.Default) {
                     runCatching {
                         MusicFreeEngine.search(context, plugin.platform, query)
+                    }.onFailure { error ->
+                        errors[plugin.platform] = (error.message ?: error.toString())
+                            .substringBefore('\n')
+                            .take(200)
                     }.getOrDefault(emptyList())
                 }
             }.awaitAll()
         }
+        _lastErrors.value = errors.toMap()
         return results.flatten()
             .sortedWith(
                 compareByDescending<MusicTrack> { score(it, query) }
@@ -46,7 +62,15 @@ object MusicRepository {
         if (trimmed.isBlank()) return playRandom(context)
         val tracks = runCatching { searchAll(context, trimmed) }.getOrDefault(emptyList())
         if (tracks.isEmpty()) {
-            return PlayOutcome(false, "没有找到「$trimmed」。可以换个歌名或歌手，也可以先在音乐页搜索。")
+            val error = lastErrors.value.entries.firstOrNull()
+            return PlayOutcome(
+                false,
+                if (error != null) {
+                    "搜索「$trimmed」失败：${error.key}：${error.value}"
+                } else {
+                    "没有找到「$trimmed」。可以换个歌名或歌手，也可以先在音乐页搜索。"
+                },
+            )
         }
         val outcome = playFirstPlayable(context, tracks.take(6))
         return if (outcome.ok) outcome else PlayOutcome(

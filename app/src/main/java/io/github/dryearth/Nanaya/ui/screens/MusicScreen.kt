@@ -76,6 +76,7 @@ fun MusicScreen(onBack: () -> Unit) {
     var pluginUrl by remember { mutableStateOf("") }
     var pluginBusy by remember { mutableStateOf(false) }
     var pluginErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var loadedPlatforms by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirmDelete by remember { mutableStateOf<InstalledPlugin?>(null) }
 
     val nowPlaying by MusicPlayback.nowPlaying.collectAsState()
@@ -87,6 +88,7 @@ fun MusicScreen(onBack: () -> Unit) {
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
             withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
             pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
         }
     }
 
@@ -105,7 +107,12 @@ fun MusicScreen(onBack: () -> Unit) {
             searched = true
             busy = false
             if (found.isEmpty() && message == null) {
-                message = "没有找到「$q」。确认已安装并启用了音源插件。"
+                val error = MusicRepository.lastErrors.value.entries.firstOrNull()
+                message = if (error != null) {
+                    "搜索没有结果：${error.key}：${error.value}"
+                } else {
+                    "没有找到「$q」。插件返回了空结果，可以换个关键词。"
+                }
             }
         }
     }
@@ -149,7 +156,31 @@ fun MusicScreen(onBack: () -> Unit) {
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
             withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
             pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
             pluginBusy = false
+        }
+    }
+
+    fun testPlugins() {
+        if (busy || pluginBusy) return
+        busy = true
+        message = null
+        scope.launch {
+            val found = runCatching { MusicRepository.searchAll(context, "稻香", 8) }
+                .getOrElse { emptyList() }
+            val errors = MusicRepository.lastErrors.value
+            message = buildString {
+                append("测试搜索「稻香」：${found.size} 个结果")
+                if (errors.isNotEmpty()) {
+                    append("；")
+                    append(
+                        errors.entries.take(2).joinToString("；") {
+                            "${it.key}：${it.value.take(100)}"
+                        },
+                    )
+                }
+            }
+            busy = false
         }
     }
 
@@ -164,6 +195,7 @@ fun MusicScreen(onBack: () -> Unit) {
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
             withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
             pluginErrors = MusicFreeEngine.errors()
+            loadedPlatforms = MusicFreeEngine.platforms()
             pluginBusy = false
         }
     }
@@ -317,6 +349,13 @@ fun MusicScreen(onBack: () -> Unit) {
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Amber,
                     )
+                    Spacer(Modifier.height(6.dp))
+                    ActionButton(
+                        if (busy) "测试中…" else "测试已启用插件（搜索「稻香」）",
+                        enabled = !busy && !pluginBusy && plugins.any { it.enabled },
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { testPlugins() },
+                    )
                 }
 
                 confirmDelete?.let { plugin ->
@@ -341,6 +380,7 @@ fun MusicScreen(onBack: () -> Unit) {
                                         plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
                                         withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
                                         pluginErrors = MusicFreeEngine.errors()
+                                        loadedPlatforms = MusicFreeEngine.platforms()
                                         message = "已删除 ${target.platform}"
                                     }
                                 },
@@ -364,10 +404,19 @@ fun MusicScreen(onBack: () -> Unit) {
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                    val loaded = plugin.platform in loadedPlatforms
                                     Text(
-                                        "v${plugin.version} · ${if (plugin.enabled) "已启用" else "已停用"}",
+                                        when {
+                                            !plugin.enabled -> "v${plugin.version} · 已停用"
+                                            loaded -> "v${plugin.version} · 运行中"
+                                            else -> "v${plugin.version} · 未加载"
+                                        },
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (plugin.enabled) Glass.Mint else Glass.Faint,
+                                        color = when {
+                                            !plugin.enabled -> Glass.Faint
+                                            loaded -> Glass.Mint
+                                            else -> Glass.Rose
+                                        },
                                     )
                                 }
                                 Text(
@@ -381,6 +430,7 @@ fun MusicScreen(onBack: () -> Unit) {
                                                 plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
                                                 withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
                                                 pluginErrors = MusicFreeEngine.errors()
+                                                loadedPlatforms = MusicFreeEngine.platforms()
                                             }
                                         }
                                         .padding(horizontal = 6.dp),

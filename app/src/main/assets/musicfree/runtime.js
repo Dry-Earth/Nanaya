@@ -271,6 +271,12 @@
             if (res.error) throw createError(res.error, config, null);
 
             var responseHeaders = res.headers || {};
+            for (var headerKey in responseHeaders) {
+                if (Object.prototype.hasOwnProperty.call(responseHeaders, headerKey)) {
+                    var lowerKey = String(headerKey).toLowerCase();
+                    if (responseHeaders[lowerKey] === undefined) responseHeaders[lowerKey] = responseHeaders[headerKey];
+                }
+            }
             var response = {
                 data: res.body,
                 status: res.status,
@@ -303,10 +309,105 @@
     })();
     globalThis.axios = axios;
 
+    if (!globalThis.crypto) {
+        globalThis.crypto = {};
+    }
+    if (!globalThis.crypto.getRandomValues) {
+        globalThis.crypto.getRandomValues = function (array) {
+            for (var i = 0; i < array.length; i++) {
+                array[i] = Math.floor(Math.random() * 256);
+            }
+            return array;
+        };
+    }
+
+    function headersFromMap(map) {
+        var lower = {};
+        for (var key in map) {
+            if (Object.prototype.hasOwnProperty.call(map, key)) {
+                var value = map[key];
+                lower[String(key).toLowerCase()] = Array.isArray(value) ? value.join(", ") : String(value);
+            }
+        }
+        return {
+            get: function (name) {
+                var value = lower[String(name).toLowerCase()];
+                return value === undefined ? null : value;
+            },
+            has: function (name) { return lower[String(name).toLowerCase()] !== undefined; },
+            forEach: function (fn) {
+                for (var key in lower) {
+                    if (Object.prototype.hasOwnProperty.call(lower, key)) fn(lower[key], key);
+                }
+            },
+        };
+    }
+
+    if (typeof globalThis.fetch === "undefined") {
+        globalThis.fetch = async function (url, options) {
+            var opt = options || {};
+            var headers = {};
+            var rawHeaders = opt.headers;
+            if (rawHeaders) {
+                if (typeof rawHeaders.forEach === "function" && !Array.isArray(rawHeaders)) {
+                    rawHeaders.forEach(function (value, key) { headers[key] = value; });
+                } else {
+                    for (var key in rawHeaders) {
+                        if (Object.prototype.hasOwnProperty.call(rawHeaders, key)) headers[key] = rawHeaders[key];
+                    }
+                }
+            }
+            var body = opt.body;
+            if (body !== undefined && body !== null && typeof body !== "string") {
+                if (body instanceof ArrayBuffer) {
+                    body = btoa(String.fromCharCode.apply(null, new Uint8Array(body)));
+                } else {
+                    body = String(body);
+                }
+            }
+            var raw = await __http(JSON.stringify({
+                url: url,
+                method: (opt.method || "GET").toUpperCase(),
+                headers: headers,
+                body: body === undefined || body === null ? "" : body,
+                timeoutMs: 20000,
+                binary: false,
+            }));
+            var res = JSON.parse(raw);
+            if (res.error) throw new Error(res.error);
+            return {
+                ok: res.status >= 200 && res.status < 300,
+                status: res.status,
+                statusText: res.statusText || "",
+                url: url,
+                headers: headersFromMap(res.headers || {}),
+                text: function () { return Promise.resolve(String(res.body === undefined ? "" : res.body)); },
+                json: function () { return Promise.resolve().then(function () { return JSON.parse(res.body); }); },
+            };
+        };
+    }
+
+    // MusicFree injects these as function arguments; keep the same shape.
+    globalThis.__mfEnv = {
+        getUserVariables: function () { return {}; },
+        userVariables: {},
+        appVersion: "0.8.60",
+        os: "android",
+        lang: "zh-CN",
+    };
+    globalThis.__mfProcess = {
+        platform: "android",
+        version: "0.8.60",
+        env: globalThis.__mfEnv,
+    };
+
     // ---- plugin registry --------------------------------------------------
     globalThis.__mfPlugins = {};
 
     globalThis.__mfAdd = function (id, instance) {
+        if (instance && instance.default && typeof instance.default === "object") {
+            instance = instance.default;
+        }
         if (!instance || typeof instance !== "object") throw new Error("插件没有导出对象");
         if (!instance.platform) throw new Error("插件缺少 platform 字段");
         instance.__mfId = id;

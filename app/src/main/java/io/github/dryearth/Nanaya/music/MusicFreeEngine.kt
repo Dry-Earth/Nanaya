@@ -207,9 +207,9 @@ object MusicFreeEngine {
 
     private fun pluginWrapper(id: String, source: String): String = buildString {
         append("(function(){var module={exports:{}};var exports=module.exports;\n")
-        append("(function(require,module,exports,console){\n")
+        append("(function(require,__musicfree_require,module,exports,console,env,URL,process){\n")
         append(source)
-        append("\n})(__mfRequire,module,exports,console);\n")
+        append("\n})(__mfRequire,__mfRequire,module,exports,console,__mfEnv,globalThis.URL,__mfProcess);\n")
         append("return __mfAdd(")
         append(JSONObject.quote(id))
         append(", module.exports);\n})()")
