@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Build
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shield
@@ -97,6 +96,7 @@ import io.github.dryearth.Nanaya.PerfUiState
 import io.github.dryearth.Nanaya.core.Capabilities
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.AmbientBackground
+import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.LocalGlassBackdrop
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.liquid.lens
@@ -573,11 +573,10 @@ private fun FlowingAiIcon(modifier: Modifier = Modifier) {
                 )
             },
     ) {
-        Icon(
-            Icons.Rounded.AutoAwesome,
-            contentDescription = "AI 管家",
-            tint = Color.White,
+        HieroglyphMark(
             modifier = Modifier.fillMaxSize(),
+            color = Color.White,
+            contentDescription = "AI 管家",
         )
     }
 }

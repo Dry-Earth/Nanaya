@@ -60,7 +60,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloseFullscreen
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -150,6 +149,7 @@ import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.VoiceWave
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -559,11 +559,10 @@ private fun FlowingAiIcon(modifier: Modifier = Modifier) {
                 )
             },
     ) {
-        Icon(
-            Icons.Rounded.AutoAwesome,
-            contentDescription = null,
-            tint = Color.White,
+        HieroglyphMark(
             modifier = Modifier.fillMaxSize(),
+            color = Color.White,
+            contentDescription = null,
         )
     }
 }

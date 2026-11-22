@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoMode
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Memory
@@ -57,6 +56,7 @@ import io.github.dryearth.Nanaya.data.StorageReport
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.AppIcon
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
+import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.Meter
 import io.github.dryearth.Nanaya.ui.components.Pill
 import io.github.dryearth.Nanaya.ui.components.Ring
@@ -523,7 +523,7 @@ private fun QuickEntries(
     onAutomation: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Entry("管家", Icons.Rounded.AutoAwesome, Glass.Violet, Modifier.weight(1f), onChat)
+        Entry("管家", null, Glass.Violet, Modifier.weight(1f), onChat)
         Entry("自启", Icons.Rounded.PowerSettingsNew, Glass.Amber, Modifier.weight(1f), onAutostart)
         Entry("自动化", Icons.Rounded.AutoMode, Glass.Accent, Modifier.weight(1f), onAutomation)
         Entry("存储", Icons.Rounded.Storage, Glass.Mint, Modifier.weight(1f), onStorage)
@@ -534,18 +534,26 @@ private fun QuickEntries(
 @Composable
 private fun Entry(
     label: String,
-    icon: ImageVector,
+    icon: ImageVector?,
     color: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     GlassPanel(modifier = modifier, corner = 16.dp, padding = PaddingValues(vertical = 12.dp), onClick = onClick) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = color,
-            modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
-        )
+        if (icon == null) {
+            HieroglyphMark(
+                modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
+                color = color,
+                contentDescription = label,
+            )
+        } else {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
+            )
+        }
         Spacer(Modifier.height(7.dp))
         Text(
             label,

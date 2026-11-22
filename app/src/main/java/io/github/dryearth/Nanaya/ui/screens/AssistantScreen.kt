@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Send
@@ -78,6 +77,7 @@ import io.github.dryearth.Nanaya.core.TtsDefaults
 import io.github.dryearth.Nanaya.data.ChatRole
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
+import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
 import io.github.dryearth.Nanaya.ui.components.ToastEffect
@@ -296,7 +296,7 @@ fun AssistantScreen(
             Box(Modifier.padding(horizontal = 16.dp)) {
                 GlassPanel(tint = Glass.Violet) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Glass.Violet, modifier = Modifier.size(20.dp))
+                        HieroglyphMark(Modifier.size(20.dp), color = Glass.Violet, contentDescription = null)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("先接一个云端模型", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
