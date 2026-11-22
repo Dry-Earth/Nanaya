@@ -239,6 +239,10 @@ fun ButlerApp(
     }
 
     fun closeSub() {
+        if (sub == "wakeup") {
+            sub = "autostart"
+            return
+        }
         sub = null
         if (backTarget == "settings") {
             settings = true
