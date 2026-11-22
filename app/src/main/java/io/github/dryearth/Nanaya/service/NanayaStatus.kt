@@ -51,6 +51,10 @@ object NanayaStatus {
     fun attach(context: Context) {
         if (appContext == null) appContext = context.applicationContext
         ensureChannel()
+        if (!started) {
+            started = true
+            render()
+        }
     }
 
     fun start(context: Context) {
