@@ -335,6 +335,110 @@ public final class AdbManager extends AbsAdbConnectionManager {
         }
     }
 
+    @Nullable
+    public static byte[] captureRemoteScreenshot() {
+        AdbManager manager = REMOTE;
+        if (manager == null || !manager.isConnected()) return null;
+        try (AdbStream stream = manager.openStream("exec:screencap -p");
+             InputStream input = stream.openInputStream()) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            return output.toByteArray();
+        } catch (Exception e) {
+            LAST_RUN_ERROR = message(e);
+            return null;
+        }
+    }
+
+    @Nullable
+    public static String pushRemote(InputStream input, String remotePath) {
+        AdbManager manager = REMOTE;
+        if (manager == null || !manager.isConnected()) return "远程未连接";
+        try (AdbStream stream = manager.openStream("sync:");
+             OutputStream out = stream.openOutputStream();
+             InputStream reply = stream.openInputStream()) {
+            byte[] path = remotePath.getBytes(StandardCharsets.UTF_8);
+            writeSyncChunk(out, "SEND", path);
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                byte[] data = new byte[read];
+                System.arraycopy(buffer, 0, data, 0, read);
+                writeSyncChunk(out, "DATA", data);
+            }
+            byte[] done = new byte[8];
+            writeSyncHeader(out, "DONE", 0);
+            out.flush();
+            byte[] status = new byte[4];
+            int n = reply.read(status);
+            if (n != 4) return "目标设备没有确认文件写入";
+            String id = new String(status, StandardCharsets.UTF_8);
+            if ("FAIL".equals(id)) return "目标设备拒绝写入";
+            return null;
+        } catch (Exception e) {
+            return message(e);
+        }
+    }
+
+    @Nullable
+    public static String pullRemote(String remotePath, OutputStream output) {
+        AdbManager manager = REMOTE;
+        if (manager == null || !manager.isConnected()) return "远程未连接";
+        try (AdbStream stream = manager.openStream("sync:");
+             OutputStream out = stream.openOutputStream();
+             InputStream in = stream.openInputStream()) {
+            byte[] path = remotePath.getBytes(StandardCharsets.UTF_8);
+            writeSyncChunk(out, "RECV", path);
+            out.flush();
+            byte[] header = new byte[8];
+            while (true) {
+                if (readFully(in, header, 8) != 8) return "目标设备没有返回文件";
+                String id = new String(header, 0, 4, StandardCharsets.UTF_8);
+                int length = readLittleInt(header, 4);
+                if ("DONE".equals(id)) return null;
+                if ("FAIL".equals(id)) return "目标设备拒绝读取";
+                if (!"DATA".equals(id)) return "未知 sync 响应";
+                byte[] data = new byte[length];
+                if (readFully(in, data, length) != length) return "文件传输中断";
+                output.write(data);
+            }
+        } catch (Exception e) {
+            return message(e);
+        }
+    }
+
+    private static void writeSyncChunk(OutputStream out, String id, byte[] data) throws IOException {
+        writeSyncHeader(out, id, data.length);
+        out.write(data);
+    }
+
+    private static void writeSyncHeader(OutputStream out, String id, int length) throws IOException {
+        out.write(id.getBytes(StandardCharsets.UTF_8), 0, 4);
+        out.write(length & 0xff);
+        out.write((length >> 8) & 0xff);
+        out.write((length >> 16) & 0xff);
+        out.write((length >> 24) & 0xff);
+    }
+
+    private static int readLittleInt(byte[] data, int offset) {
+        return (data[offset] & 0xff)
+                | ((data[offset + 1] & 0xff) << 8)
+                | ((data[offset + 2] & 0xff) << 16)
+                | ((data[offset + 3] & 0xff) << 24);
+    }
+
+    private static int readFully(InputStream input, byte[] data, int length) throws IOException {
+        int total = 0;
+        while (total < length) {
+            int read = input.read(data, total, length - total);
+            if (read < 0) break;
+            total += read;
+        }
+        return total;
+    }
+
     private static void close(AdbStream stream) {
         if (stream == null) return;
         try {

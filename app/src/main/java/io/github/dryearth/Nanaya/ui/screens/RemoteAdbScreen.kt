@@ -1,5 +1,10 @@
 package io.github.dryearth.Nanaya.ui.screens
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -65,6 +73,59 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var command by remember { mutableStateOf("") }
     var output by remember { mutableStateOf("") }
+    var remotePath by remember { mutableStateOf("/data/local/tmp/nanaya-file") }
+    var screenshot by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    val uploadPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val error = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    AdbManager.pushRemote(input, remotePath)
+                } ?: "无法读取所选文件"
+            }
+            busy = false
+            message = error ?: "文件已上传到 $remotePath"
+        }
+    }
+
+    val downloadPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val error = withContext(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    AdbManager.pullRemote(remotePath, outputStream)
+                } ?: "无法写入本地文件"
+            }
+            busy = false
+            message = error ?: "文件已下载"
+        }
+    }
+
+    val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val target = "/data/local/tmp/nanaya-install.apk"
+            val pushError = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    AdbManager.pushRemote(input, target)
+                } ?: "无法读取 APK"
+            }
+            if (pushError != null) {
+                busy = false
+                message = "APK 上传失败：$pushError"
+                return@launch
+            }
+            val result = withContext(Dispatchers.IO) {
+                AdbManager.runRemote("pm install -r $target", 60_000)
+            }
+            busy = false
+            message = result?.output?.take(200) ?: "安装没有返回结果"
+        }
+    }
 
     fun runCommand(cmd: String) {
         val text = cmd.trim()
@@ -217,6 +278,41 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
             }
             Pill("屏幕", color = Glass.Mint) {
                 runCommand("wm size; wm density")
+            }
+        }
+
+        GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
+            Field("远程文件路径", remotePath, "/data/local/tmp/nanaya-file") { remotePath = it }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ActionButton("截图", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = {
+                    busy = true
+                    scope.launch {
+                        val bytes = withContext(Dispatchers.IO) { AdbManager.captureRemoteScreenshot() }
+                        if (bytes != null) {
+                            screenshot = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                            message = "截图已获取"
+                        } else {
+                            message = "截图失败：${AdbManager.lastRunError()}"
+                        }
+                        busy = false
+                    }
+                })
+                ActionButton("上传", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { uploadPicker.launch(arrayOf("*/*")) })
+                ActionButton("下载", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { downloadPicker.launch("nanaya-file") })
+            }
+            Spacer(Modifier.height(6.dp))
+            ActionButton("安装 APK", enabled = connected && !busy, modifier = Modifier.fillMaxWidth(), onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive")) })
+        }
+
+        screenshot?.let { image ->
+            GlassPanel(corner = 14.dp, padding = PaddingValues(0.dp)) {
+                Image(
+                    image,
+                    contentDescription = "远程截图",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                )
             }
         }
 
