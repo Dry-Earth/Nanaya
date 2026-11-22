@@ -329,7 +329,7 @@ fun ButlerApp(
                 )
             }
         }
-        if (!detailOpen) {
+        if (sub == null && !detailOpen) {
             BottomBar(
                 current = tab,
                 onSelect = { sub = null; tab = it },
