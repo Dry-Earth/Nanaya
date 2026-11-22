@@ -617,7 +617,7 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        FlowingAiIcon(Modifier.size(19.dp))
+        FlowingAiIcon(Modifier.size(28.dp))
     }
 }
 
@@ -792,7 +792,7 @@ private fun TopBar(
             onClick = onChat,
             modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
         ) {
-            FlowingAiIcon(modifier = Modifier.size(24.dp))
+            FlowingAiIcon(modifier = Modifier.size(30.dp))
         }
     }
 }

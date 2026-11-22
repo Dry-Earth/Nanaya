@@ -296,7 +296,7 @@ fun AssistantScreen(
             Box(Modifier.padding(horizontal = 16.dp)) {
                 GlassPanel(tint = Glass.Violet) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        HieroglyphMark(Modifier.size(20.dp), color = Glass.Violet, contentDescription = null)
+                        HieroglyphMark(Modifier.size(26.dp), color = Glass.Violet, flowing = true, contentDescription = null)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("先接一个云端模型", style = MaterialTheme.typography.titleMedium, color = Glass.Text)

@@ -542,8 +542,9 @@ private fun Entry(
     GlassPanel(modifier = modifier, corner = 16.dp, padding = PaddingValues(vertical = 12.dp), onClick = onClick) {
         if (icon == null) {
             HieroglyphMark(
-                modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
+                modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally),
                 color = color,
+                flowing = true,
                 contentDescription = label,
             )
         } else {

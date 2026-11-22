@@ -1153,7 +1153,7 @@ private fun OverlayAssistant(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = dragModifier.fillMaxWidth(),
                 ) {
-                    FlowingAiIcon(Modifier.size(22.dp))
+                    FlowingAiIcon(Modifier.size(30.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
