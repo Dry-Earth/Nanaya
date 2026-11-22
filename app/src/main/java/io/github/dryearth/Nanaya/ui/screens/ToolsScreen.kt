@@ -32,7 +32,7 @@ import io.github.dryearth.Nanaya.ui.theme.Glass
 fun ToolsScreen(onBack: () -> Unit, onOpenRemote: () -> Unit, onOpenLocal: () -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(horizontal = 16.dp, top = 10.dp, bottom = 16.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
