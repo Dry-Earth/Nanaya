@@ -329,7 +329,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
             }
             connected = AdbManager.remoteConnected()
             busy = false
-            message = if (error == null) "已连接 ${result.host}:${result.port}" else "连接失败：$error"
+            message = if (error == null) "已连接 ${result.host}:${result.port}" else "连接失败：$error（若目标刚弹出授权框，请允许后重试）"
             if (error == null) {
                 connectionExpanded = false
                 scanResults = emptyList()
@@ -620,7 +620,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                                     }
                                     connected = AdbManager.remoteConnected()
                                     busy = false
-                                    message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                                    message = if (error == null) "远程 ADB 已连接" else "连接失败：$error（若目标刚弹出授权框，请允许后重试）"
                                     if (error == null) connectionExpanded = false
                                 }
                             } else {
@@ -629,7 +629,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                                 }
                                 connected = AdbManager.remoteConnected()
                                 busy = false
-                                message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                                message = if (error == null) "远程 ADB 已连接" else "连接失败：$error（若目标刚弹出授权框，请允许后重试）"
                                 if (error == null) connectionExpanded = false
                             }
                         }
@@ -647,7 +647,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                             }
                             connected = AdbManager.remoteConnected()
                             busy = false
-                            message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                            message = if (error == null) "远程 ADB 已连接" else "连接失败：$error（若目标刚弹出授权框，请允许后重试）"
                             if (error == null) connectionExpanded = false
                         }
                     }
