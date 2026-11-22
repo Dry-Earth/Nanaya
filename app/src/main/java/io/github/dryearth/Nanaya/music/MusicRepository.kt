@@ -36,6 +36,8 @@ object MusicRepository {
                 async(Dispatchers.Default) {
                     runCatching {
                         MusicFreeEngine.search(context, plugin.platform, query)
+                    }.onSuccess { tracks ->
+                        MusicFreeEngine.log("插件 ${plugin.platform} 返回 ${tracks.size} 首")
                     }.onFailure { error ->
                         errors[plugin.platform] = (error.message ?: error.toString())
                             .substringBefore('\n')

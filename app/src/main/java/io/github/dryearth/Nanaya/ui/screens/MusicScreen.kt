@@ -484,7 +484,7 @@ fun MusicScreen(onBack: () -> Unit) {
                     }
                 }
 
-                debugLog.takeLast(6).let { lines ->
+                debugLog.takeLast(8).let { lines ->
                     if (lines.isNotEmpty()) {
                         GlassPanel(corner = 12.dp, padding = PaddingValues(8.dp)) {
                             Text(

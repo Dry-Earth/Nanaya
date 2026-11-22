@@ -18,9 +18,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -58,12 +60,15 @@ object MusicFreeEngine {
     @Volatile
     private var runtimeSource: String? = null
 
+    private val cookieJar = MemoryCookieJar()
+
     private val httpClient = OkHttpClient.Builder()
-        .cookieJar(MemoryCookieJar())
+        .cookieJar(CookieJar.NO_COOKIES)
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(50, TimeUnit.SECONDS)
         .followRedirects(true)
+        .protocols(listOf(Protocol.HTTP_1_1))
         .build()
 
     fun errors(): Map<String, String> = pluginErrors.toMap()
@@ -118,12 +123,15 @@ object MusicFreeEngine {
                 q.evaluate<String>(code, filename = "search.js")
             }
             val array = runCatching { JSONObject(json).optJSONArray("data") }.getOrNull() ?: JSONArray()
-            buildList {
+            val tracks = buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     parseTrack(platform, item)?.let { add(it) }
                 }
             }
+            log("搜索 $platform: ${tracks.size}/${array.length()} 条 (${json.length}B)")
+            if (array.length() == 0) log("返回片段 ${json.take(220)}")
+            tracks
         }
     }
 
@@ -266,10 +274,15 @@ object MusicFreeEngine {
             val headerObj = request.optJSONObject("headers")
             val builder = okhttp3.Headers.Builder()
             var contentType: String? = null
+            var explicitCookie: String? = null
             if (headerObj != null) {
                 val keys = headerObj.keys()
                 while (keys.hasNext()) {
                     val key = keys.next()
+                    if (key.equals("cookie", true)) {
+                        explicitCookie = headerObj.optString(key)
+                        continue
+                    }
                     if (key.equals("host", true) ||
                         key.equals("content-length", true) ||
                         key.equals("connection", true) ||
@@ -283,6 +296,14 @@ object MusicFreeEngine {
                     runCatching { builder.add(key, value) }
                 }
             }
+            val httpUrl = runCatching { url.toHttpUrl() }.getOrNull()
+                ?: return@withContext errorJson("URL 无效")
+            val cookieHeader = explicitCookie?.takeIf { it.isNotBlank() }
+                ?: cookieJar.loadForRequest(httpUrl).takeIf { it.isNotEmpty() }?.let { cookies ->
+                    cookies.joinToString("; ") { "${it.name}=${it.value}" }
+                }
+            if (!cookieHeader.isNullOrBlank()) builder.add("Cookie", cookieHeader)
+            if (builder.get("Accept") == null) builder.add("Accept", "*/*")
             if (builder.get("User-Agent") == null) {
                 builder.add(
                     "User-Agent",
@@ -303,13 +324,13 @@ object MusicFreeEngine {
                 .method(method, body)
                 .build()
             httpClient.newCall(call).execute().use { response ->
+                runCatching {
+                    val cookies = okhttp3.Cookie.parseAll(httpUrl, response.headers)
+                    if (cookies.isNotEmpty()) cookieJar.saveFromResponse(httpUrl, cookies)
+                }
                 val bytes = response.body?.bytes() ?: ByteArray(0)
                 val responseType = response.header("Content-Type").orEmpty().lowercase()
-                val binary = request.optBoolean("binary", false) ||
-                    responseType.startsWith("image/") ||
-                    responseType.startsWith("audio/") ||
-                    responseType.startsWith("video/") ||
-                    responseType.startsWith("application/octet-stream")
+                val binary = request.optBoolean("binary", false)
                 val out = JSONObject()
                 out.put("status", response.code)
                 out.put("statusText", response.message)
@@ -325,7 +346,7 @@ object MusicFreeEngine {
                     else headerOut.put(key, JSONArray(values))
                 }
                 out.put("headers", headerOut)
-                log("HTTP $method ${url.take(140)} -> ${response.code} (${bytes.size}B)")
+                log("HTTP $method ${url.take(140)} -> ${response.code} (${bytes.size}B, ${responseType}, binary=$binary)")
                 out.toString()
             }
         } catch (e: Exception) {
