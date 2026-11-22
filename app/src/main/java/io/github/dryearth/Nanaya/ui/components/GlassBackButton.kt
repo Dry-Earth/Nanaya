@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -98,6 +99,8 @@ fun GlassBackButton(
 
     Box(
         modifier = modifier
+            // Sit just under the status bar instead of centred in the title block.
+            .offset(y = (-14).dp)
             .size(44.dp)
             .clickable(
                 interactionSource = interaction,
