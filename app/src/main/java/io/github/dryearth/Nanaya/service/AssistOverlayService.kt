@@ -760,6 +760,23 @@ private fun OverlayAssistant(
             ttsRef.value?.let { TtsDefaults.apply(context, it) }
         }
     }
+
+    var lastSpokenId by remember { mutableStateOf(state.messages.lastOrNull()?.id ?: 0L) }
+    LaunchedEffect(state.messages.size, ttsReady.value, vm.prefs.aiSpeakReplies) {
+        if (!vm.prefs.aiSpeakReplies || !ttsReady.value) return@LaunchedEffect
+        val last = state.messages.lastOrNull() ?: return@LaunchedEffect
+        if (last.role == ChatRole.ASSISTANT && last.text.isNotBlank() && last.id != lastSpokenId) {
+            lastSpokenId = last.id
+            runCatching {
+                ttsRef.value?.speak(
+                    last.text,
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "overlay-${last.id}",
+                )
+            }
+        }
+    }
     LaunchedEffect(Unit) { if (wakeSerial == 0) wakeSerial = 1 }
     LaunchedEffect(wakeSerial) {
         if (wakeSerial == 0) return@LaunchedEffect
