@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Settings
@@ -113,6 +114,9 @@ import io.github.dryearth.Nanaya.ui.screens.RulesScreen
 import io.github.dryearth.Nanaya.ui.screens.WakeupScreen
 import io.github.dryearth.Nanaya.ui.screens.SpecialPermissionsScreen
 import io.github.dryearth.Nanaya.ui.screens.HomeScreen
+import io.github.dryearth.Nanaya.ui.screens.ToolsScreen
+import io.github.dryearth.Nanaya.ui.screens.RemoteAdbScreen
+import io.github.dryearth.Nanaya.ui.screens.AdbConsoleScreen
 import io.github.dryearth.Nanaya.ui.screens.PerformanceScreen
 import io.github.dryearth.Nanaya.ui.screens.SecurityScreen
 import io.github.dryearth.Nanaya.ui.screens.SettingsScreen
@@ -127,6 +131,7 @@ private val navItems = listOf(
     NavItem("apps", "应用", Icons.Rounded.Apps),
     NavItem("perf", "性能", Icons.Rounded.Speed),
     NavItem("security", "安全", Icons.Rounded.Shield),
+    NavItem("tools", "工具", Icons.Rounded.Build),
 )
 
 private val settingsItem = NavItem("settings", "设置", Icons.Rounded.Settings)
@@ -220,7 +225,11 @@ fun ButlerApp(
             }
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Box(Modifier.weight(1f)) {
-                if (sub == "autostart") {
+                if (sub == "remoteadb") {
+                    RemoteAdbScreen(onBack = { sub = null })
+                } else if (sub == "adbconsole") {
+                    AdbConsoleScreen(onBack = { sub = null })
+                } else if (sub == "autostart") {
                     AutostartScreen(vm, onBack = { sub = null }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
                     LineageScreen(onBack = { sub = null })
@@ -266,6 +275,11 @@ fun ButlerApp(
                             vm,
                             onOpenSpecial = { sub = "special" },
                             onOpenDomain = { sub = "domain" },
+                        )
+                        "tools" -> ToolsScreen(
+                            onBack = { tab = "home" },
+                            onOpenRemote = { sub = "remoteadb" },
+                            onOpenLocal = { sub = "adbconsole" },
                         )
                     }
                 }
@@ -612,7 +626,7 @@ private fun AiStatusLight(modifier: Modifier = Modifier) {
 private fun BarItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
     Column(
         Modifier
-            .width(46.dp)
+            .width(38.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }

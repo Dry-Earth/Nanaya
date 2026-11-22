@@ -59,6 +59,7 @@ import io.github.muntashirakon.adb.AdbStream;
  */
 public final class AdbManager extends AbsAdbConnectionManager {
     private static volatile AdbManager INSTANCE;
+    private static volatile AdbManager REMOTE;
     private static volatile String LAST_ERROR = "";
     private static volatile String LAST_RUN_ERROR = "";
 
@@ -210,10 +211,69 @@ public final class AdbManager extends AbsAdbConnectionManager {
         }
     }
 
+    public static synchronized boolean initRemote(@NonNull Context context) {
+        if (REMOTE != null) return true;
+        try {
+            REMOTE = new AdbManager(context.getApplicationContext());
+            LAST_ERROR = "";
+            return true;
+        } catch (Exception e) {
+            LAST_ERROR = message(e);
+            return false;
+        }
+    }
+
+    public static boolean remoteConnected() {
+        AdbManager manager = REMOTE;
+        return manager != null && manager.isConnected();
+    }
+
+    @Nullable
+    public static String pairRemote(@NonNull Context context, String host, int port, String code) {
+        if (!initRemote(context)) return LAST_ERROR;
+        try {
+            boolean ok = REMOTE.pair(host, port, code);
+            return ok ? null : "配对没有成功";
+        } catch (Exception e) {
+            return message(e);
+        }
+    }
+
+    @Nullable
+    public static String connectRemote(@NonNull Context context, String host, int port) {
+        if (!initRemote(context)) return LAST_ERROR;
+        try {
+            boolean ok = REMOTE.connect(host, port);
+            return ok ? null : "没有连上这个端口";
+        } catch (AdbPairingRequiredException e) {
+            return "还没有完成配对：请先在目标设备无线调试里配对";
+        } catch (Exception e) {
+            return message(e);
+        }
+    }
+
+    public static void disconnectRemote() {
+        AdbManager manager = REMOTE;
+        if (manager == null) return;
+        try {
+            manager.disconnect();
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Execute a shell command through adbd. Returns null when not connected. */
     @Nullable
     public static Result run(String command, long timeoutMs) {
-        AdbManager manager = INSTANCE;
+        return runWith(INSTANCE, command, timeoutMs);
+    }
+
+    @Nullable
+    public static Result runRemote(String command, long timeoutMs) {
+        return runWith(REMOTE, command, timeoutMs);
+    }
+
+    @Nullable
+    private static Result runWith(AdbManager manager, String command, long timeoutMs) {
         if (manager == null || !manager.isConnected()) return null;
         final AdbStream[] holder = new AdbStream[1];
         Future<Result> future = manager.executor.submit(() -> {
