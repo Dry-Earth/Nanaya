@@ -118,7 +118,8 @@ object MusicFreeEngine {
         mutex.withLock {
             ensureLocked(context)
             val q = engine ?: return@withLock emptyList()
-            val code = "__mfSearch(${JSONObject.quote(platform)}, ${JSONObject.quote(query)}, $page, ${JSONObject.quote(type)})"
+            // quickjs-kt does not unwrap a Promise automatically; await it explicitly.
+            val code = "await __mfSearch(${JSONObject.quote(platform)}, ${JSONObject.quote(query)}, $page, ${JSONObject.quote(type)})"
             val json = withTimeout(PLUGIN_TIMEOUT_MS) {
                 q.evaluate<String>(code, filename = "search.js")
             }
@@ -144,7 +145,7 @@ object MusicFreeEngine {
         mutex.withLock {
             ensureLocked(context)
             val q = engine ?: return@withLock null
-            val code = "__mfMedia(${JSONObject.quote(platform)}, ${JSONObject.quote(track.rawJson)}, ${JSONObject.quote(quality)})"
+            val code = "await __mfMedia(${JSONObject.quote(platform)}, ${JSONObject.quote(track.rawJson)}, ${JSONObject.quote(quality)})"
             val json = withTimeout(PLUGIN_TIMEOUT_MS) {
                 q.evaluate<String>(code, filename = "media.js")
             }
@@ -160,7 +161,7 @@ object MusicFreeEngine {
         mutex.withLock {
             ensureLocked(context)
             val q = engine ?: return@withLock null
-            val code = "__mfLyric(${JSONObject.quote(platform)}, ${JSONObject.quote(track.rawJson)})"
+            val code = "await __mfLyric(${JSONObject.quote(platform)}, ${JSONObject.quote(track.rawJson)})"
             val json = withTimeout(PLUGIN_TIMEOUT_MS) {
                 q.evaluate<String>(code, filename = "lyric.js")
             }

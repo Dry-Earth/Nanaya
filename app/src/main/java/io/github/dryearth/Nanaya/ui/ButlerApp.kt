@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -153,6 +154,7 @@ fun ButlerApp(
     var settings by rememberSaveable { mutableStateOf(false) }
     var aiSettings by rememberSaveable { mutableStateOf(false) }
     var sub by rememberSaveable { mutableStateOf<String?>(null) }
+    var backTarget by rememberSaveable { mutableStateOf<String?>(null) }
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
     val appsState by vm.apps.collectAsStateWithLifecycle()
@@ -216,6 +218,39 @@ fun ButlerApp(
         }
     }
 
+    fun closeSub() {
+        sub = null
+        if (backTarget == "settings") {
+            settings = true
+            backTarget = null
+        }
+    }
+
+    fun closeAiSettings() {
+        aiSettings = false
+        when (backTarget) {
+            "settings" -> settings = true
+            "chat" -> chat = true
+        }
+        backTarget = null
+    }
+
+    BackHandler(
+        enabled = detailOpen || aiSettings || settings || chat || sub != null || tab != "home",
+    ) {
+        when {
+            detailOpen -> vm.closeApp()
+            aiSettings -> closeAiSettings()
+            settings -> {
+                settings = false
+                backTarget = null
+            }
+            chat -> chat = false
+            sub != null -> closeSub()
+            tab != "home" -> tab = "home"
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
@@ -228,33 +263,33 @@ fun ButlerApp(
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Box(Modifier.weight(1f)) {
                 if (sub == "remoteadb") {
-                    RemoteAdbScreen(onBack = { sub = null })
+                    RemoteAdbScreen(onBack = { closeSub() })
                 } else if (sub == "usbotg") {
-                    UsbAdbScreen(onBack = { sub = null })
+                    UsbAdbScreen(onBack = { closeSub() })
                 } else if (sub == "adbconsole") {
-                    AdbConsoleScreen(onBack = { sub = null })
+                    AdbConsoleScreen(onBack = { closeSub() })
                 } else if (sub == "autostart") {
-                    AutostartScreen(vm, onBack = { sub = null }, onOpenWakeup = { sub = "wakeup" })
+                    AutostartScreen(vm, onBack = { closeSub() }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
-                    LineageScreen(onBack = { sub = null })
+                    LineageScreen(onBack = { closeSub() })
                 } else if (sub == "special") {
-                    SpecialPermissionsScreen(onBack = { sub = null })
+                    SpecialPermissionsScreen(onBack = { closeSub() })
                 } else if (sub == "notifications") {
-                    NotificationsScreen(onBack = { sub = null })
+                    NotificationsScreen(onBack = { closeSub() })
                 } else if (sub == "wakeup") {
                     WakeupScreen(onBack = { sub = "autostart" })
                 } else if (sub == "diagnostics") {
-                    DiagnosticsScreen(onBack = { sub = null })
+                    DiagnosticsScreen(onBack = { closeSub() })
                 } else if (sub == "domain") {
-                    DomainFirewallScreen(onBack = { sub = null })
+                    DomainFirewallScreen(onBack = { closeSub() })
                 } else if (sub == "rules") {
-                    RulesScreen(vm, onBack = { sub = null })
+                    RulesScreen(vm, onBack = { closeSub() })
                 } else if (sub == "memory") {
-                    MemoryScreen(onBack = { sub = null })
+                    MemoryScreen(onBack = { closeSub() })
                 } else if (sub == "automation") {
-                    AutomationScreen(onBack = { sub = null })
+                    AutomationScreen(onBack = { closeSub() })
                 } else if (sub == "music") {
-                    MusicScreen(onBack = { sub = null })
+                    MusicScreen(onBack = { closeSub() })
                 } else {
                     when (tab) {
                         "home" -> HomeScreen(
@@ -337,7 +372,7 @@ fun ButlerApp(
             BottomBar(
                 current = tab,
                 onSelect = { sub = null; tab = it },
-                onOpenSettings = { settings = true },
+                onOpenSettings = { settings = true; backTarget = null },
                 backdrop = contentBackdrop,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
@@ -354,7 +389,7 @@ fun ButlerApp(
                 autoListen = autoVoice,
                 onAutoListenConsumed = { autoVoice = false },
                 onClose = { chat = false },
-                onSettings = { chat = false; aiSettings = true },
+                onSettings = { chat = false; aiSettings = true; backTarget = "chat" },
             )
         }
     }
@@ -366,11 +401,11 @@ fun ButlerApp(
             SettingsScreen(
                 vm = vm,
                 caps = caps,
-                onClose = { settings = false },
-                onOpenAiSettings = { settings = false; aiSettings = true },
-                onOpenAutomation = { settings = false; sub = "automation" },
-                onOpenLineage = { settings = false; chat = false; sub = "lineage" },
-                onOpenNotifications = { settings = false; chat = false; sub = "notifications" },
+                onClose = { settings = false; backTarget = null },
+                onOpenAiSettings = { settings = false; aiSettings = true; backTarget = "settings" },
+                onOpenAutomation = { settings = false; sub = "automation"; backTarget = "settings" },
+                onOpenLineage = { settings = false; chat = false; sub = "lineage"; backTarget = "settings" },
+                onOpenNotifications = { settings = false; chat = false; sub = "notifications"; backTarget = "settings" },
             )
         }
     }
@@ -381,7 +416,7 @@ fun ButlerApp(
         }
             AiSettingsScreen(
                 vm = vm,
-                onBack = { aiSettings = false },
+                onBack = { closeAiSettings() },
                 onChat = { aiSettings = false; chat = true },
             )
         }
