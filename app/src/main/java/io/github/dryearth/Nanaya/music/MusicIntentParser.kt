@@ -6,6 +6,8 @@ sealed interface MusicIntent {
     data object Pause : MusicIntent
     data object Resume : MusicIntent
     data object Stop : MusicIntent
+    data object Next : MusicIntent
+    data object Previous : MusicIntent
 }
 
 /**
@@ -20,6 +22,12 @@ object MusicIntentParser {
     )
     private val stopWords = setOf(
         "停止", "停止播放", "停止音乐", "关闭音乐", "关掉音乐", "别放了", "退出播放",
+    )
+    private val nextWords = setOf(
+        "下一首", "下一曲", "切歌", "换一首", "换首歌", "换个歌", "下一首吧",
+    )
+    private val previousWords = setOf(
+        "上一首", "上一曲", "前一首", "换回上一首",
     )
 
     private val prefixes = listOf(
@@ -43,6 +51,8 @@ object MusicIntentParser {
         if (compact in pauseWords) return MusicIntent.Pause
         if (compact in resumeWords) return MusicIntent.Resume
         if (compact in stopWords) return MusicIntent.Stop
+        if (compact in nextWords) return MusicIntent.Next
+        if (compact in previousWords) return MusicIntent.Previous
 
         var body: String? = null
         for (prefix in prefixes) {

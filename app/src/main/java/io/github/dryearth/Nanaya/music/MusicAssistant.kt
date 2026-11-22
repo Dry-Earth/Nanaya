@@ -26,8 +26,24 @@ object MusicAssistant {
             if (MusicPlayback.nowPlaying.value == null) {
                 "现在没有在播放音乐。"
             } else {
-                MusicPlayback.stop()
+                MusicQueue.stop()
                 "已停止播放。"
+            }
+        }
+        MusicIntent.Next -> {
+            if (MusicQueue.tracks.value.isEmpty()) {
+                "播放队列是空的。"
+            } else {
+                MusicQueue.next()
+                "下一首。"
+            }
+        }
+        MusicIntent.Previous -> {
+            if (MusicQueue.tracks.value.isEmpty()) {
+                "播放队列是空的。"
+            } else {
+                MusicQueue.previous()
+                "上一首。"
             }
         }
     }

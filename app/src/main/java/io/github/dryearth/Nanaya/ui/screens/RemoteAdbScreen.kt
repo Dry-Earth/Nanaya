@@ -36,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -71,6 +72,7 @@ import io.github.dryearth.Nanaya.core.AdbManager
 import io.github.dryearth.Nanaya.core.AdbScanResult
 import io.github.dryearth.Nanaya.core.LanAdbScanner
 import io.github.dryearth.Nanaya.core.Prefs
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -339,6 +341,8 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         }
     }
 
+    LaunchedEffect(scanning) { NanayaStatus.setScanning(scanning) }
+    DisposableEffect(Unit) { onDispose { NanayaStatus.setScanning(false) } }
     LaunchedEffect(mode, connected) {
         if (mode == "device" && connected && deviceInfo.isEmpty() && !infoBusy) {
             loadInfo()

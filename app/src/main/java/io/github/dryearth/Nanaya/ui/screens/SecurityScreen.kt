@@ -26,6 +26,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,7 @@ import io.github.dryearth.Nanaya.data.PrivacyApp
 import io.github.dryearth.Nanaya.data.RiskFinding
 import io.github.dryearth.Nanaya.data.RiskLevel
 import io.github.dryearth.Nanaya.data.SecurityReport
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.AppIcon
 import io.github.dryearth.Nanaya.ui.components.EmptyHint
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -58,6 +61,8 @@ import io.github.dryearth.Nanaya.ui.theme.Glass
 @Composable
 fun SecurityScreen(vm: ButlerViewModel, onOpenSpecial: () -> Unit, onOpenDomain: () -> Unit) {
     val state by vm.security.collectAsStateWithLifecycle()
+    LaunchedEffect(state.scanning) { NanayaStatus.setScanning(state.scanning) }
+    DisposableEffect(Unit) { onDispose { NanayaStatus.setScanning(false) } }
     val appsState by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
     var privacyDialog by remember { mutableStateOf<PrivacyApp?>(null) }

@@ -9,6 +9,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +36,9 @@ object MediaHeaders {
 
 /** Thin controller around the MediaSessionService-owned ExoPlayer. */
 object MusicPlayback {
+    var onPlaybackEnded: (() -> Unit)? = null
+    var onPlaybackError: (() -> Unit)? = null
+
     private var controller: MediaController? = null
     private var connecting = false
     private val pending = mutableListOf<(MediaController) -> Unit>()
@@ -52,6 +56,8 @@ object MusicPlayback {
         MediaHeaders.put(source.url, source.headers)
         _error.value = null
         _nowPlaying.value = track
+        NanayaStatus.attach(context)
+        NanayaStatus.setMusic(true, track.title)
         connect(context) { player ->
             val item = MediaItem.Builder()
                 .setUri(source.url)
@@ -94,6 +100,7 @@ object MusicPlayback {
         player.stop()
         player.clearMediaItems()
         _isPlaying.value = false
+        NanayaStatus.setMusic(false, null)
     }
 
     fun clearError() {
@@ -129,15 +136,22 @@ object MusicPlayback {
                 player.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _isPlaying.value = isPlaying
+                        NanayaStatus.setMusic(isPlaying, _nowPlaying.value?.title)
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_ENDED) _isPlaying.value = false
+                        if (playbackState == Player.STATE_ENDED) {
+                            _isPlaying.value = false
+                            NanayaStatus.setMusic(false, null)
+                            onPlaybackEnded?.invoke()
+                        }
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
                         _error.value = error.message ?: "播放失败"
                         _isPlaying.value = false
+                        NanayaStatus.setMusic(false, null)
+                        onPlaybackError?.invoke()
                     }
                 })
                 pending.forEach { it(player) }

@@ -3,6 +3,7 @@ package io.github.dryearth.Nanaya.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +55,7 @@ import io.github.dryearth.Nanaya.music.InstalledPlugin
 import io.github.dryearth.Nanaya.music.MusicFreeEngine
 import io.github.dryearth.Nanaya.music.MusicPlayback
 import io.github.dryearth.Nanaya.music.MusicPluginStore
+import io.github.dryearth.Nanaya.music.MusicQueue
 import io.github.dryearth.Nanaya.music.MusicRepository
 import io.github.dryearth.Nanaya.music.MusicTrack
 import io.github.dryearth.Nanaya.ui.components.ActionButton
@@ -78,11 +83,16 @@ fun MusicScreen(onBack: () -> Unit) {
     var pluginErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var loadedPlatforms by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirmDelete by remember { mutableStateOf<InstalledPlugin?>(null) }
+    var selectedSource by remember { mutableStateOf<String?>(null) }
 
     val nowPlaying by MusicPlayback.nowPlaying.collectAsState()
     val playing by MusicPlayback.isPlaying.collectAsState()
     val playError by MusicPlayback.error.collectAsState()
     val debugLog by MusicFreeEngine.debugLog.collectAsState()
+    val queueTracks by MusicQueue.tracks.collectAsState()
+    val queueIndex by MusicQueue.index.collectAsState()
+    val resultPlatforms = results.map { it.platform }.distinct()
+    val visibleResults = if (selectedSource == null) results else results.filter { it.platform == selectedSource }
 
     fun refreshPlugins() {
         scope.launch {
@@ -105,6 +115,7 @@ fun MusicScreen(onBack: () -> Unit) {
                     emptyList()
                 }
             results = found
+            selectedSource = null
             searched = true
             busy = false
             if (found.isEmpty() && message == null) {
@@ -122,8 +133,11 @@ fun MusicScreen(onBack: () -> Unit) {
         if (busy) return
         busy = true
         message = null
+        val list = visibleResults.ifEmpty { listOf(track) }
+        val index = list.indexOfFirst { it.platform == track.platform && it.id == track.id }
+            .takeIf { it >= 0 } ?: list.indexOf(track).coerceAtLeast(0)
         scope.launch {
-            val outcome = runCatching { MusicRepository.playTrack(context, track) }
+            val outcome = runCatching { MusicRepository.playList(context, list, index) }
                 .getOrElse { io.github.dryearth.Nanaya.music.PlayOutcome(false, "播放失败：${it.message}") }
             message = outcome.message
             busy = false
@@ -251,13 +265,26 @@ fun MusicScreen(onBack: () -> Unit) {
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            track.subtitle,
+                            if (queueTracks.isNotEmpty()) {
+                                "${track.subtitle} · ${queueIndex + 1}/${queueTracks.size}"
+                            } else {
+                                track.subtitle
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = Glass.Muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    Icon(
+                        Icons.Rounded.SkipPrevious,
+                        contentDescription = "上一首",
+                        tint = Glass.Muted,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clickable { MusicQueue.previous() }
+                            .padding(3.dp),
+                    )
                     Icon(
                         if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = if (playing) "暂停" else "播放",
@@ -267,14 +294,24 @@ fun MusicScreen(onBack: () -> Unit) {
                             .clickable { MusicPlayback.toggle() }
                             .padding(3.dp),
                     )
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Rounded.SkipNext,
+                        contentDescription = "下一首",
+                        tint = Glass.Muted,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clickable { MusicQueue.next() }
+                            .padding(3.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
                     Icon(
                         Icons.Rounded.Stop,
                         contentDescription = "停止",
                         tint = Glass.Faint,
                         modifier = Modifier
                             .size(24.dp)
-                            .clickable { MusicPlayback.stop() }
+                            .clickable { MusicQueue.stop() }
                             .padding(2.dp),
                     )
                 }
@@ -292,7 +329,7 @@ fun MusicScreen(onBack: () -> Unit) {
                 refreshPlugins()
             }
             Spacer(Modifier.weight(1f))
-            Pill("停止", color = Glass.Faint) { MusicPlayback.stop() }
+            Pill("停止", color = Glass.Faint) { MusicQueue.stop() }
         }
 
         when (tab) {
@@ -550,49 +587,79 @@ fun MusicScreen(onBack: () -> Unit) {
                     }
                 }
 
+                if (resultPlatforms.size > 1) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Pill(
+                            "全部 ${results.size}",
+                            selected = selectedSource == null,
+                            color = Glass.Accent,
+                        ) { selectedSource = null }
+                        resultPlatforms.forEach { platform ->
+                            Pill(
+                                "$platform ${results.count { it.platform == platform }}",
+                                selected = selectedSource == platform,
+                                color = Glass.Violet,
+                            ) { selectedSource = platform }
+                        }
+                    }
+                }
+
                 GlassPanel(modifier = Modifier.weight(1f), corner = 16.dp, padding = PaddingValues(8.dp)) {
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(results, key = { "${it.platform}:${it.id}:${it.title}" }) { track ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !busy) { play(track) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        track.title,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Glass.Text,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        track.subtitle,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Glass.Faint,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                if (track.durationMs > 0) {
-                                    Text(
-                                        formatDuration(track.durationMs),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Glass.Faint,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                }
-                                Icon(
-                                    Icons.Rounded.PlayArrow,
-                                    contentDescription = "播放",
-                                    tint = Glass.Accent,
-                                    modifier = Modifier.size(20.dp),
+                        visibleResults.groupBy { it.platform }.forEach { (platform, list) ->
+                            item {
+                                Text(
+                                    "$platform · ${list.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Glass.Faint,
+                                    modifier = Modifier.padding(start = 2.dp, top = 6.dp, bottom = 2.dp),
                                 )
                             }
+                            items(list) { track ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !busy) { play(track) }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            track.title,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Glass.Text,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            track.subtitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Glass.Faint,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    if (track.durationMs > 0) {
+                                        Text(
+                                            formatDuration(track.durationMs),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Glass.Faint,
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Icon(
+                                        Icons.Rounded.PlayArrow,
+                                        contentDescription = "播放",
+                                        tint = Glass.Accent,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
                         }
-                        if (results.isEmpty()) {
+                        if (visibleResults.isEmpty()) {
                             item {
                                 Text(
                                     if (busy) "正在搜索…"

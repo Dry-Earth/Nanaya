@@ -188,6 +188,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         active = this
+        NanayaStatus.attach(this)
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
             val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
@@ -253,6 +254,7 @@ class AssistOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     override fun onDestroy() {
         runCatching { receiver?.let { unregisterReceiver(it) } }
         if (active === this) active = null
+        NanayaStatus.setAssistant(false)
         SystemSounds.play(this, Prefs(this).exitSoundUri)
         OverlaySpeech.stop()
         removeWindow()
@@ -704,6 +706,7 @@ private fun OverlayAssistant(
     val state by vm.chat.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var revealed by remember { mutableStateOf(!autoVoice) }
+    LaunchedEffect(revealed) { NanayaStatus.setAssistant(revealed) }
     var voiceStatus by remember { mutableStateOf<String?>(null) }
     val busStatus by OverlayVoiceBus.status.collectAsState()
     val busListening by OverlayVoiceBus.listening.collectAsState()

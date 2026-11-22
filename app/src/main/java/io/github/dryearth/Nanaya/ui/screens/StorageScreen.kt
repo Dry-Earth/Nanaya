@@ -29,6 +29,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +56,7 @@ import io.github.dryearth.Nanaya.data.Slice
 import io.github.dryearth.Nanaya.data.StorageCategory
 import io.github.dryearth.Nanaya.data.StorageItem
 import io.github.dryearth.Nanaya.data.StorageReport
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.EmptyHint
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -68,6 +71,8 @@ import io.github.dryearth.Nanaya.ui.theme.Glass
 @Composable
 fun StorageScreen(vm: ButlerViewModel) {
     val state by vm.storage.collectAsStateWithLifecycle()
+    LaunchedEffect(state.scanning) { NanayaStatus.setScanning(state.scanning) }
+    DisposableEffect(Unit) { onDispose { NanayaStatus.setScanning(false) } }
     var selected by remember { mutableStateOf<StorageCategory?>(null) }
     ToastEffect(state.toast) { vm.clearStorageToast() }
 

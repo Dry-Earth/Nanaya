@@ -61,6 +61,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -101,6 +102,7 @@ import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.liquid.lens
 import io.github.dryearth.Nanaya.ui.components.liquid.vibrancy
 import io.github.dryearth.Nanaya.ui.components.Pill
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.screens.AppsScreen
 import io.github.dryearth.Nanaya.ui.screens.AiSettingsScreen
 import io.github.dryearth.Nanaya.ui.screens.AssistantScreen
@@ -184,16 +186,19 @@ fun ButlerApp(
     }
 
     var foreground by remember { mutableStateOf(true) }
+    val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     foreground = true
+                    NanayaStatus.start(context)
                     vm.refreshCapabilities()
                 }
                 Lifecycle.Event.ON_STOP -> {
                     foreground = false
+                    NanayaStatus.stop()
                     vm.stopMonitoring()
                 }
                 else -> Unit
@@ -216,6 +221,21 @@ fun ButlerApp(
         } else {
             vm.stopMonitoring()
         }
+    }
+    LaunchedEffect(screenKey, tab, sub, chat, settings, aiSettings) {
+        NanayaStatus.setAssistant(chat)
+        NanayaStatus.setScreen(
+            when {
+                settings || aiSettings -> NanayaStatus.State.APP
+                tab == "security" -> NanayaStatus.State.SECURITY
+                tab == "perf" -> NanayaStatus.State.PERFORMANCE
+                sub == "special" || sub == "domain" || sub == "lineage" || sub == "notifications" ->
+                    NanayaStatus.State.SECURITY
+                sub == "rules" || sub == "memory" || sub == "diagnostics" ->
+                    NanayaStatus.State.PERFORMANCE
+                else -> NanayaStatus.State.APP
+            },
+        )
     }
 
     fun closeSub() {

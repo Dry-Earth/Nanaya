@@ -74,11 +74,7 @@ object MusicRepository {
                 },
             )
         }
-        val outcome = playFirstPlayable(context, tracks.take(6))
-        return if (outcome.ok) outcome else PlayOutcome(
-            false,
-            "找到 ${tracks.size} 个结果，但没有拿到可播放地址。插件可能暂时失效，换一首或换个音源试试。",
-        )
+        return startQueue(context, tracks, 0)
     }
 
     suspend fun playRandom(context: Context): PlayOutcome {
@@ -92,31 +88,50 @@ object MusicRepository {
             return PlayOutcome(false, "没有搜到可播放的歌曲，先在音乐页搜索一首吧。")
         }
         val pool = tracks.filter { it.durationMs in 60_000..12 * 60_000L }.ifEmpty { tracks }
-        val shuffled = pool.shuffled(Random(System.currentTimeMillis())).take(6)
-        val outcome = playFirstPlayable(context, shuffled)
-        return if (outcome.ok) outcome else PlayOutcome(false, "随机歌曲没有拿到播放地址，稍后再试。")
+        val shuffled = pool.shuffled(Random(System.currentTimeMillis())).take(20)
+        return startQueue(context, shuffled, 0)
     }
 
     suspend fun playTrack(context: Context, track: MusicTrack): PlayOutcome =
-        playFirstPlayable(context, listOf(track))
+        startQueue(context, listOf(track), 0)
 
-    private suspend fun playFirstPlayable(context: Context, tracks: List<MusicTrack>): PlayOutcome {
-        for (track in tracks) {
-            val qualities = listOf("standard", "high", "low")
-            for (quality in qualities) {
-                val source = runCatching {
-                    MusicFreeEngine.mediaSource(context, track.platform, track, quality)
-                }.getOrNull()
-                if (source != null) {
-                    withContext(Dispatchers.Main) {
-                        MusicPlayback.play(context, track, source)
-                    }
-                    val label = if (track.artist.isBlank()) track.title else "${track.title} — ${track.artist}"
-                    return PlayOutcome(true, "正在播放《$label》（${track.platform}）", track)
-                }
-            }
+    suspend fun playList(context: Context, items: List<MusicTrack>, startIndex: Int): PlayOutcome {
+        if (items.isEmpty()) return PlayOutcome(false, "列表是空的")
+        return startQueue(context, items, startIndex)
+    }
+
+    suspend fun resolveSource(context: Context, track: MusicTrack): MusicSourceInfo? {
+        for (quality in listOf("standard", "high", "low")) {
+            val source = runCatching {
+                MusicFreeEngine.mediaSource(context, track.platform, track, quality)
+            }.getOrNull()
+            if (source != null) return source
         }
-        return PlayOutcome(false, "没有拿到播放地址")
+        return null
+    }
+
+    private suspend fun startQueue(context: Context, items: List<MusicTrack>, preferred: Int): PlayOutcome {
+        val ordered = items.take(50)
+        if (ordered.isEmpty()) return PlayOutcome(false, "列表是空的")
+        val start = preferred.coerceIn(0, ordered.lastIndex)
+        val attempts = (start until ordered.size) + (0 until start)
+        for (i in attempts) {
+            val track = ordered[i]
+            val source = resolveSource(context, track) ?: continue
+            withContext(Dispatchers.Main) {
+                MusicQueue.start(context, ordered, i, source)
+            }
+            val label = if (track.artist.isBlank()) track.title else "${track.title} — ${track.artist}"
+            return PlayOutcome(
+                true,
+                "正在播放《$label》（${track.platform}），队列 ${ordered.size} 首",
+                track,
+            )
+        }
+        return PlayOutcome(
+            false,
+            "找到 ${ordered.size} 个结果，但没有拿到可播放地址。插件可能暂时失效，换一首或换个音源试试。",
+        )
     }
 
     private fun score(track: MusicTrack, query: String): Int {
