@@ -54,7 +54,14 @@ object LanAdbScanner {
             .sortedWith(compareBy({ it.kind.ordinal }, { it.host }, { it.port }))
     }
 
-    private suspend fun scanMdns(context: Context): List<AdbScanResult> {
+    suspend fun findWirelessPort(context: Context, host: String, timeoutMs: Long = 6_000): Int? {
+        val found = runCatching { scanMdns(context, timeoutMs) }.getOrDefault(emptyList())
+        return found.firstOrNull {
+            it.kind == AdbScanResult.Kind.WIRELESS && it.host == host
+        }?.port
+    }
+
+    private suspend fun scanMdns(context: Context, timeoutMs: Long = 4_500): List<AdbScanResult> {
         val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return emptyList()
         val results = mutableListOf<AdbScanResult>()
         val resultLock = Mutex()
@@ -62,7 +69,7 @@ object LanAdbScanner {
 
         suspend fun collect(type: String, kind: AdbScanResult.Kind) {
             runCatching {
-                withTimeoutOrNull(4_500) {
+                withTimeoutOrNull(timeoutMs) {
                     mdnsServices(nsd, type).collect { info ->
                         val resolved = resolveLock.withLock {
                             withTimeoutOrNull(1_500) { resolve(nsd, info) }

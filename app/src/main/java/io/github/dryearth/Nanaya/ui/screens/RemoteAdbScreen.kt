@@ -127,6 +127,8 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     var dpiInput by remember { mutableStateOf("") }
     var selectedPkg by remember { mutableStateOf<String?>(null) }
     var connectionExpanded by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(shellEntries.size) {
         if (shellEntries.isNotEmpty()) shellListState.animateScrollToItem(0)
@@ -243,6 +245,33 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
             shellEntries += shellEntry("logcat -d -t 400", "logcat -d -t 400 2>&1")
             busy = false
             mode = "shell"
+        }
+    }
+
+    fun loadProcesses() {
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            shellEntries += shellEntry(
+                "ps · 进程列表",
+                "ps -A -o PID,USER,NAME,%CPU,%MEM --sort=-%CPU 2>/dev/null | head -30 || ps -A | head -30",
+            )
+            busy = false
+            mode = "shell"
+        }
+    }
+
+    fun deleteRemote(path: String) {
+        pendingDelete = null
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                AdbManager.runRemote("rm -rf \"$path\"", 10_000)
+            }
+            busy = false
+            message = if (result == null) "删除失败：${AdbManager.lastRunError()}" else "已删除 $path"
+            loadFiles()
         }
     }
 
@@ -522,6 +551,25 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
+            Text(
+                if (showHelp) "收起连接帮助" else "车机 / 平板连接帮助",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Accent,
+                modifier = Modifier
+                    .clickable { showHelp = !showHelp }
+                    .padding(top = 4.dp),
+            )
+            if (showHelp) {
+                Text(
+                    "车机 / 电视：设置 → 关于 → 连续点版本号进入开发者模式，再打开 USB 调试或 ADB 调试；" +
+                        "部分车型需要工厂密码。开启后一般监听 5555，扫描或直接输入 IP 即可。\n" +
+                        "平板 / 手机（Android 11+）：打开「无线调试」，在扫描结果里点「配对」并输入屏幕上的 6 位配对码，" +
+                        "成功后会自动通过 mDNS 找到连接端口。\n" +
+                        "扫描不到：确认在同一 Wi-Fi，关闭路由器的 AP 隔离；也可以先连车机自带热点再扫描。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Glass.Muted,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f)) {
@@ -558,8 +606,23 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                             rememberDevice()
                             val target = connectPort.trim().toIntOrNull()
                             if (target == null) {
-                                busy = false
-                                message = "配对成功；请填写连接端口再点「只连接」"
+                                message = "配对成功，正在查找无线调试端口…"
+                                val discovered = withContext(Dispatchers.IO) {
+                                    LanAdbScanner.findWirelessPort(context, host.trim())
+                                }
+                                if (discovered == null) {
+                                    busy = false
+                                    message = "配对成功；没有自动发现端口，请填写连接端口后点「只连接」"
+                                } else {
+                                    connectPort = discovered.toString()
+                                    val error = withContext(Dispatchers.IO) {
+                                        AdbManager.connectRemote(context, host.trim(), discovered)
+                                    }
+                                    connected = AdbManager.remoteConnected()
+                                    busy = false
+                                    message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                                    if (error == null) connectionExpanded = false
+                                }
                             } else {
                                 val error = withContext(Dispatchers.IO) {
                                     AdbManager.connectRemote(context, host.trim(), target)
@@ -798,6 +861,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                 ) {
                     Pill("重启", color = Glass.Rose) { showReboot = !showReboot }
                     Pill("DPI", color = Glass.Ice) { showDpi = !showDpi }
+                    Pill("进程", color = Glass.Violet) { loadProcesses() }
                     Pill("息屏", color = Glass.Amber) { runAction("息屏", "input keyevent 223") }
                     Pill("亮屏", color = Glass.Mint) { runAction("亮屏", "input keyevent 224") }
                 }
@@ -933,19 +997,41 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                     ActionButton("上传", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { uploadPicker.launch(arrayOf("*/*")) })
                 }
                 Field("远程目录", remoteDir, "/sdcard") { remoteDir = it }
+                pendingDelete?.let { path ->
+                    GlassPanel(tint = Glass.Rose, corner = 14.dp, padding = PaddingValues(10.dp)) {
+                        Text(
+                            "确认删除目标设备上的这个路径？目录会递归删除。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Rose,
+                        )
+                        Text(
+                            path,
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp),
+                            color = Glass.Text,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ActionButton("取消", modifier = Modifier.weight(1f), onClick = { pendingDelete = null })
+                            ActionButton("删除", accent = true, modifier = Modifier.weight(1f), onClick = { deleteRemote(path) })
+                        }
+                    }
+                }
                 GlassPanel(modifier = Modifier.weight(1f), corner = 16.dp, padding = PaddingValues(8.dp)) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(entries) { entry ->
+                            val path = if (remoteDir == "/") "/${entry.name}" else "$remoteDir/${entry.name}"
                             Row(
                                 Modifier.fillMaxWidth().clickable {
                                     if (entry.directory) {
-                                        remoteDir = if (remoteDir == "/") "/${entry.name}" else "$remoteDir/${entry.name}"
+                                        remoteDir = path
                                         loadFiles()
                                     } else {
-                                        remotePath = if (remoteDir == "/") "/${entry.name}" else "$remoteDir/${entry.name}"
+                                        remotePath = path
                                         downloadPicker.launch(entry.name)
                                     }
-                                }.padding(vertical = 6.dp),
+                                }.padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
@@ -954,6 +1040,15 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                                     color = if (entry.directory) Glass.Accent else Glass.Text,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    "删除",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Glass.Rose,
+                                    modifier = Modifier
+                                        .clickable { pendingDelete = path }
+                                        .padding(horizontal = 6.dp),
                                 )
                             }
                         }
