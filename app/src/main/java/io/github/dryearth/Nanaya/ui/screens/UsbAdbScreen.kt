@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.dryearth.Nanaya.core.UsbAdbClient
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -117,11 +118,16 @@ fun UsbAdbScreen(onBack: () -> Unit) {
         if (target.isBlank() || busy || active == null) return
         busy = true
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { active.runShell(target) }.getOrElse { "失败：${it.message}" }
+            NanayaStatus.beginCommand()
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { active.runShell(target) }.getOrElse { "失败：${it.message}" }
+                }
+                output = "$ ${target}\n$result\n\n$output"
+            } finally {
+                NanayaStatus.endCommand()
+                busy = false
             }
-            output = "$ ${target}\n$result\n\n$output"
-            busy = false
         }
     }
 

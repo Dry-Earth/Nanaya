@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.Shell
+import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -76,12 +77,17 @@ fun AdbConsoleScreen(onBack: () -> Unit) {
         busy = true
         command = ""
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                Shell.runAs(Shell.backend(), text, 20_000)
+            NanayaStatus.beginCommand()
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    Shell.runAs(Shell.backend(), text, 20_000)
+                }
+                entries += TerminalEntry(text, result.text, result.code)
+                history = (listOf(text) + history.filter { it != text }).take(20)
+            } finally {
+                NanayaStatus.endCommand()
+                busy = false
             }
-            entries += TerminalEntry(text, result.text, result.code)
-            history = (listOf(text) + history.filter { it != text }).take(20)
-            busy = false
         }
     }
 

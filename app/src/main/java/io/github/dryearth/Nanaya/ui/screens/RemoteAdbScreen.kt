@@ -137,24 +137,34 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     }
 
     suspend fun exec(cmd: String): String = withContext(Dispatchers.IO) {
-        val result = AdbManager.runRemote(cmd, 20_000)
-        if (result == null) {
-            "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}"
-        } else {
-            result.output.ifBlank { "(无输出)" } + "\n[exit ${result.code}]"
+        NanayaStatus.beginCommand()
+        try {
+            val result = AdbManager.runRemote(cmd, 20_000)
+            if (result == null) {
+                "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}"
+            } else {
+                result.output.ifBlank { "(无输出)" } + "\n[exit ${result.code}]"
+            }
+        } finally {
+            NanayaStatus.endCommand()
         }
     }
 
     suspend fun shellEntry(label: String, cmd: String): RemoteShellEntry = withContext(Dispatchers.IO) {
-        val result = AdbManager.runRemote(cmd, 20_000)
-        if (result == null) {
-            RemoteShellEntry(
-                label,
-                "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}",
-                -1,
-            )
-        } else {
-            RemoteShellEntry(label, result.output.ifBlank { "(无输出)" }, result.code)
+        NanayaStatus.beginCommand()
+        try {
+            val result = AdbManager.runRemote(cmd, 20_000)
+            if (result == null) {
+                RemoteShellEntry(
+                    label,
+                    "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}",
+                    -1,
+                )
+            } else {
+                RemoteShellEntry(label, result.output.ifBlank { "(无输出)" }, result.code)
+            }
+        } finally {
+            NanayaStatus.endCommand()
         }
     }
 

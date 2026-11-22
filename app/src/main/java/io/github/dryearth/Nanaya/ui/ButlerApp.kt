@@ -160,6 +160,7 @@ fun ButlerApp(
     val appearance by vm.appearance.collectAsStateWithLifecycle()
     val nav by vm.navigate.collectAsStateWithLifecycle()
     val appsState by vm.apps.collectAsStateWithLifecycle()
+    val storageState by vm.storage.collectAsStateWithLifecycle()
     val detailOpen = appsState.detail != null
     val glassBackdrop = LocalGlassBackdrop.current
     val density = LocalDensity.current
@@ -221,6 +222,9 @@ fun ButlerApp(
         } else {
             vm.stopMonitoring()
         }
+    }
+    LaunchedEffect(storageState.cleaning) {
+        NanayaStatus.setCleaning(storageState.cleaning)
     }
     LaunchedEffect(screenKey, tab, sub, chat, settings, aiSettings) {
         NanayaStatus.setAssistant(chat)
