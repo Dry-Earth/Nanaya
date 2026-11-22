@@ -452,6 +452,18 @@ public final class AdbManager extends AbsAdbConnectionManager {
         return text == null || text.trim().isEmpty() ? e.toString() : text;
     }
 
+    @Nullable
+    public static PrivateKey usbPrivateKey(@NonNull Context context) {
+        if (!init(context)) return null;
+        return INSTANCE.privateKey;
+    }
+
+    @Nullable
+    public static Certificate usbCertificate(@NonNull Context context) {
+        if (!init(context)) return null;
+        return INSTANCE.certificate;
+    }
+
     @NonNull
     @Override
     protected PrivateKey getPrivateKey() {

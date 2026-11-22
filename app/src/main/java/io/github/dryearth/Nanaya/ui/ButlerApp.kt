@@ -117,6 +117,7 @@ import io.github.dryearth.Nanaya.ui.screens.HomeScreen
 import io.github.dryearth.Nanaya.ui.screens.ToolsScreen
 import io.github.dryearth.Nanaya.ui.screens.RemoteAdbScreen
 import io.github.dryearth.Nanaya.ui.screens.AdbConsoleScreen
+import io.github.dryearth.Nanaya.ui.screens.UsbAdbScreen
 import io.github.dryearth.Nanaya.ui.screens.PerformanceScreen
 import io.github.dryearth.Nanaya.ui.screens.SecurityScreen
 import io.github.dryearth.Nanaya.ui.screens.SettingsScreen
@@ -227,6 +228,8 @@ fun ButlerApp(
             Box(Modifier.weight(1f)) {
                 if (sub == "remoteadb") {
                     RemoteAdbScreen(onBack = { sub = null })
+                } else if (sub == "usbotg") {
+                    UsbAdbScreen(onBack = { sub = null })
                 } else if (sub == "adbconsole") {
                     AdbConsoleScreen(onBack = { sub = null })
                 } else if (sub == "autostart") {
@@ -280,6 +283,7 @@ fun ButlerApp(
                             onBack = { tab = "home" },
                             onOpenRemote = { sub = "remoteadb" },
                             onOpenLocal = { sub = "adbconsole" },
+                            onOpenUsb = { sub = "usbotg" },
                         )
                     }
                 }
