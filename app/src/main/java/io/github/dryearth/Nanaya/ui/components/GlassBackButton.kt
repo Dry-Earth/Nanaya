@@ -70,9 +70,9 @@ fun GlassBackButton(
     val description = contentDescription
     Box(
         modifier = modifier
-            .size(38.dp)
+            .size(32.dp)
             .shadow(
-                9.dp,
+                6.dp,
                 CircleShape,
                 ambientColor = Color.Black.copy(alpha = 0.32f),
                 spotColor = Color.Black.copy(alpha = 0.20f),
@@ -86,39 +86,18 @@ fun GlassBackButton(
                         effects = {
                             vibrancy()
                             lens(
-                                refractionHeight = 18.dp.toPx(),
-                                refractionAmount = 14.dp.toPx(),
+                                refractionHeight = 14.dp.toPx(),
+                                refractionAmount = 10.dp.toPx(),
                                 depthEffect = true,
                                 chromaticAberration = 0.04f,
                             )
                         },
-                        onDrawSurface = { drawRect(Color(0x1CFFFFFF)) },
+                        onDrawSurface = { },
                     )
                 } else {
-                    Modifier.background(Color(0x1CFFFFFF))
+                    Modifier
                 },
             )
-            .drawBehind {
-                // Raised glass bevel: bright top, dark bottom.
-                drawCircle(
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            Color(0x3DFFFFFF),
-                            Color(0x0AFFFFFF),
-                            Color(0x3D000000),
-                        ),
-                    ),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(Color(0x2AFFFFFF), Color.Transparent),
-                        center = Offset(size.width * 0.30f, size.height * 0.22f),
-                        radius = size.width * 0.62f,
-                    ),
-                    radius = size.width * 0.62f,
-                    center = Offset(size.width * 0.30f, size.height * 0.22f),
-                )
-            }
             .border(
                 1.dp,
                 Brush.verticalGradient(
@@ -133,25 +112,6 @@ fun GlassBackButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            val w = size.width
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = colors.map { it.copy(alpha = 0.16f * breath) },
-                    start = Offset(-w * 0.8f + phase * w * 1.8f, 0f),
-                    end = Offset(phase * w * 1.8f, w),
-                ),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(Color(0x22FFFFFF).copy(alpha = 0.16f * breath), Color.Transparent),
-                    center = Offset(w * 0.28f, w * 0.20f),
-                    radius = w * 0.7f,
-                ),
-                radius = w * 0.7f,
-                center = Offset(w * 0.28f, w * 0.20f),
-            )
-        }
         Text(
             "⇦",
             style = TextStyle(
@@ -160,7 +120,7 @@ fun GlassBackButton(
                     start = Offset(-40f + phase * 90f, 0f),
                     end = Offset(40f + phase * 90f, 40f),
                 ),
-                fontSize = 23.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             ),
         )
