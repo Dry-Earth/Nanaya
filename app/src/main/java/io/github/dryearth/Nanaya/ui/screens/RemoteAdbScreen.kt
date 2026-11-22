@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,17 +26,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +68,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.AdbManager
+import io.github.dryearth.Nanaya.core.AdbScanResult
+import io.github.dryearth.Nanaya.core.LanAdbScanner
 import io.github.dryearth.Nanaya.core.Prefs
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -111,6 +117,16 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
             },
         )
     }
+    var scanning by remember { mutableStateOf(false) }
+    var scanResults by remember { mutableStateOf<List<AdbScanResult>>(emptyList()) }
+    var scanFinished by remember { mutableStateOf(false) }
+    val deviceInfo = remember { mutableStateMapOf<String, String>() }
+    var infoBusy by remember { mutableStateOf(false) }
+    var showReboot by remember { mutableStateOf(false) }
+    var showDpi by remember { mutableStateOf(false) }
+    var dpiInput by remember { mutableStateOf("") }
+    var selectedPkg by remember { mutableStateOf<String?>(null) }
+    var connectionExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(shellEntries.size) {
         if (shellEntries.isNotEmpty()) shellListState.animateScrollToItem(0)
@@ -166,6 +182,151 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         scope.launch {
             shellEntries += shellEntry(text, text)
             busy = false
+        }
+    }
+
+    fun captureShot() {
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            val bytes = withContext(Dispatchers.IO) { AdbManager.captureRemoteScreenshot() }
+            if (bytes != null) {
+                screenshot = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                message = "截图已获取"
+            } else {
+                message = "截图失败：${AdbManager.lastRunError()}"
+            }
+            busy = false
+        }
+    }
+
+    fun runAction(label: String, cmd: String) {
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { AdbManager.runRemote(cmd, 10_000) }
+            busy = false
+            message = if (result == null) {
+                "$label 失败：${AdbManager.lastRunError().ifBlank { "设备没有响应" }}"
+            } else {
+                "$label 完成"
+            }
+        }
+    }
+
+    fun rebootTo(cmd: String, label: String) {
+        showReboot = false
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            withContext(Dispatchers.IO) { AdbManager.runRemote(cmd, 5_000) }
+            busy = false
+            connected = false
+            message = "已发送$label，设备会断开连接"
+        }
+    }
+
+    fun applyDpi(reset: Boolean) {
+        val value = dpiInput.trim().toIntOrNull()
+        if (!reset && (value == null || value !in 120..960)) {
+            message = "DPI 请输入 120–960 之间的数值"
+            return
+        }
+        showDpi = false
+        runAction(if (reset) "恢复 DPI" else "设置 DPI", if (reset) "wm density reset" else "wm density $value")
+    }
+
+    fun loadLogcat() {
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            shellEntries += shellEntry("logcat -d -t 400", "logcat -d -t 400 2>&1")
+            busy = false
+            mode = "shell"
+        }
+    }
+
+    fun loadInfo() {
+        if (!connected) {
+            message = "先连接设备"
+            return
+        }
+        infoBusy = true
+        scope.launch {
+            val raw = exec(
+                "echo MODEL=\$(getprop ro.product.model);" +
+                    "echo BRAND=\$(getprop ro.product.brand);" +
+                    "echo RELEASE=\$(getprop ro.build.version.release);" +
+                    "echo SDK=\$(getprop ro.build.version.sdk);" +
+                    "echo ABI=\$(getprop ro.product.cpu.abi);" +
+                    "echo SOC=\$(getprop ro.soc.model);" +
+                    "echo SIZE=\$(wm size | head -1);" +
+                    "echo DENSITY=\$(wm density | head -1);" +
+                    "echo MEM=\$(grep MemTotal /proc/meminfo);" +
+                    "echo DISK=\$(df -h /data | tail -1);" +
+                    "echo BATTERY=\$(dumpsys battery | grep -E 'level|status' | tr '\\n' ' ');" +
+                    "echo IP=\$(ip -f inet addr show 2>/dev/null | awk '/inet /{print \$2}' | grep -v 127.0.0.1 | head -1)",
+            )
+            val parsed = raw.lineSequence()
+                .mapNotNull { line ->
+                    val sep = line.indexOf('=')
+                    if (sep > 0) line.substring(0, sep).trim() to line.substring(sep + 1).trim() else null
+                }
+                .toMap()
+            deviceInfo.clear()
+            deviceInfo.putAll(parsed)
+            infoBusy = false
+        }
+    }
+
+    fun startScan() {
+        if (scanning) return
+        scanning = true
+        scanFinished = false
+        scanResults = emptyList()
+        scope.launch {
+            val found = withContext(Dispatchers.IO) { LanAdbScanner.scan(context) }
+            scanResults = found
+            scanning = false
+            scanFinished = true
+            if (found.isEmpty()) {
+                message = "没有发现设备：确认同一 Wi-Fi/热点，且目标已开启 ADB 调试"
+            }
+        }
+    }
+
+    fun connectScanned(result: AdbScanResult) {
+        host = result.host
+        if (result.kind == AdbScanResult.Kind.PAIRING) {
+            pairPort = result.port.toString()
+            connectPort = ""
+            message = "已填入 ${result.host} 的配对端口，请输入目标屏幕上的 6 位配对码"
+            return
+        }
+        pairPort = ""
+        connectPort = result.port.toString()
+        if (busy) return
+        busy = true
+        message = null
+        scope.launch {
+            val error = withContext(Dispatchers.IO) {
+                AdbManager.connectRemote(context, result.host, result.port)
+            }
+            connected = AdbManager.remoteConnected()
+            busy = false
+            message = if (error == null) "已连接 ${result.host}:${result.port}" else "连接失败：$error"
+            if (error == null) {
+                connectionExpanded = false
+                scanResults = emptyList()
+                scanFinished = false
+                rememberDevice()
+            }
+        }
+    }
+
+    LaunchedEffect(mode, connected) {
+        if (mode == "device" && connected && deviceInfo.isEmpty() && !infoBusy) {
+            loadInfo()
         }
     }
 
@@ -266,6 +427,27 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         }
     }
 
+    fun exportApk(pkg: String) {
+        selectedPkg = null
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            val raw = withContext(Dispatchers.IO) { AdbManager.runRemote("pm path $pkg", 8_000) }
+            val path = raw?.output
+                ?.lineSequence()
+                ?.map { it.trim() }
+                ?.firstOrNull { it.startsWith("package:") }
+                ?.removePrefix("package:")
+            busy = false
+            if (path.isNullOrBlank()) {
+                message = "没有找到 $pkg 的 APK 路径"
+            } else {
+                remotePath = path
+                downloadPicker.launch("$pkg.apk")
+            }
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -289,7 +471,57 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         }
 
         GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
-            Field("目标 IP", host, "例如 192.168.1.23") { host = it }
+            if (connected && !connectionExpanded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("已连接", style = MaterialTheme.typography.labelSmall, color = Glass.Mint)
+                        Text(
+                            "$host:${connectPort.ifBlank { "?" }}",
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                            color = Glass.Text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        "连接设置",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Accent,
+                        modifier = Modifier.clickable { connectionExpanded = true },
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "断开",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Rose,
+                        modifier = Modifier.clickable {
+                            AdbManager.disconnectRemote()
+                            connected = false
+                            connectionExpanded = false
+                            message = "已断开"
+                        },
+                    )
+                }
+            } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    Field("目标 IP", host, "例如 192.168.1.23") { host = it }
+                }
+                ActionButton(
+                    if (scanning) "扫描中…" else "扫描",
+                    enabled = !scanning && !busy,
+                    modifier = Modifier.padding(bottom = 1.dp),
+                    onClick = { startScan() },
+                )
+            }
+            Text(
+                "扫描同一 Wi-Fi 下的车机 / 电视 / 平板，需已开启 ADB 调试",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f)) {
@@ -335,6 +567,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                                 connected = AdbManager.remoteConnected()
                                 busy = false
                                 message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                                if (error == null) connectionExpanded = false
                             }
                         }
                     }
@@ -352,6 +585,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                             connected = AdbManager.remoteConnected()
                             busy = false
                             message = if (error == null) "远程 ADB 已连接" else "连接失败：$error"
+                            if (error == null) connectionExpanded = false
                         }
                     }
                 })
@@ -368,9 +602,66 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Text(it, style = MaterialTheme.typography.labelSmall, color = if (connected) Glass.Mint else Glass.Amber)
             }
+            }
         }
 
-        if (devices.isNotEmpty()) {
+        if (!connected && (scanning || scanFinished || scanResults.isNotEmpty())) {
+            GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "局域网设备",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (scanning) {
+                        Text("扫描中…", style = MaterialTheme.typography.labelSmall, color = Glass.Amber)
+                    }
+                }
+                scanResults.forEach { result ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { connectScanned(result) }
+                            .padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                result.name.ifBlank { result.host },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                when (result.kind) {
+                                    AdbScanResult.Kind.WIRELESS -> "无线调试 · ${result.host}:${result.port}"
+                                    AdbScanResult.Kind.PAIRING -> "需要配对 · ${result.host}:${result.port}"
+                                    AdbScanResult.Kind.LAN -> "ADB 5555 · ${result.host}:${result.port}"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Faint,
+                            )
+                        }
+                        Text(
+                            if (result.kind == AdbScanResult.Kind.PAIRING) "配对" else "连接",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Glass.Accent,
+                        )
+                    }
+                }
+                if (scanFinished && scanResults.isEmpty()) {
+                    Text(
+                        "没有发现设备。可手动输入目标 IP；部分路由器开启了 AP 隔离，会阻止扫描。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Amber,
+                    )
+                }
+            }
+        }
+
+        if (devices.isNotEmpty() && (!connected || connectionExpanded)) {
             GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
                 Text("已保存设备", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                 devices.forEach { device ->
@@ -392,43 +683,240 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill("命令行", selected = mode == "shell", color = Glass.Accent) { mode = "shell" }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Pill("设备", selected = mode == "device", color = Glass.Mint) {
+                mode = "device"
+                selectedPkg = null
+                if (connected && deviceInfo.isEmpty()) loadInfo()
+            }
+            Pill("命令行", selected = mode == "shell", color = Glass.Accent) {
+                mode = "shell"
+                selectedPkg = null
+            }
             Pill("应用", selected = mode == "apps", color = Glass.Violet) {
                 mode = "apps"
+                selectedPkg = null
                 loadApps()
             }
             Pill("文件", selected = mode == "files", color = Glass.Ice) {
                 mode = "files"
+                selectedPkg = null
                 loadFiles()
             }
         }
 
         when (mode) {
+            "device" -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ActionButton(
+                        "刷新信息",
+                        enabled = connected && !infoBusy,
+                        modifier = Modifier.weight(1f),
+                        onClick = { loadInfo() },
+                    )
+                    ActionButton(
+                        "截图",
+                        enabled = connected && !busy,
+                        modifier = Modifier.weight(1f),
+                        onClick = { captureShot() },
+                    )
+                    ActionButton(
+                        "日志",
+                        enabled = connected && !busy,
+                        modifier = Modifier.weight(1f),
+                        onClick = { loadLogcat() },
+                    )
+                }
+
+                GlassPanel(modifier = Modifier.weight(1f), corner = 16.dp, padding = PaddingValues(12.dp)) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        val shot = screenshot
+                        if (shot != null) {
+                            Image(
+                                shot,
+                                contentDescription = "远程截图",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        if (infoBusy && deviceInfo.isEmpty()) {
+                            Text("正在读取设备信息…", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                        } else if (deviceInfo.isEmpty()) {
+                            Text(
+                                if (connected) "点「刷新信息」读取设备信息" else "连接设备后显示型号、系统、屏幕、内存等信息",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Glass.Muted,
+                            )
+                        } else {
+                            val rows = listOf(
+                                "品牌" to "BRAND", "型号" to "MODEL", "系统" to "RELEASE", "SDK" to "SDK",
+                                "SoC" to "SOC", "架构" to "ABI", "屏幕" to "SIZE", "密度" to "DENSITY",
+                                "内存" to "MEM", "存储" to "DISK", "电池" to "BATTERY", "网络" to "IP",
+                            )
+                            rows.forEach { (label, key) ->
+                                val value = deviceInfo[key].orEmpty()
+                                if (value.isNotBlank()) {
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Glass.Faint,
+                                            modifier = Modifier.width(52.dp),
+                                        )
+                                        Text(
+                                            value
+                                                .replace("Physical size: ", "")
+                                                .replace("Physical density: ", ""),
+                                            style = TextStyle(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                lineHeight = 16.sp,
+                                            ),
+                                            color = Glass.Text,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "屏幕尺寸、DPI 与重启都需要 ADB shell 权限；误改 DPI 可用「恢复默认」修复。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Faint,
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Pill("重启", color = Glass.Rose) { showReboot = !showReboot }
+                    Pill("DPI", color = Glass.Ice) { showDpi = !showDpi }
+                    Pill("息屏", color = Glass.Amber) { runAction("息屏", "input keyevent 223") }
+                    Pill("亮屏", color = Glass.Mint) { runAction("亮屏", "input keyevent 224") }
+                }
+
+                if (showReboot) {
+                    GlassPanel(tint = Glass.Rose, corner = 14.dp, padding = PaddingValues(10.dp)) {
+                        Text(
+                            "选择重启方式（设备会立即断开）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Rose,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Pill("正常", color = Glass.Text) { rebootTo("reboot", "重启") }
+                            Pill("Recovery", color = Glass.Amber) { rebootTo("reboot recovery", "进入 Recovery") }
+                            Pill("Fastboot", color = Glass.Ice) { rebootTo("reboot bootloader", "进入 Bootloader") }
+                            Pill("关机", color = Glass.Rose) { rebootTo("reboot -p", "关机") }
+                        }
+                    }
+                }
+
+                if (showDpi) {
+                    GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
+                        Field("屏幕 DPI", dpiInput, "例如 320", numeric = true) { dpiInput = it }
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ActionButton(
+                                "应用",
+                                accent = true,
+                                modifier = Modifier.weight(1f),
+                                onClick = { applyDpi(false) },
+                            )
+                            ActionButton(
+                                "恢复默认",
+                                modifier = Modifier.weight(1f),
+                                onClick = { applyDpi(true) },
+                            )
+                            ActionButton(
+                                "取消",
+                                modifier = Modifier.weight(1f),
+                                onClick = { showDpi = false },
+                            )
+                        }
+                    }
+                }
+            }
             "apps" -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ActionButton("刷新应用", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { loadApps() })
                     ActionButton("安装 APK", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive")) })
                 }
+                selectedPkg?.let { pkg ->
+                    GlassPanel(corner = 12.dp, padding = PaddingValues(10.dp)) {
+                        Text(
+                            "操作：$pkg",
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            color = Glass.Text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Pill("启动", color = Glass.Mint) {
+                                selectedPkg = null
+                                performAppAction(
+                                    pkg,
+                                    "启动",
+                                    "monkey -p $pkg -c android.intent.category.LAUNCHER 1",
+                                )
+                            }
+                            Pill("停止", color = Glass.Amber) {
+                                selectedPkg = null
+                                performAppAction(pkg, "停止", "am force-stop $pkg")
+                            }
+                            Pill("清除数据", color = Glass.Rose) {
+                                selectedPkg = null
+                                performAppAction(pkg, "清除数据", "pm clear $pkg")
+                            }
+                            Pill("停用", color = Glass.Ice) {
+                                selectedPkg = null
+                                performAppAction(pkg, "停用", "pm disable-user --user 0 $pkg")
+                            }
+                            Pill("启用", color = Glass.Mint) {
+                                selectedPkg = null
+                                performAppAction(pkg, "启用", "pm enable $pkg")
+                            }
+                            Pill("导出 APK", color = Glass.Ice) { exportApk(pkg) }
+                            Pill("卸载", color = Glass.Rose) {
+                                selectedPkg = null
+                                performAppAction(pkg, "卸载", "pm uninstall --user 0 $pkg")
+                            }
+                        }
+                    }
+                }
                 GlassPanel(modifier = Modifier.weight(1f), corner = 16.dp, padding = PaddingValues(8.dp)) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(packages) { pkg ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedPkg = if (selectedPkg == pkg) null else pkg }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(
                                     pkg,
                                     style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
-                                    color = Glass.Text,
+                                    color = if (selectedPkg == pkg) Glass.Accent else Glass.Text,
                                     modifier = Modifier.weight(1f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Pill("停止", color = Glass.Amber) {
-                                    performAppAction(pkg, "停止", "am force-stop $pkg")
-                                }
-                                Spacer(Modifier.width(4.dp))
-                                Pill("卸载", color = Glass.Rose) {
-                                    performAppAction(pkg, "卸载", "pm uninstall --user 0 $pkg")
-                                }
+                                Text("›", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                             }
                         }
                     }
@@ -479,17 +967,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                     }
                     Pill("应用列表", color = Glass.Violet) { runCommand("pm list packages -3") }
                     Pill("截图", color = Glass.Mint) {
-                        busy = true
-                        scope.launch {
-                            val bytes = withContext(Dispatchers.IO) { AdbManager.captureRemoteScreenshot() }
-                            if (bytes != null) {
-                                screenshot = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                                message = "截图已获取"
-                            } else {
-                                message = "截图失败：${AdbManager.lastRunError()}"
-                            }
-                            busy = false
-                        }
+                        captureShot()
                     }
                 }
 
