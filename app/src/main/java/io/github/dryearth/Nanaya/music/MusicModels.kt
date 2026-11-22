@@ -2,7 +2,7 @@ package io.github.dryearth.Nanaya.music
 
 import org.json.JSONObject
 
-/** A track returned by a MusicFree plugin. [rawJson] keeps every plugin-specific field. */
+/** A track returned by a audio source plugin. [rawJson] keeps every plugin-specific field. */
 data class MusicTrack(
     val platform: String,
     val id: String,

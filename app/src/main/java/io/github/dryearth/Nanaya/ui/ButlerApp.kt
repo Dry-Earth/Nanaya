@@ -587,38 +587,44 @@ private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
     val shape = CircleShape
     Box(
         Modifier
-            .size(40.dp)
-            .shadow(
-                6.dp,
-                shape,
-                ambientColor = Color.Black.copy(alpha = 0.28f),
-                spotColor = Color.Black.copy(alpha = 0.18f),
-            )
-            .clip(shape)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { shape },
-                effects = {
-                    vibrancy()
-                    blur(6.dp.toPx(), 6.dp.toPx())
-                    lens(
-                        refractionHeight = 20.dp.toPx(),
-                        refractionAmount = 18.dp.toPx(),
-                    )
-                },
-                onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
-            )
-            .border(
-                1.dp,
-                Brush.verticalGradient(
-                    listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
-                ),
-                shape,
-            )
+            .size(44.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        FlowingAiIcon(Modifier.size(19.dp))
+        Box(
+            Modifier
+                .size(34.dp)
+                .shadow(
+                    5.dp,
+                    shape,
+                    ambientColor = Color.Black.copy(alpha = 0.26f),
+                    spotColor = Color.Black.copy(alpha = 0.16f),
+                )
+                .clip(shape)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { shape },
+                    effects = {
+                        vibrancy()
+                        blur(5.dp.toPx(), 5.dp.toPx())
+                        lens(
+                            refractionHeight = 16.dp.toPx(),
+                            refractionAmount = 14.dp.toPx(),
+                        )
+                    },
+                    onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
+                )
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
+                    ),
+                    shape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            FlowingAiIcon(Modifier.size(18.dp))
+        }
     }
 }
 

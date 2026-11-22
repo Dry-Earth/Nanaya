@@ -31,13 +31,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
- * Runs MusicFree plugin files in an embedded QuickJS instance.
+ * Runs audio source plugin files in an embedded QuickJS instance.
  *
  * libs.js (cheerio / crypto-js / dayjs / he / qs / big-integer) and runtime.js
  * are bundled in assets. Kotlin only provides the network bridge.
  */
-object MusicFreeEngine {
-    private const val TAG = "MusicFree"
+object MusicPluginEngine {
+    private const val TAG = "MusicPlugin"
     private const val PLUGIN_TIMEOUT_MS = 45_000L
     private const val MAX_MEMORY = 192L * 1024 * 1024
 
@@ -236,7 +236,7 @@ object MusicFreeEngine {
 
     private fun pluginWrapper(id: String, source: String): String = buildString {
         append("(function(){var module={exports:{}};var exports=module.exports;\n")
-        append("(function(require,__musicfree_require,module,exports,console,env,URL,process){\n")
+        append("(function(require,__plugin_require,module,exports,console,env,URL,process){\n")
         append(source)
         append("\n})(__mfRequire,__mfRequire,module,exports,console,__mfEnv,globalThis.URL,__mfProcess);\n")
         append("return __mfAdd(")
@@ -259,11 +259,11 @@ object MusicFreeEngine {
     }
 
     private fun libs(context: Context): String =
-        libsSource ?: context.assets.open("musicfree/libs.js").bufferedReader().use { it.readText() }
+        libsSource ?: context.assets.open("musicplugins/libs.js").bufferedReader().use { it.readText() }
             .also { libsSource = it }
 
     private fun runtime(context: Context): String =
-        runtimeSource ?: context.assets.open("musicfree/runtime.js").bufferedReader().use { it.readText() }
+        runtimeSource ?: context.assets.open("musicplugins/runtime.js").bufferedReader().use { it.readText() }
             .also { runtimeSource = it }
 
     private suspend fun httpRequest(json: String): String = withContext(Dispatchers.IO) {

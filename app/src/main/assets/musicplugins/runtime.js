@@ -1,4 +1,4 @@
-/* MusicFree plugin runtime for QuickJS.
+/* audio source plugin runtime for QuickJS.
  * Loaded after libs.js, which defines globalThis.__mfLibs.
  * Kotlin provides the async __http(json) and sync __log(text) bindings.
  */
@@ -156,7 +156,7 @@
         if (name === "axios") return globalThis.axios;
         if (moduleCache[name]) return moduleCache[name];
         var pkg = __mfLibs[name];
-        if (!pkg) throw new Error("MusicFree 插件引用了不支持的模块：" + name);
+        if (!pkg) throw new Error("音源插件引用了不支持的模块：" + name);
         var wrapped = withDefault(pkg);
         moduleCache[name] = wrapped;
         return wrapped;
@@ -406,7 +406,7 @@
         };
     }
 
-    // MusicFree injects these as function arguments; keep the same shape.
+    //  injects these as function arguments; keep the same shape.
     globalThis.__mfEnv = {
         getUserVariables: function () { return {}; },
         userVariables: {},

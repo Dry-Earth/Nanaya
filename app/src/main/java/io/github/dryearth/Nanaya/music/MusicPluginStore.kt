@@ -18,7 +18,7 @@ private const val META_FILE = "plugins.json"
 private const val MAX_PLUGIN_BYTES = 4 * 1024 * 1024
 
 /**
- * Installed MusicFree-style plugins live in filesDir/musicfree/plugins.
+ * Installed plugin files live in filesDir/musicplugins/plugins.
  * Metadata is kept in plugins.json next to them.
  */
 object MusicPluginStore {
@@ -31,7 +31,7 @@ object MusicPluginStore {
         .build()
 
     fun pluginsDir(context: Context): File =
-        File(context.filesDir, "musicfree/plugins").apply { mkdirs() }
+        File(context.filesDir, "musicplugins/plugins").apply { mkdirs() }
 
     fun fileFor(context: Context, plugin: InstalledPlugin): File =
         File(pluginsDir(context), plugin.fileName)
@@ -124,7 +124,7 @@ object MusicPluginStore {
         val source = rawSource.trim()
         require(source.isNotEmpty()) { "插件内容为空" }
         require(!source.startsWith("{")) { "暂不支持订阅 JSON，请安装单个 .js 插件文件" }
-        val meta = MusicFreeEngine.inspectPlugin(context, source)
+        val meta = MusicPluginEngine.inspectPlugin(context, source)
         return lock.withLock {
             val dir = pluginsDir(context)
             val id = UUID.randomUUID().toString().replace("-", "").take(12)
@@ -154,7 +154,7 @@ object MusicPluginStore {
                     .apply { if (!sourceUrl.isNullOrBlank()) put("url", sourceUrl) },
             )
             writeMeta(context, next)
-            MusicFreeEngine.reload(context)
+            MusicPluginEngine.reload(context)
             InstalledPlugin(
                 id = id,
                 platform = meta.platform,
@@ -175,7 +175,7 @@ object MusicPluginStore {
             }
             writeMeta(context, array)
         }
-        MusicFreeEngine.reload(context)
+        MusicPluginEngine.reload(context)
     }
 
     suspend fun remove(context: Context, id: String) {
@@ -194,7 +194,7 @@ object MusicPluginStore {
             }
             writeMeta(context, next)
         }
-        MusicFreeEngine.reload(context)
+        MusicPluginEngine.reload(context)
     }
 
     fun enabledSources(context: Context): List<Pair<InstalledPlugin, String>> = buildList {

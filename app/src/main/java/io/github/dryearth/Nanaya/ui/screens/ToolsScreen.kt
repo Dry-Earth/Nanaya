@@ -65,7 +65,7 @@ fun ToolsScreen(
                     Column(Modifier.weight(1f)) {
                         Text("音乐", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
-                            "安装 MusicFree 音源插件，搜索或直接说「播放稻香」",
+                            "安装音源插件，搜索或直接说「播放稻香」",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )

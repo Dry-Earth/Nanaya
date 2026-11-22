@@ -35,9 +35,9 @@ object MusicRepository {
             plugins.map { plugin ->
                 async(Dispatchers.Default) {
                     runCatching {
-                        MusicFreeEngine.search(context, plugin.platform, query)
+                        MusicPluginEngine.search(context, plugin.platform, query)
                     }.onSuccess { tracks ->
-                        MusicFreeEngine.log("插件 ${plugin.platform} 返回 ${tracks.size} 首")
+                        MusicPluginEngine.log("插件 ${plugin.platform} 返回 ${tracks.size} 首")
                     }.onFailure { error ->
                         errors[plugin.platform] = (error.message ?: error.toString())
                             .substringBefore('\n')
@@ -58,7 +58,7 @@ object MusicRepository {
     suspend fun playQuery(context: Context, query: String): PlayOutcome {
         val plugins = MusicPluginStore.list(context).filter { it.enabled }
         if (plugins.isEmpty()) {
-            return PlayOutcome(false, "还没有安装音源插件。请到「工具 → 音乐 → 插件」安装 MusicFree 插件。")
+            return PlayOutcome(false, "还没有安装音源插件。请到「工具 → 音乐 → 插件」安装音源插件。")
         }
         val trimmed = query.trim()
         if (trimmed.isBlank()) return playRandom(context)
@@ -80,7 +80,7 @@ object MusicRepository {
     suspend fun playRandom(context: Context): PlayOutcome {
         val plugins = MusicPluginStore.list(context).filter { it.enabled }
         if (plugins.isEmpty()) {
-            return PlayOutcome(false, "还没有安装音源插件。请到「工具 → 音乐 → 插件」安装 MusicFree 插件。")
+            return PlayOutcome(false, "还没有安装音源插件。请到「工具 → 音乐 → 插件」安装音源插件。")
         }
         val query = randomQueries.random()
         val tracks = runCatching { searchAll(context, query) }.getOrDefault(emptyList())
@@ -103,7 +103,7 @@ object MusicRepository {
     suspend fun resolveSource(context: Context, track: MusicTrack): MusicSourceInfo? {
         for (quality in listOf("standard", "high", "low")) {
             val source = runCatching {
-                MusicFreeEngine.mediaSource(context, track.platform, track, quality)
+                MusicPluginEngine.mediaSource(context, track.platform, track, quality)
             }.getOrNull()
             if (source != null) return source
         }

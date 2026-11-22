@@ -52,7 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.music.InstalledPlugin
-import io.github.dryearth.Nanaya.music.MusicFreeEngine
+import io.github.dryearth.Nanaya.music.MusicPluginEngine
 import io.github.dryearth.Nanaya.music.MusicPlayback
 import io.github.dryearth.Nanaya.music.MusicPluginStore
 import io.github.dryearth.Nanaya.music.MusicQueue
@@ -88,7 +88,7 @@ fun MusicScreen(onBack: () -> Unit) {
     val nowPlaying by MusicPlayback.nowPlaying.collectAsState()
     val playing by MusicPlayback.isPlaying.collectAsState()
     val playError by MusicPlayback.error.collectAsState()
-    val debugLog by MusicFreeEngine.debugLog.collectAsState()
+    val debugLog by MusicPluginEngine.debugLog.collectAsState()
     val queueTracks by MusicQueue.tracks.collectAsState()
     val queueIndex by MusicQueue.index.collectAsState()
     val resultPlatforms = results.map { it.platform }.distinct()
@@ -97,9 +97,9 @@ fun MusicScreen(onBack: () -> Unit) {
     fun refreshPlugins() {
         scope.launch {
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
-            pluginErrors = MusicFreeEngine.errors()
-            loadedPlatforms = MusicFreeEngine.platforms()
+            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
+            pluginErrors = MusicPluginEngine.errors()
+            loadedPlatforms = MusicPluginEngine.platforms()
         }
     }
 
@@ -172,9 +172,9 @@ fun MusicScreen(onBack: () -> Unit) {
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
-            pluginErrors = MusicFreeEngine.errors()
-            loadedPlatforms = MusicFreeEngine.platforms()
+            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
+            pluginErrors = MusicPluginEngine.errors()
+            loadedPlatforms = MusicPluginEngine.platforms()
             pluginBusy = false
         }
     }
@@ -216,9 +216,9 @@ fun MusicScreen(onBack: () -> Unit) {
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
-            pluginErrors = MusicFreeEngine.errors()
-            loadedPlatforms = MusicFreeEngine.platforms()
+            withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
+            pluginErrors = MusicPluginEngine.errors()
+            loadedPlatforms = MusicPluginEngine.platforms()
             pluginBusy = false
         }
     }
@@ -335,7 +335,7 @@ fun MusicScreen(onBack: () -> Unit) {
         when (tab) {
             "plugins" -> {
                 GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
-                    Text("安装 MusicFree 音源插件 / 订阅", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                    Text("安装音源插件 / 订阅", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                     Spacer(Modifier.height(4.dp))
                     BasicTextField(
                         value = pluginUrl,
@@ -424,9 +424,9 @@ fun MusicScreen(onBack: () -> Unit) {
                                     scope.launch {
                                         MusicPluginStore.remove(context, target.id)
                                         plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-                                        withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
-                                        pluginErrors = MusicFreeEngine.errors()
-                                        loadedPlatforms = MusicFreeEngine.platforms()
+                                        withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
+                                        pluginErrors = MusicPluginEngine.errors()
+                                        loadedPlatforms = MusicPluginEngine.platforms()
                                         message = "已删除 ${target.platform}"
                                     }
                                 },
@@ -474,9 +474,9 @@ fun MusicScreen(onBack: () -> Unit) {
                                             scope.launch {
                                                 MusicPluginStore.setEnabled(context, plugin.id, !plugin.enabled)
                                                 plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
-                                                withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
-                                                pluginErrors = MusicFreeEngine.errors()
-                                                loadedPlatforms = MusicFreeEngine.platforms()
+                                                withContext(Dispatchers.IO) { MusicPluginEngine.ensure(context) }
+                                                pluginErrors = MusicPluginEngine.errors()
+                                                loadedPlatforms = MusicPluginEngine.platforms()
                                             }
                                         }
                                         .padding(horizontal = 6.dp),
@@ -503,7 +503,7 @@ fun MusicScreen(onBack: () -> Unit) {
                         if (plugins.isEmpty()) {
                             item {
                                 Text(
-                                    "还没有插件。支持直接安装 MusicFree 的 .js 插件文件；插件本身不随 Nanaya 分发。",
+                                    "还没有插件。支持直接安装 .js 插件文件；插件本身不随 Nanaya 分发。",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Glass.Muted,
                                 )

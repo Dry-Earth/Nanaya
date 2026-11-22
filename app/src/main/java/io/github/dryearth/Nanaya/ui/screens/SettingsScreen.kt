@@ -483,7 +483,7 @@ fun SettingsScreen(
             }
         }
 
-        SectionHeader("关于", "汐 · Solid Glass 风格")
+        SectionHeader("关于")
         GlassPanel {
             Text(
                 "包名：${BuildConfig.APPLICATION_ID}\n版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
