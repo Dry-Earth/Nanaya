@@ -58,23 +58,12 @@ object MusicPluginStore {
         }
     }
 
-    suspend fun installFromUrl(context: Context, url: String): InstalledPlugin {
-        val source = withContext(Dispatchers.IO) {
-            val request = Request.Builder()
-                .url(url.trim())
-                .header("User-Agent", "Nanaya/1.0")
-                .build()
-            http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("下载失败：HTTP ${response.code}")
-                val body = response.body ?: error("下载失败：响应为空")
-                if (body.contentLength() > MAX_PLUGIN_BYTES) error("插件文件过大（> 4 MB）")
-                body.string()
-            }
-        }
-        return installSource(context, source, url.trim())
+    suspend fun installFromUrl(context: Context, url: String): InstallSummary {
+        val text = downloadText(url)
+        return installContent(context, text, url.trim())
     }
 
-    suspend fun installFromUri(context: Context, uri: Uri): InstalledPlugin {
+    suspend fun installFromUri(context: Context, uri: Uri): InstallSummary {
         val source = withContext(Dispatchers.IO) {
             val size = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
             if (size > MAX_PLUGIN_BYTES) error("插件文件过大（> 4 MB）")
@@ -84,7 +73,51 @@ object MusicPluginStore {
                 String(bytes, Charsets.UTF_8)
             } ?: error("无法读取所选文件")
         }
-        return installSource(context, source, null)
+        return installContent(context, source, null)
+    }
+
+    private suspend fun installContent(context: Context, rawText: String, sourceUrl: String?): InstallSummary {
+        val text = rawText.trim().removePrefix("\uFEFF")
+        if (text.startsWith("{")) {
+            val json = runCatching { JSONObject(text) }.getOrNull()
+                ?: error("订阅 JSON 无法解析")
+            val plugins = json.optJSONArray("plugins")
+                ?: error("这个 JSON 里没有 plugins 列表")
+            val installed = mutableListOf<InstalledPlugin>()
+            var failed = 0
+            for (i in 0 until minOf(plugins.length(), 12)) {
+                val item = plugins.optJSONObject(i)
+                val url = item?.optString("url")?.trim().orEmpty()
+                if (url.isBlank()) {
+                    failed++
+                    continue
+                }
+                runCatching {
+                    installSource(context, downloadText(url), url)
+                }.onSuccess { installed += it }
+                    .onFailure { failed++ }
+            }
+            if (installed.isEmpty()) {
+                error("订阅里的插件都安装失败了（$failed 个）")
+            }
+            return InstallSummary(installed, failed)
+        }
+        return InstallSummary(listOf(installSource(context, text, sourceUrl)), 0)
+    }
+
+    private suspend fun downloadText(url: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(url.trim())
+            .header("User-Agent", "Nanaya/1.0")
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("下载失败：HTTP ${response.code}")
+            val body = response.body ?: error("下载失败：响应为空")
+            if (body.contentLength() > MAX_PLUGIN_BYTES) error("插件文件过大（> 4 MB）")
+            val bytes = body.bytes()
+            if (bytes.size > MAX_PLUGIN_BYTES) error("插件文件过大（> 4 MB）")
+            String(bytes, Charsets.UTF_8)
+        }
     }
 
     suspend fun installSource(context: Context, rawSource: String, sourceUrl: String?): InstalledPlugin {

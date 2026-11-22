@@ -82,6 +82,7 @@ fun MusicScreen(onBack: () -> Unit) {
     val nowPlaying by MusicPlayback.nowPlaying.collectAsState()
     val playing by MusicPlayback.isPlaying.collectAsState()
     val playError by MusicPlayback.error.collectAsState()
+    val debugLog by MusicFreeEngine.debugLog.collectAsState()
 
     fun refreshPlugins() {
         scope.launch {
@@ -148,9 +149,12 @@ fun MusicScreen(onBack: () -> Unit) {
         message = null
         scope.launch {
             runCatching { MusicPluginStore.installFromUrl(context, url) }
-                .onSuccess {
+                .onSuccess { summary ->
                     pluginUrl = ""
-                    message = "已安装 ${it.platform} ${it.version}"
+                    message = buildString {
+                        append("已安装 ${summary.installed.size} 个插件")
+                        if (summary.failed > 0) append("，${summary.failed} 个失败")
+                    }
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
@@ -190,7 +194,12 @@ fun MusicScreen(onBack: () -> Unit) {
         message = null
         scope.launch {
             runCatching { MusicPluginStore.installFromUri(context, uri) }
-                .onSuccess { message = "已安装 ${it.platform} ${it.version}" }
+                .onSuccess { summary ->
+                    message = buildString {
+                        append("已安装 ${summary.installed.size} 个插件")
+                        if (summary.failed > 0) append("，${summary.failed} 个失败")
+                    }
+                }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
             withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
@@ -289,7 +298,7 @@ fun MusicScreen(onBack: () -> Unit) {
         when (tab) {
             "plugins" -> {
                 GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
-                    Text("安装 MusicFree 音源插件", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
+                    Text("安装 MusicFree 音源插件 / 订阅", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
                     Spacer(Modifier.height(4.dp))
                     BasicTextField(
                         value = pluginUrl,
@@ -307,7 +316,7 @@ fun MusicScreen(onBack: () -> Unit) {
                         decorationBox = { inner ->
                             if (pluginUrl.isEmpty()) {
                                 Text(
-                                    "https://.../plugin.js",
+                                    "https://.../plugin.js 或 plugins.json",
                                     style = TextStyle(
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 11.sp,
@@ -345,7 +354,7 @@ fun MusicScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "插件是第三方 JavaScript，运行时拥有网络访问权限；只安装可信来源。",
+                        "支持单个 .js 或 plugins.json 订阅（一次最多 12 个）。插件是第三方 JavaScript，只安装可信来源。",
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Amber,
                     )
@@ -469,6 +478,31 @@ fun MusicScreen(onBack: () -> Unit) {
                                     "运行环境错误：$error",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Glass.Rose,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                debugLog.takeLast(6).let { lines ->
+                    if (lines.isNotEmpty()) {
+                        GlassPanel(corner = 12.dp, padding = PaddingValues(8.dp)) {
+                            Text(
+                                "最近日志",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Faint,
+                            )
+                            lines.forEach { line ->
+                                Text(
+                                    line,
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.sp,
+                                        lineHeight = 13.sp,
+                                    ),
+                                    color = Glass.Muted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }

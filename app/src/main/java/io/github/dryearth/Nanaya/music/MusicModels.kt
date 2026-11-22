@@ -39,6 +39,8 @@ data class InstalledPlugin(
     val sourceUrl: String? = null,
 )
 
+data class InstallSummary(val installed: List<InstalledPlugin>, val failed: Int)
+
 data class ParsedPluginMeta(
     val platform: String,
     val version: String,

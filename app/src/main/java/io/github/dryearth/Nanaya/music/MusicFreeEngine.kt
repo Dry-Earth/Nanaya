@@ -7,6 +7,11 @@ import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.asyncFunction
 import com.dokar.quickjs.binding.function
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -39,6 +44,13 @@ object MusicFreeEngine {
     private var loadedSignature: String? = null
     private val pluginErrors = ConcurrentHashMap<String, String>()
     private val loadedPlatforms = mutableSetOf<String>()
+    private val _debugLog = MutableStateFlow<List<String>>(emptyList())
+    val debugLog: StateFlow<List<String>> = _debugLog.asStateFlow()
+
+    fun log(line: String) {
+        if (line.isBlank()) return
+        _debugLog.update { (it + line.replace('\n', ' ').take(260)).takeLast(80) }
+    }
 
     @Volatile
     private var libsSource: String? = null
@@ -177,6 +189,7 @@ object MusicFreeEngine {
                 } catch (e: Exception) {
                     val message = (e.message ?: e.toString()).substringBefore('\n').take(240)
                     pluginErrors[meta.platform.ifBlank { meta.fileName }] = message
+                    log("加载失败 ${meta.platform}: $message")
                     Log.w(TAG, "plugin ${meta.platform} failed: $message")
                 }
             }
@@ -197,11 +210,18 @@ object MusicFreeEngine {
 
     private fun installBindings(q: QuickJs) {
         q.function<Any?>("__log") { args ->
-            Log.d(TAG, args.joinToString(" ") { it?.toString() ?: "null" })
+            val line = args.joinToString(" ") { it?.toString() ?: "null" }
+            Log.d(TAG, line)
+            log("JS $line")
             null
         }
         q.asyncFunction<String>("__http") { args ->
             httpRequest(args.firstOrNull()?.toString().orEmpty())
+        }
+        q.asyncFunction<Any?>("__sleep") { args ->
+            val ms = (args.firstOrNull() as? Number)?.toLong() ?: 0L
+            delay(ms.coerceIn(0L, 60_000L))
+            null
         }
     }
 
@@ -305,9 +325,11 @@ object MusicFreeEngine {
                     else headerOut.put(key, JSONArray(values))
                 }
                 out.put("headers", headerOut)
+                log("HTTP $method ${url.take(140)} -> ${response.code} (${bytes.size}B)")
                 out.toString()
             }
         } catch (e: Exception) {
+            log("HTTP 失败：${e.message ?: e.toString()}")
             errorJson(e.message ?: e.toString())
         }
     }

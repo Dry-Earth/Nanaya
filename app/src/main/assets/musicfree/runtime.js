@@ -14,14 +14,33 @@
     };
     globalThis.global = globalThis;
 
-    if (typeof globalThis.setTimeout === "undefined") {
-        globalThis.setTimeout = function (fn) {
-            Promise.resolve().then(fn);
-            return 0;
+    if (typeof globalThis.setTimeout === "undefined" && typeof __sleep === "function") {
+        var __timerSeq = 0;
+        var __timers = {};
+        globalThis.setTimeout = function (fn, ms) {
+            var id = ++__timerSeq;
+            __timers[id] = true;
+            __sleep(Math.max(0, Number(ms) || 0)).then(function () {
+                if (!__timers[id]) return;
+                delete __timers[id];
+                try { fn(); } catch (e) { console.error(e); }
+            });
+            return id;
         };
-        globalThis.clearTimeout = function () {};
-        globalThis.setInterval = function () { return 0; };
-        globalThis.clearInterval = function () {};
+        globalThis.clearTimeout = function (id) { delete __timers[id]; };
+        globalThis.setInterval = function (fn, ms) {
+            var id = ++__timerSeq;
+            __timers[id] = true;
+            var delay = Math.max(1, Number(ms) || 1);
+            var tick = function () {
+                if (!__timers[id]) return;
+                try { fn(); } catch (e) { console.error(e); }
+                if (__timers[id]) __sleep(delay).then(tick);
+            };
+            __sleep(delay).then(tick);
+            return id;
+        };
+        globalThis.clearInterval = function (id) { delete __timers[id]; };
     }
     if (typeof globalThis.queueMicrotask === "undefined") {
         globalThis.queueMicrotask = function (fn) { Promise.resolve().then(fn); };
