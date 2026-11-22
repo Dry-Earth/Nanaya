@@ -109,6 +109,7 @@ import io.github.dryearth.Nanaya.ui.screens.DiagnosticsScreen
 import io.github.dryearth.Nanaya.ui.screens.DomainFirewallScreen
 import io.github.dryearth.Nanaya.ui.screens.LineageScreen
 import io.github.dryearth.Nanaya.ui.screens.MemoryScreen
+import io.github.dryearth.Nanaya.ui.screens.MusicScreen
 import io.github.dryearth.Nanaya.ui.screens.NotificationsScreen
 import io.github.dryearth.Nanaya.ui.screens.RulesScreen
 import io.github.dryearth.Nanaya.ui.screens.WakeupScreen
@@ -252,6 +253,8 @@ fun ButlerApp(
                     MemoryScreen(onBack = { sub = null })
                 } else if (sub == "automation") {
                     AutomationScreen(onBack = { sub = null })
+                } else if (sub == "music") {
+                    MusicScreen(onBack = { sub = null })
                 } else {
                     when (tab) {
                         "home" -> HomeScreen(
@@ -284,6 +287,7 @@ fun ButlerApp(
                             onOpenRemote = { sub = "remoteadb" },
                             onOpenLocal = { sub = "adbconsole" },
                             onOpenUsb = { sub = "usbotg" },
+                            onOpenMusic = { sub = "music" },
                         )
                     }
                 }

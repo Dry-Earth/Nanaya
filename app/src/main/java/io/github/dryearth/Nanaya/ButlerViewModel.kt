@@ -40,6 +40,8 @@ import io.github.dryearth.Nanaya.data.StorageCategory
 import io.github.dryearth.Nanaya.data.StorageItem
 import io.github.dryearth.Nanaya.data.StorageRepository
 import io.github.dryearth.Nanaya.data.StorageReport
+import io.github.dryearth.Nanaya.music.MusicAssistant
+import io.github.dryearth.Nanaya.music.MusicIntentParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -747,6 +749,22 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             imageThumbPath = imageThumbPath,
         )
         _chat.update { it.copy(messages = trimChatImages(it.messages + user), sending = true) }
+        val musicIntent = if (imageSendPath == null) MusicIntentParser.parse(input) else null
+        if (musicIntent != null) {
+            viewModelScope.launch {
+                val reply = runCatching { MusicAssistant.handle(getApplication(), musicIntent) }
+                    .getOrElse { "音乐操作失败：${it.message ?: "未知错误"}" }
+                _chat.update {
+                    it.copy(
+                        sending = false,
+                        messages = trimChatImages(
+                            it.messages + ChatMessage(role = ChatRole.ASSISTANT, text = reply),
+                        ),
+                    )
+                }
+            }
+            return
+        }
         viewModelScope.launch {
             runCatching { ai.complete(buildSystemPrompt(), _chat.value.messages) }
                 .onSuccess { raw ->

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Terminal
@@ -30,7 +31,13 @@ import io.github.dryearth.Nanaya.ui.components.SectionHeader
 import io.github.dryearth.Nanaya.ui.theme.Glass
 
 @Composable
-fun ToolsScreen(onBack: () -> Unit, onOpenRemote: () -> Unit, onOpenLocal: () -> Unit, onOpenUsb: () -> Unit) {
+fun ToolsScreen(
+    onBack: () -> Unit,
+    onOpenRemote: () -> Unit,
+    onOpenLocal: () -> Unit,
+    onOpenUsb: () -> Unit,
+    onOpenMusic: () -> Unit,
+) {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 16.dp),
@@ -43,6 +50,27 @@ fun ToolsScreen(onBack: () -> Unit, onOpenRemote: () -> Unit, onOpenLocal: () ->
                 Column {
                     Text("工具", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
                     Text("设备控制与调试", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                }
+            }
+        }
+
+        item {
+            SectionHeader("媒体", "插件音源与语音点歌")
+        }
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpenMusic) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.MusicNote, null, tint = Glass.Violet)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("音乐", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "安装 MusicFree 音源插件，搜索或直接说「播放稻香」",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
                 }
             }
         }
