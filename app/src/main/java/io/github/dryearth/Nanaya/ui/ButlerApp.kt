@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Settings
@@ -96,8 +97,6 @@ import io.github.dryearth.Nanaya.PerfUiState
 import io.github.dryearth.Nanaya.core.Capabilities
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.AmbientBackground
-import io.github.dryearth.Nanaya.ui.components.AiHeartButton
-import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.LocalGlassBackdrop
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.liquid.lens
@@ -574,18 +573,52 @@ private fun FlowingAiIcon(modifier: Modifier = Modifier) {
                 )
             },
     ) {
-        HieroglyphMark(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.White,
+        Icon(
+            Icons.Rounded.AutoAwesome,
             contentDescription = "AI 管家",
+            tint = Color.White,
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }
 
 @Composable
 private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
-    AiHeartButton(backdrop = backdrop, onClick = onClick) {
-        FlowingAiIcon(Modifier.size(34.dp))
+    val shape = CircleShape
+    Box(
+        Modifier
+            .size(40.dp)
+            .shadow(
+                6.dp,
+                shape,
+                ambientColor = Color.Black.copy(alpha = 0.28f),
+                spotColor = Color.Black.copy(alpha = 0.18f),
+            )
+            .clip(shape)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(6.dp.toPx(), 6.dp.toPx())
+                    lens(
+                        refractionHeight = 20.dp.toPx(),
+                        refractionAmount = 18.dp.toPx(),
+                    )
+                },
+                onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
+            )
+            .border(
+                1.dp,
+                Brush.verticalGradient(
+                    listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
+                ),
+                shape,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        FlowingAiIcon(Modifier.size(19.dp))
     }
 }
 
@@ -760,7 +793,7 @@ private fun TopBar(
             onClick = onChat,
             modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
         ) {
-            FlowingAiIcon(modifier = Modifier.size(34.dp))
+            FlowingAiIcon(modifier = Modifier.size(24.dp))
         }
     }
 }
