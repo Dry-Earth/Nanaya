@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -58,7 +57,6 @@ import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
-import io.github.dryearth.Nanaya.ui.components.SectionHeader
 import io.github.dryearth.Nanaya.ui.theme.Glass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -149,6 +147,7 @@ fun MusicScreen(onBack: () -> Unit) {
                 }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
+            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
             pluginErrors = MusicFreeEngine.errors()
             pluginBusy = false
         }
@@ -163,6 +162,7 @@ fun MusicScreen(onBack: () -> Unit) {
                 .onSuccess { message = "已安装 ${it.platform} ${it.version}" }
                 .onFailure { message = "安装失败：${it.message}" }
             plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
+            withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
             pluginErrors = MusicFreeEngine.errors()
             pluginBusy = false
         }
@@ -339,6 +339,7 @@ fun MusicScreen(onBack: () -> Unit) {
                                     scope.launch {
                                         MusicPluginStore.remove(context, target.id)
                                         plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
+                                        withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
                                         pluginErrors = MusicFreeEngine.errors()
                                         message = "已删除 ${target.platform}"
                                     }
@@ -378,6 +379,7 @@ fun MusicScreen(onBack: () -> Unit) {
                                             scope.launch {
                                                 MusicPluginStore.setEnabled(context, plugin.id, !plugin.enabled)
                                                 plugins = withContext(Dispatchers.IO) { MusicPluginStore.list(context) }
+                                                withContext(Dispatchers.IO) { MusicFreeEngine.ensure(context) }
                                                 pluginErrors = MusicFreeEngine.errors()
                                             }
                                         }

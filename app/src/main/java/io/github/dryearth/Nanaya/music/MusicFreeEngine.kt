@@ -74,9 +74,10 @@ object MusicFreeEngine {
             try {
                 q.memoryLimit = MAX_MEMORY
                 q.maxStackSize = 2L * 1024 * 1024
+                q.evaluationTimeoutMillis = PLUGIN_TIMEOUT_MS
                 installBindings(q)
-                q.evaluate<Any?>(libs(context), filename = "libs.js")
                 q.evaluate<Any?>(runtime(context), filename = "runtime.js")
+                q.evaluate<Any?>(libs(context), filename = "libs.js")
                 val metaJson = q.evaluate<String>(
                     pluginWrapper("inspect", source),
                     filename = "plugin-inspect.js",
@@ -163,8 +164,8 @@ object MusicFreeEngine {
             q.maxStackSize = 2L * 1024 * 1024
             q.evaluationTimeoutMillis = PLUGIN_TIMEOUT_MS
             installBindings(q)
-            q.evaluate<Any?>(libs(context), filename = "libs.js")
             q.evaluate<Any?>(runtime(context), filename = "runtime.js")
+            q.evaluate<Any?>(libs(context), filename = "libs.js")
             for ((meta, source) in plugins) {
                 try {
                     val metaJson = q.evaluate<String>(

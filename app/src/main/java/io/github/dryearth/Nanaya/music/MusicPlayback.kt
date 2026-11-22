@@ -111,7 +111,16 @@ object MusicPlayback {
         connecting = true
         val appContext = context.applicationContext
         val token = SessionToken(appContext, ComponentName(appContext, MusicService::class.java))
-        val future = MediaController.Builder(appContext, token).buildAsync()
+        val future = MediaController.Builder(appContext, token)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    if (MusicPlayback.controller === controller) {
+                        MusicPlayback.controller = null
+                    }
+                    _isPlaying.value = false
+                }
+            })
+            .buildAsync()
         future.addListener({
             connecting = false
             try {

@@ -6,6 +6,14 @@
     "use strict";
 
     // ---- tiny Web API polyfills -------------------------------------------
+    globalThis.process = globalThis.process || {
+        env: { NODE_ENV: "production" },
+        browser: true,
+        version: "",
+        nextTick: function (fn) { Promise.resolve().then(fn); },
+    };
+    globalThis.global = globalThis;
+
     if (typeof globalThis.setTimeout === "undefined") {
         globalThis.setTimeout = function (fn) {
             Promise.resolve().then(fn);
@@ -78,6 +86,23 @@
                 }
             }
             return out;
+        };
+    }
+
+    if (typeof globalThis.TextEncoder === "undefined") {
+        globalThis.TextEncoder = function () {};
+        globalThis.TextEncoder.prototype.encode = function (value) {
+            var str = String(value);
+            var bytes = [];
+            for (var i = 0; i < str.length; i++) {
+                var code = str.codePointAt(i);
+                if (code > 0xffff) i++;
+                if (code < 0x80) bytes.push(code);
+                else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+                else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+                else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+            }
+            return new Uint8Array(bytes);
         };
     }
 
@@ -259,8 +284,11 @@
                 response.data = decodeBase64(res.body || "");
             } else if (res.binary) {
                 response.data = decodeBase64(res.body || "");
-            } else if (/json/i.test(String(ct || ""))) {
-                try { response.data = JSON.parse(res.body); } catch (e) { /* keep text */ }
+            } else if (config.responseType !== "text" && typeof res.body === "string") {
+                var trimmed = res.body.trim();
+                if (/json/i.test(String(ct || "")) || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                    try { response.data = JSON.parse(trimmed); } catch (e) { /* keep text */ }
+                }
             }
             var validate = config.validateStatus;
             var ok = validate ? !!validate(res.status) : res.status >= 200 && res.status < 300;
