@@ -78,6 +78,9 @@ fun HieroglyphMark(
         }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.LEFT
+            style = Paint.Style.FILL_AND_STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
         }
         val baseSize = 100f
         paint.textSize = baseSize
@@ -101,6 +104,7 @@ fun HieroglyphMark(
             side * 0.92f / measuredHeight,
         )
         paint.textSize = baseSize * scale
+        paint.strokeWidth = paint.textSize * 0.035f
 
         if (flowing) {
             val shift = (phase * 2f - 0.5f) * side

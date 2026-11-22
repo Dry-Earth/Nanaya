@@ -96,6 +96,7 @@ import io.github.dryearth.Nanaya.PerfUiState
 import io.github.dryearth.Nanaya.core.Capabilities
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.AmbientBackground
+import io.github.dryearth.Nanaya.ui.components.AiHeartButton
 import io.github.dryearth.Nanaya.ui.components.HieroglyphMark
 import io.github.dryearth.Nanaya.ui.components.LocalGlassBackdrop
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
@@ -583,41 +584,8 @@ private fun FlowingAiIcon(modifier: Modifier = Modifier) {
 
 @Composable
 private fun AiGlassButton(backdrop: LayerBackdrop, onClick: () -> Unit) {
-    val shape = CircleShape
-    Box(
-        Modifier
-            .size(40.dp)
-            .shadow(
-                6.dp,
-                shape,
-                ambientColor = Color.Black.copy(alpha = 0.28f),
-                spotColor = Color.Black.copy(alpha = 0.18f),
-            )
-            .clip(shape)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { shape },
-                effects = {
-                    vibrancy()
-                    blur(6.dp.toPx(), 6.dp.toPx())
-                    lens(
-                        refractionHeight = 20.dp.toPx(),
-                        refractionAmount = 18.dp.toPx(),
-                    )
-                },
-                onDrawSurface = { drawRect(Color(0x08FFFFFF)) },
-            )
-            .border(
-                1.dp,
-                Brush.verticalGradient(
-                    listOf(Color(0x88FFFFFF), Color(0x22FFFFFF), Color(0x0DFFFFFF)),
-                ),
-                shape,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        FlowingAiIcon(Modifier.size(28.dp))
+    AiHeartButton(backdrop = backdrop, onClick = onClick) {
+        FlowingAiIcon(Modifier.size(34.dp))
     }
 }
 
@@ -792,7 +760,7 @@ private fun TopBar(
             onClick = onChat,
             modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
         ) {
-            FlowingAiIcon(modifier = Modifier.size(30.dp))
+            FlowingAiIcon(modifier = Modifier.size(34.dp))
         }
     }
 }
