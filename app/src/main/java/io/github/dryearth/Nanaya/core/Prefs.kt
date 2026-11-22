@@ -87,6 +87,10 @@ class Prefs(context: Context) {
         get() = sp.getString("bg_uri", "") ?: ""
         set(value) = sp.edit().putString("bg_uri", value).apply()
 
+    var remoteAdbDevices: String
+        get() = sp.getString("remote_adb_devices", "") ?: ""
+        set(value) = sp.edit().putString("remote_adb_devices", value).apply()
+
     var backgroundSoften: Boolean
         get() = sp.getBoolean("bg_soften", false)
         set(value) = sp.edit().putBoolean("bg_soften", value).apply()
