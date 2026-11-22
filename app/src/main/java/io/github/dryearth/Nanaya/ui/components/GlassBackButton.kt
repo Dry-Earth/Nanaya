@@ -99,8 +99,8 @@ fun GlassBackButton(
 
     Box(
         modifier = modifier
-            // Sit just under the status bar instead of centred in the title block.
-            .offset(y = (-14).dp)
+            // Align the bead with the title line and nudge it toward the edge.
+            .offset(x = (-5).dp, y = (-8).dp)
             .size(44.dp)
             .clickable(
                 interactionSource = interaction,

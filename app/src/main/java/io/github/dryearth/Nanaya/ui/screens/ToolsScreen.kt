@@ -90,9 +90,9 @@ fun ToolsScreen(onBack: () -> Unit, onOpenRemote: () -> Unit, onOpenLocal: () ->
                     Icon(Icons.Rounded.Terminal, null, tint = Glass.Ice)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("本机 ADB 命令行", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text("本机 ADB 终端", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
-                            "在本机 Root / 无线 ADB 上执行 shell 命令",
+                            "类终端交互，直接在窗口里输入 shell 命令",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )

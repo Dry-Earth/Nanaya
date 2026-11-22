@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,22 +18,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,10 +43,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -68,6 +78,8 @@ private data class SavedRemote(val host: String, val pairPort: String, val conne
 
 private data class RemoteEntry(val name: String, val directory: Boolean)
 
+private data class RemoteShellEntry(val label: String, val result: String, val code: Int)
+
 @Composable
 fun RemoteAdbScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -82,7 +94,10 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf("shell") }
     var command by remember { mutableStateOf("") }
-    var output by remember { mutableStateOf("") }
+    val shellEntries = remember { mutableStateListOf<RemoteShellEntry>() }
+    val shellListState = rememberLazyListState()
+    val shellFocus = remember { FocusRequester() }
+    val shellTap = remember { MutableInteractionSource() }
     var remotePath by remember { mutableStateOf("/data/local/tmp/nanaya-file") }
     var screenshot by remember { mutableStateOf<ImageBitmap?>(null) }
     var packages by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -97,12 +112,29 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         )
     }
 
+    LaunchedEffect(shellEntries.size) {
+        if (shellEntries.isNotEmpty()) shellListState.animateScrollToItem(0)
+    }
+
     suspend fun exec(cmd: String): String = withContext(Dispatchers.IO) {
         val result = AdbManager.runRemote(cmd, 20_000)
         if (result == null) {
             "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}"
         } else {
             result.output.ifBlank { "(无输出)" } + "\n[exit ${result.code}]"
+        }
+    }
+
+    suspend fun shellEntry(label: String, cmd: String): RemoteShellEntry = withContext(Dispatchers.IO) {
+        val result = AdbManager.runRemote(cmd, 20_000)
+        if (result == null) {
+            RemoteShellEntry(
+                label,
+                "失败：${AdbManager.lastRunError().ifBlank { "未连接或没有输出" }}",
+                -1,
+            )
+        } else {
+            RemoteShellEntry(label, result.output.ifBlank { "(无输出)" }, result.code)
         }
     }
 
@@ -125,9 +157,14 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     fun runCommand(cmd: String) {
         val text = cmd.trim()
         if (text.isBlank() || busy) return
+        if (!connected) {
+            message = "先连接设备"
+            return
+        }
         busy = true
+        command = ""
         scope.launch {
-            output = "$ ${text}\n" + exec(text) + "\n\n" + output
+            shellEntries += shellEntry(text, text)
             busy = false
         }
     }
@@ -164,7 +201,7 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     fun performAppAction(pkg: String, action: String, cmd: String) {
         busy = true
         scope.launch {
-            output = "$ $action $pkg\n" + exec(cmd) + "\n\n" + output
+            shellEntries += shellEntry("$action $pkg", cmd)
             message = "$action：$pkg"
             busy = false
             loadApps()
@@ -230,7 +267,11 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
     }
 
     Column(
-        Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -464,41 +505,114 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                 }
 
                 GlassPanel(modifier = Modifier.weight(1f), corner = 16.dp, padding = PaddingValues(12.dp)) {
-                    SelectionContainer {
-                        Text(
-                            output.ifBlank { "连接目标设备后，可以在这里执行远程 shell 命令。" },
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 17.sp,
-                                color = Glass.Muted,
-                            ),
-                            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                        )
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = shellTap,
+                                indication = null,
+                            ) { shellFocus.requestFocus() },
+                    ) {
+                        LazyColumn(
+                            state = shellListState,
+                            reverseLayout = true,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (shellEntries.isEmpty()) {
+                                item {
+                                    Text(
+                                        "连接目标设备后，直接在下方输入，回车执行远程 shell 命令。",
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            lineHeight = 18.sp,
+                                            color = Glass.Muted,
+                                        ),
+                                    )
+                                }
+                            } else {
+                                items(count = shellEntries.size) { index ->
+                                    val entry = shellEntries[shellEntries.lastIndex - index]
+                                    SelectionContainer {
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                "$ ${entry.label}",
+                                                style = TextStyle(
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 12.sp,
+                                                    lineHeight = 18.sp,
+                                                    color = Glass.Accent,
+                                                ),
+                                            )
+                                            Text(
+                                                entry.result,
+                                                style = TextStyle(
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 17.sp,
+                                                    color = Glass.Text,
+                                                ),
+                                            )
+                                            Text(
+                                                "[exit ${entry.code}]",
+                                                style = TextStyle(
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 10.sp,
+                                                    color = Glass.Faint,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "$",
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp,
+                                    color = Glass.Accent,
+                                ),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            BasicTextField(
+                                value = command,
+                                onValueChange = { command = it },
+                                singleLine = true,
+                                textStyle = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 13.sp,
+                                    color = Glass.Text,
+                                ),
+                                cursorBrush = SolidColor(Glass.Accent),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(onSend = { runCommand(command) }),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(shellFocus)
+                                    .onPreviewKeyEvent { event ->
+                                        if (
+                                            event.type == KeyEventType.KeyDown &&
+                                            (event.key == Key.Enter || event.key == Key.NumPadEnter)
+                                        ) {
+                                            runCommand(command)
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    },
+                            )
+                        }
                     }
                 }
 
                 GlassPanel(corner = 14.dp, padding = PaddingValues(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$", style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Glass.Accent))
-                        Spacer(Modifier.width(4.dp))
-                        BasicTextField(
-                            value = command,
-                            onValueChange = { command = it },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                                color = Glass.Text,
-                            ),
-                            cursorBrush = SolidColor(Glass.Accent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { runCommand(command) }),
-                            modifier = Modifier.weight(1f),
-                        )
-                        ActionButton("执行", accent = true, enabled = !busy && command.isNotBlank() && connected, onClick = { runCommand(command) })
-                    }
-                    Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ActionButton("上传", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { uploadPicker.launch(arrayOf("*/*")) })
                         ActionButton("下载", enabled = connected && !busy, modifier = Modifier.weight(1f), onClick = { downloadPicker.launch(remotePath.substringAfterLast('/')) })
