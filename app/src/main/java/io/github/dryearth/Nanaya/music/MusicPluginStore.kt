@@ -30,8 +30,27 @@ object MusicPluginStore {
         .followRedirects(true)
         .build()
 
-    fun pluginsDir(context: Context): File =
-        File(context.filesDir, "musicplugins/plugins").apply { mkdirs() }
+    fun pluginsDir(context: Context): File {
+        val target = File(context.filesDir, "musicplugins/plugins")
+        if (!target.exists()) {
+            // Copy plugins from any older single "plugins" directory without
+            // hard-coding the previous folder name.
+            val legacy = context.filesDir.listFiles()
+                ?.firstOrNull { dir ->
+                    dir.isDirectory &&
+                        dir.name != "musicplugins" &&
+                        File(dir, "plugins").isDirectory &&
+                        File(dir, "plugins").listFiles()?.any { it.extension == "js" } == true
+                }
+            if (legacy != null) {
+                runCatching {
+                    File(legacy, "plugins").copyRecursively(target, overwrite = false)
+                }
+            }
+        }
+        target.mkdirs()
+        return target
+    }
 
     fun fileFor(context: Context, plugin: InstalledPlugin): File =
         File(pluginsDir(context), plugin.fileName)
