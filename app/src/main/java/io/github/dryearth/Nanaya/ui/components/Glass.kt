@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -73,18 +74,39 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 
+private data class CachedBackground(
+    val bitmap: ImageBitmap,
+    val luma: Float,
+)
+
 private object AmbientBitmapCache {
     @Volatile private var key: String? = null
-    @Volatile private var bitmap: ImageBitmap? = null
+    @Volatile private var entry: CachedBackground? = null
 
-    fun get(cacheKey: String): ImageBitmap? =
-        if (cacheKey.isNotBlank() && cacheKey == key) bitmap else null
+    fun get(cacheKey: String): CachedBackground? =
+        if (cacheKey.isNotBlank() && cacheKey == key) entry else null
 
-    fun put(cacheKey: String, value: ImageBitmap) {
+    fun put(cacheKey: String, value: CachedBackground) {
         key = cacheKey
-        bitmap = value
+        entry = value
     }
 }
+
+private fun imageLuma(bitmap: ImageBitmap): Float = runCatching {
+    val source = bitmap.asAndroidBitmap()
+    val scaled = android.graphics.Bitmap.createScaledBitmap(source, 32, 32, true)
+    val pixels = IntArray(32 * 32)
+    scaled.getPixels(pixels, 0, 32, 0, 0, 32, 32)
+    if (scaled !== source) scaled.recycle()
+    var sum = 0f
+    for (pixel in pixels) {
+        val r = android.graphics.Color.red(pixel) / 255f
+        val g = android.graphics.Color.green(pixel) / 255f
+        val b = android.graphics.Color.blue(pixel) / 255f
+        sum += 0.2126f * r + 0.7152f * g + 0.0722f * b
+    }
+    sum / pixels.size
+}.getOrDefault(0.5f)
 
 @Composable
 fun AmbientBackground(
@@ -95,7 +117,7 @@ fun AmbientBackground(
 ) {
     val context = LocalContext.current
     val cacheKey = if (style == "image" && imageUri.isNotBlank()) "$style|$imageUri" else ""
-    val bitmap by produceState<ImageBitmap?>(
+    val background by produceState<CachedBackground?>(
         initialValue = AmbientBitmapCache.get(cacheKey),
         style,
         imageUri,
@@ -126,11 +148,14 @@ fun AmbientBackground(
                 }.getOrNull()
             }
         } else null
-        if (decoded != null && cacheKey.isNotBlank()) {
-            AmbientBitmapCache.put(cacheKey, decoded)
+        val cached = decoded?.let { CachedBackground(it, imageLuma(it)) }
+        if (cached != null && cacheKey.isNotBlank()) {
+            AmbientBitmapCache.put(cacheKey, cached)
         }
-        value = decoded
+        value = cached
     }
+    val bitmap = background?.bitmap
+    val bright = background?.luma ?: 0.5f
 
     Box(Modifier.fillMaxSize()) {
         if (bitmap != null) {
@@ -174,9 +199,15 @@ fun AmbientBackground(
             drawRect(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF06070B).copy(alpha = if (bitmap != null) 0.12f else 1f),
-                        Color(0xFF090C13).copy(alpha = if (bitmap != null) 0.18f else 1f),
-                        Color(0xFF05070B).copy(alpha = if (bitmap != null) 0.26f else 1f),
+                        Color(0xFF06070B).copy(
+                            alpha = if (bitmap != null) 0.12f + bright * 0.20f else 1f,
+                        ),
+                        Color(0xFF090C13).copy(
+                            alpha = if (bitmap != null) 0.18f + bright * 0.24f else 1f,
+                        ),
+                        Color(0xFF05070B).copy(
+                            alpha = if (bitmap != null) 0.26f + bright * 0.26f else 1f,
+                        ),
                     )
                 )
             )
