@@ -261,20 +261,6 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
         }
     }
 
-    fun deleteRemote(path: String) {
-        pendingDelete = null
-        if (!connected || busy) return
-        busy = true
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                AdbManager.runRemote("rm -rf \"$path\"", 10_000)
-            }
-            busy = false
-            message = if (result == null) "删除失败：${AdbManager.lastRunError()}" else "已删除 $path"
-            loadFiles()
-        }
-    }
-
     fun loadInfo() {
         if (!connected) {
             message = "先连接设备"
@@ -385,6 +371,20 @@ fun RemoteAdbScreen(onBack: () -> Unit) {
                 .map { RemoteEntry(it.removeSuffix("/"), it.endsWith("/")) }
                 .toList()
             busy = false
+        }
+    }
+
+    fun deleteRemote(path: String) {
+        pendingDelete = null
+        if (!connected || busy) return
+        busy = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                AdbManager.runRemote("rm -rf \"$path\"", 10_000)
+            }
+            busy = false
+            message = if (result == null) "删除失败：${AdbManager.lastRunError()}" else "已删除 $path"
+            loadFiles()
         }
     }
 
