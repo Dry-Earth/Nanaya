@@ -18,6 +18,7 @@
     inset: 0;
     padding: 4px 2px;
     box-sizing: border-box;
+    touch-action: none;
   }
   .xterm .xterm-viewport {
     background: transparent !important;
@@ -45,6 +46,7 @@
     fontSize: 12,
     lineHeight: 1.15,
     scrollback: 2000,
+    scrollOnUserInput: true,
     allowProposedApi: true,
     theme: {
       background: "rgba(8,10,14,0.58)",
@@ -73,10 +75,14 @@
   var serialize = new SerializeAddon.SerializeAddon();
   term.loadAddon(fit);
   term.loadAddon(serialize);
-  term.open(document.getElementById("term"));
+  var termEl = document.getElementById("term");
+  term.open(termEl);
 
   function doFit() {
-    try { fit.fit(); } catch (e) {}
+    try {
+      fit.fit();
+      term.scrollToBottom();
+    } catch (e) {}
   }
   requestAnimationFrame(doFit);
   setTimeout(doFit, 200);
@@ -86,15 +92,60 @@
     window.visualViewport.addEventListener("resize", doFit);
   }
   if (window.ResizeObserver) {
-    try { new ResizeObserver(doFit).observe(document.getElementById("term")); } catch (e) {}
+    try { new ResizeObserver(doFit).observe(termEl); } catch (e) {}
+  }
+
+  function bytesFromB64(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function b64FromBytes(bytes) {
+    var bin = "";
+    var step = 8192;
+    for (var i = 0; i < bytes.length; i += step) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return btoa(bin);
+  }
+
+  function b64FromText(text) {
+    return b64FromBytes(new TextEncoder().encode(text));
+  }
+
+  function textFromB64(b64) {
+    return new TextDecoder().decode(bytesFromB64(b64));
+  }
+
+  // Xterm processes one chunk at a time. Feeding it a queue keeps a burst of
+  // output (htop, yes, cat of a big log) from building a multi-megabyte write
+  // buffer inside xterm and freezing the WebView.
+  var writeQueue = [];
+  var writeBusy = false;
+
+  function pumpWrites() {
+    if (!writeQueue.length) {
+      writeBusy = false;
+      return;
+    }
+    writeBusy = true;
+    var chunk = writeQueue.shift();
+    term.write(chunk, function () {
+      try { AndroidBridge.ack(); } catch (e) {}
+      setTimeout(pumpWrites, 0);
+    });
+  }
+
+  function queueWrite(bytes) {
+    writeQueue.push(bytes);
+    if (!writeBusy) pumpWrites();
   }
 
   term.onData(function (data) {
     try {
-      var bytes = new TextEncoder().encode(data);
-      var bin = "";
-      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      AndroidBridge.send(btoa(bin));
+      AndroidBridge.send(b64FromText(data));
     } catch (e) {}
   });
 
@@ -102,19 +153,78 @@
     try { AndroidBridge.resize(size.cols, size.rows); } catch (e) {}
   });
 
-  function b64ToBytes(b64) {
-    var bin = atob(b64);
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes;
+  window.xtermWrite = function (b64) { queueWrite(bytesFromB64(b64)); };
+  window.xtermReset = function () {
+    var dropped = writeQueue.length;
+    writeQueue.length = 0;
+    for (var i = 0; i < dropped; i++) {
+      try { AndroidBridge.ack(); } catch (e) {}
+    }
+    term.reset();
+    doFit();
+  };
+  window.xtermFocus = function () {
+    try {
+      term.blur();
+      setTimeout(function () { try { term.focus(); } catch (e) {} }, 30);
+    } catch (e) {}
+  };
+  window.xtermScroll = function (pages) {
+    try { term.scrollPages(pages); } catch (e) {}
+  };
+  window.xtermTop = function () { try { term.scrollToTop(); } catch (e) {} };
+  window.xtermBottom = function () { try { term.scrollToBottom(); } catch (e) {} };
+
+  window.xtermPaste = function (b64) {
+    try {
+      term.paste(textFromB64(b64));
+      term.focus();
+    } catch (e) {}
+  };
+
+  function bufferText() {
+    var b = term.buffer.active;
+    var from = Math.max(0, b.length - 500);
+    var lines = [];
+    for (var i = from; i < b.length; i++) {
+      var line = b.getLine(i);
+      lines.push(line ? line.translateToString(true) : "");
+    }
+    return lines.join("\n").replace(/\s+$/, "");
   }
 
-  window.xtermWrite = function (b64) {
-    term.write(b64ToBytes(b64), function () { term.scrollToBottom(); });
+  window.xtermCopy = function () {
+    var text = "";
+    try { text = term.getSelection(); } catch (e) {}
+    if (!text) text = bufferText();
+    if (!text) return;
+    try { AndroidBridge.copyB64(b64FromText(text)); } catch (e) {}
   };
-  window.xtermBottom = function () { term.scrollToBottom(); };
-  window.xtermReset = function () { term.reset(); };
-  window.xtermFocus = function () { term.focus(); };
+
+  // xterm.js has no touch scrolling or touch selection, so translate swipes
+  // into scrollLines. Tapping still focuses the hidden textarea.
+  var lastTouchY = 0;
+  var touching = false;
+  termEl.addEventListener("touchstart", function (e) {
+    if (e.touches.length !== 1) return;
+    lastTouchY = e.touches[0].clientY;
+    touching = true;
+  }, { passive: true });
+  termEl.addEventListener("touchmove", function (e) {
+    if (!touching || e.touches.length !== 1) return;
+    var screen = termEl.querySelector(".xterm-screen");
+    if (!screen || term.rows <= 0) return;
+    var cell = Math.max(1, screen.clientHeight / term.rows);
+    var dy = lastTouchY - e.touches[0].clientY;
+    var lines = Math.trunc(dy / cell);
+    if (lines !== 0) {
+      try { term.scrollLines(lines); } catch (err) {}
+      lastTouchY -= lines * cell;
+    }
+    e.preventDefault();
+  }, { passive: false });
+  termEl.addEventListener("touchend", function () { touching = false; }, { passive: true });
+  termEl.addEventListener("touchcancel", function () { touching = false; }, { passive: true });
 
   try { AndroidBridge.ready(); } catch (e) {}
 })();

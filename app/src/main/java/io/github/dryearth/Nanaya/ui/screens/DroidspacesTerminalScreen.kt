@@ -19,8 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,6 +31,7 @@ import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
+import io.github.dryearth.Nanaya.ui.components.XtermController
 import io.github.dryearth.Nanaya.ui.components.XtermTerminal
 import io.github.dryearth.Nanaya.ui.theme.Glass
 
@@ -48,8 +49,7 @@ fun DroidspacesTerminalScreen(
         DroidspacesTerminals.getOrOpen(context, containerName)
     }
     val connected by session.connected.collectAsState()
-    var focusSignal by remember { mutableIntStateOf(0) }
-    var bottomSignal by remember { mutableIntStateOf(0) }
+    val controller = remember { XtermController() }
     var lastCols by remember { mutableIntStateOf(0) }
     var lastRows by remember { mutableIntStateOf(0) }
 
@@ -103,11 +103,7 @@ fun DroidspacesTerminalScreen(
         ) {
             XtermTerminal(
                 frame = session.frame,
-                connected = session.connected,
                 onWrite = { text -> session.write(text) },
-                modifier = Modifier.fillMaxSize(),
-                focusSignal = focusSignal,
-                bottomSignal = bottomSignal,
                 onSize = { cols, rows ->
                     lastCols = cols
                     lastRows = rows
@@ -115,6 +111,8 @@ fun DroidspacesTerminalScreen(
                     // this htop/top/vi draw an empty screen.
                     session.applySize(cols, rows)
                 },
+                controller = controller,
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
@@ -151,15 +149,20 @@ fun DroidspacesTerminalScreen(
             key("PgDn", Glass.Muted, "\u001b[6~")
             key("Enter", Glass.Accent, "\r")
             key("清屏", Glass.Faint, "\u000c")
-            Pill("键盘", color = Glass.Mint) { focusSignal++ }
-            Pill("底部", color = Glass.Mint) { bottomSignal++ }
+            Pill("键盘", color = Glass.Mint) { controller.focus() }
+            Pill("复制", color = Glass.Mint) { controller.copy() }
+            Pill("粘贴", color = Glass.Accent) { controller.paste() }
+            Pill("上翻", color = Glass.Muted) { controller.scrollPages(-1) }
+            Pill("下翻", color = Glass.Muted) { controller.scrollPages(1) }
+            Pill("顶部", color = Glass.Muted) { controller.scrollTop() }
+            Pill("底部", color = Glass.Muted) { controller.scrollBottom() }
             Pill("适配", color = Glass.Faint) {
                 session.forceSize(lastCols, lastRows)
             }
         }
 
         Text(
-            "点击终端区域即可输入；上方是快捷键工具栏。返回列表后会话仍在，按钮会显示「回到终端」。",
+            "点终端区域输入，上下滑动终端可翻历史。复制取选区，没有选区就复制最近的屏幕内容。",
             style = MaterialTheme.typography.labelSmall,
             color = Glass.Faint,
         )
