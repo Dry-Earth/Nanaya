@@ -107,6 +107,15 @@
         </activity-alias>
 
         <service
+            android:name=".service.DroidspacesTerminalService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="droidspaces_terminal" />
+        </service>
+
+        <service
             android:name=".service.BatteryGuardService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

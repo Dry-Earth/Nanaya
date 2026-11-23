@@ -1,5 +1,7 @@
 package io.github.dryearth.Nanaya.core
 
+import android.content.Context
+import io.github.dryearth.Nanaya.service.DroidspacesTerminalService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,13 +19,18 @@ import kotlinx.coroutines.withContext
  */
 object DroidspacesTerminals {
     private val sessions = mutableMapOf<String, Session>()
+    private var appContext: Context? = null
     private val _active = MutableStateFlow<Set<String>>(emptySet())
     val active: StateFlow<Set<String>> = _active.asStateFlow()
 
     fun get(name: String): Session? = sessions[name]?.takeIf { it.connected.value }
 
-    fun getOrOpen(name: String): Session {
-        sessions[name]?.takeIf { it.connected.value }?.let { return it }
+    fun getOrOpen(context: Context, name: String): Session {
+        appContext = context.applicationContext
+        sessions[name]?.takeIf { it.connected.value }?.let {
+            DroidspacesTerminalService.start(appContext)
+            return it
+        }
         val session = Session(name)
         session.onStateChanged = { refreshActive() }
         sessions[name] = session
@@ -45,6 +52,11 @@ object DroidspacesTerminals {
 
     private fun refreshActive() {
         _active.value = sessions.filterValues { it.connected.value }.keys.toSet()
+        if (_active.value.isEmpty()) {
+            DroidspacesTerminalService.stop(appContext)
+        } else {
+            DroidspacesTerminalService.start(appContext)
+        }
     }
 
     class Session internal constructor(val name: String) {
@@ -122,13 +134,9 @@ object DroidspacesTerminals {
             _connected.value = false
             readerJob?.cancel()
             readerJob = null
-            scope.cancel()
+            scope.coroutineContext[Job]?.cancel()
             onStateChanged?.invoke()
         }
-    }
-
-    private fun CoroutineScope.cancel() {
-        coroutineContext[Job]?.cancel()
     }
 
     private val ansiCsi = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]")

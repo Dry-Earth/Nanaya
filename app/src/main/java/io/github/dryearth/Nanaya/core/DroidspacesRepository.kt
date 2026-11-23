@@ -36,6 +36,7 @@ data class DsProcess(
     val user: String,
     val name: String,
     val args: String,
+    val rssKb: Long = 0,
 )
 
 data class DsService(
@@ -219,7 +220,7 @@ object DroidspacesRepository {
     suspend fun processes(name: String): List<DsProcess> = withContext(Dispatchers.IO) {
         val r = runIn(
             name,
-            "ps -eo pid,ppid,user,comm,args 2>/dev/null || ps -ef 2>/dev/null",
+            "ps -eo pid,ppid,user,rss,comm,args 2>/dev/null || ps -ef 2>/dev/null",
             15_000,
         )
         if (!r.ok) return@withContext emptyList()
@@ -229,14 +230,15 @@ object DroidspacesRepository {
             if (trimmed.isBlank()) continue
             val first = trimmed.substringBefore(' ')
             if (first.equals("PID", true) || first.equals("UID", true)) continue
-            val match = Regex("^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s*(.*)$").find(trimmed)
+            val match = Regex("^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(\\d+)\\s+(\\S+)\\s*(.*)$").find(trimmed)
             if (match != null) {
                 list += DsProcess(
                     pid = match.groupValues[1],
                     ppid = match.groupValues[2],
                     user = match.groupValues[3],
-                    name = match.groupValues[4],
-                    args = match.groupValues[5],
+                    name = match.groupValues[5],
+                    args = match.groupValues[6],
+                    rssKb = match.groupValues[4].toLongOrNull() ?: 0L,
                 )
             } else {
                 val old = Regex("^\\s*(\\S+)\\s+(\\d+)\\s+(\\d+).*?\\d\\d:\\d\\d\\s+(.*)$").find(trimmed)
@@ -339,6 +341,14 @@ object DroidspacesRepository {
             val r = runIn(name, command, 20_000)
             if (r.ok) null else r.text.ifBlank { "服务操作失败" }
         }
+
+    suspend fun logs(name: String): String = withContext(Dispatchers.IO) {
+        runIn(
+            name,
+            "journalctl -n 300 --no-pager 2>&1 || tail -n 300 /var/log/messages 2>&1 || dmesg 2>&1 | tail -n 300",
+            15_000,
+        ).out.trim().ifBlank { "没有读取到日志。" }
+    }
 
     suspend fun apps(name: String): List<DsApp> = withContext(Dispatchers.IO) {
         val script = """

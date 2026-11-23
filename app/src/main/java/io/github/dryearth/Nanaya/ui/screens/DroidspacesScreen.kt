@@ -1,6 +1,7 @@
 package io.github.dryearth.Nanaya.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -36,6 +39,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -80,10 +88,14 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var expanded by remember { mutableStateOf<String?>(null) }
     var tab by remember { mutableStateOf("process") }
     var initType by remember { mutableStateOf("unknown") }
+    var logText by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("") }
+    val cpuHistory = remember { mutableStateMapOf<String, List<Float>>() }
     var processes by remember { mutableStateOf<List<DsProcess>>(emptyList()) }
     var apps by remember { mutableStateOf<List<DsApp>>(emptyList()) }
     var services by remember { mutableStateOf<List<DsService>>(emptyList()) }
     var panelLoading by remember { mutableStateOf(false) }
+    var expandedPids by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
     var terminalFor by remember { mutableStateOf<String?>(null) }
@@ -100,6 +112,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     fun loadTab(container: DsContainer, kind: String) {
         expanded = container.name
         tab = kind
+        filter = ""
         if (!container.running) return
         panelLoading = true
         scope.launch {
@@ -113,6 +126,9 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     }
                     apps = loadedApps
                     processes = loadedProcesses
+                }
+                "log" -> logText = withContext(Dispatchers.IO) {
+                    DroidspacesRepository.logs(container.name)
                 }
                 "service" -> {
                     val (init, list) = withContext(Dispatchers.IO) {
@@ -140,6 +156,8 @@ fun DroidspacesScreen(onBack: () -> Unit) {
             return
         }
         expanded = container.name
+        expandedPids = setOf("1")
+        filter = ""
         processes = emptyList()
         apps = emptyList()
         services = emptyList()
@@ -184,7 +202,12 @@ fun DroidspacesScreen(onBack: () -> Unit) {
             snapshot = current.copy(
                 hostRamKb = if (hostRam > 0) hostRam else current.hostRamKb,
                 containers = current.containers.map {
-                    it.mergeLive(live[it.name] ?: live[it.folder])
+                    val merged = it.mergeLive(live[it.name] ?: live[it.folder])
+                    if (merged.running) {
+                        cpuHistory[it.name] = ((cpuHistory[it.name] ?: emptyList()) +
+                            cpuPercent(merged)).takeLast(40)
+                    }
+                    merged
                 },
             )
         }
@@ -377,6 +400,13 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                             }
                         }
                     },
+                    expandedPids = expandedPids,
+                    filter = filter,
+                    onFilterChange = { filter = it },
+                    cpuHistory = cpuHistory[container.name].orEmpty(),
+                    onTogglePid = { pid ->
+                        expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
+                    },
                     onOpenTerminal = { terminalFor = container.name },
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
@@ -429,6 +459,11 @@ private fun ContainerCard(
     onOpenTerminal: () -> Unit,
     onOpenDesktop: () -> Unit,
     hasTerminal: Boolean,
+    expandedPids: Set<String>,
+    onTogglePid: (String) -> Unit,
+    filter: String,
+    onFilterChange: (String) -> Unit,
+    cpuHistory: List<Float>,
 ) {
     GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
         Row(
@@ -544,6 +579,34 @@ private fun ContainerCard(
         if (container.cpus.isNotBlank()) InfoRow("CPU 配额", container.cpus)
         if (container.pidsLimit > 0) InfoRow("进程上限", container.pidsLimit.toString())
 
+        if (cpuHistory.size >= 2) {
+            Spacer(Modifier.height(6.dp))
+            Canvas(Modifier.fillMaxWidth().height(26.dp)) {
+                val max = 100f
+                val step = size.width / (cpuHistory.size - 1).coerceAtLeast(1)
+                val path = Path()
+                cpuHistory.forEachIndexed { index, value ->
+                    val x = index * step
+                    val y = size.height - (value.coerceIn(0f, max) / max) * size.height
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    color = Glass.Accent,
+                    style = Stroke(
+                        width = 1.4.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                    ),
+                )
+            }
+            Text(
+                "CPU 近 ${cpuHistory.size} 次采样",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+
         Spacer(Modifier.height(8.dp))
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -552,6 +615,7 @@ private fun ContainerCard(
             Pill("进程", selected = tab == "process", color = Glass.Accent) { onTab("process") }
             Pill("应用", selected = tab == "app", color = Glass.Violet) { onTab("app") }
             Pill("服务", selected = tab == "service", color = Glass.Mint) { onTab("service") }
+            Pill("日志", selected = tab == "log", color = Glass.Ice) { onTab("log") }
             FlowingRefreshButton(
                 refreshing = loading,
                 onClick = onRefresh,
@@ -560,6 +624,29 @@ private fun ContainerCard(
         }
 
         Spacer(Modifier.height(6.dp))
+        BasicTextField(
+            value = filter,
+            onValueChange = onFilterChange,
+            singleLine = true,
+            textStyle = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = Glass.Text,
+            ),
+            cursorBrush = SolidColor(Glass.Accent),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { inner ->
+                if (filter.isEmpty()) {
+                    Text(
+                        "筛选进程 / 应用 / 服务",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                    )
+                }
+                inner()
+            },
+        )
+
         if (!container.running) {
             Text(
                 "容器已停止。启动后可以查看进程、应用和系统服务。",
@@ -582,8 +669,11 @@ private fun ContainerCard(
                         color = Glass.Muted,
                     )
                 }
-                apps.take(80).forEach { app ->
-                    val running = appIsRunning(app, processes)
+                apps.filter {
+                    filter.isBlank() || it.name.contains(filter, true) || it.exec.contains(filter, true)
+                }.take(80).forEach { app ->
+                    val usage = appUsage(app, processes)
+                    val running = usage.running
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -601,7 +691,7 @@ private fun ContainerCard(
                                 if (running) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        "运行中",
+                                        if (usage.rssKb > 0) "运行中 · ${formatKb(usage.rssKb)}" else "运行中",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Glass.Mint,
                                     )
@@ -649,6 +739,20 @@ private fun ContainerCard(
                     color = Glass.Faint,
                 )
             }
+            "log" -> {
+                SelectionContainer {
+                    Text(
+                        logText.ifBlank { "没有读取到日志。" },
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                            lineHeight = 14.sp,
+                            color = Glass.Muted,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
             "service" -> {
                 Text(
                     "init: $initType",
@@ -662,7 +766,9 @@ private fun ContainerCard(
                         color = Glass.Muted,
                     )
                 }
-                services.take(100).forEach { service ->
+                services.filter {
+                    filter.isBlank() || it.name.contains(filter, true) || it.state.contains(filter, true)
+                }.take(100).forEach { service ->
                     val state = service.state.lowercase()
                     val running = state.contains("active") || state.contains("running") ||
                         state.contains("started")
@@ -726,7 +832,17 @@ private fun ContainerCard(
                         color = Glass.Muted,
                     )
                 }
-                processTree(processes).take(80).forEach { (process, depth) ->
+                val processRows = if (filter.isBlank()) {
+                    visibleProcessTree(processes, expandedPids)
+                } else {
+                    processes
+                        .filter { it.name.contains(filter, true) || it.args.contains(filter, true) }
+                        .map { Triple(it, 0, false) }
+                }
+                processRows.take(150).forEach { node ->
+                    val process = node.first
+                    val depth = node.second
+                    val hasChildren = node.third
                     val essential = essentialProcess(process)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -735,9 +851,23 @@ private fun ContainerCard(
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
+                                    if (hasChildren) {
+                                        if (process.pid in expandedPids) "▾" else "▸"
+                                    } else {
+                                        " "
+                                    },
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                    ),
+                                    color = Glass.Accent,
+                                    modifier = Modifier
+                                        .clickable(enabled = hasChildren) { onTogglePid(process.pid) }
+                                        .padding(end = 3.dp),
+                                )
+                                Text(
                                     buildString {
                                         repeat(depth) { append("  ") }
-                                        if (depth > 0) append("└─")
                                         append(process.name)
                                         append(" · ")
                                         append(process.pid)
@@ -751,6 +881,14 @@ private fun ContainerCard(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
+                                if (process.rssKb > 0) {
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        formatKb(process.rssKb),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Glass.Faint,
+                                    )
+                                }
                                 if (essential) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(
@@ -835,15 +973,32 @@ private fun formatBytes(bytes: Long): String {
     return if (gb >= 1) String.format("%.1f GB", gb) else String.format("%.0f MB", bytes / (1024.0 * 1024.0))
 }
 
-private fun appIsRunning(app: DsApp, processes: List<DsProcess>): Boolean {
-    val token = app.exec.substringBefore(' ').substringAfterLast('/').lowercase()
-    if (token.isBlank()) return false
-    return processes.any { process ->
-        process.name.lowercase() == token ||
-            process.args.split(Regex("\\s+")).any {
-                it.substringAfterLast('/').lowercase() == token
-            }
+private data class AppUsage(val running: Boolean, val rssKb: Long)
+
+private fun appUsage(app: DsApp, processes: List<DsProcess>): AppUsage {
+    val exec = app.exec.replace(Regex("%[a-zA-Z]"), "").trim()
+    val skip = setOf(
+        "env", "sh", "bash", "dash", "flatpak", "snap", "gtk-launch",
+        "dbus-run-session", "systemd-run", "run", "start", "exec",
+    )
+    val tokens = exec.split(Regex("\\s+"))
+        .map { it.trim('"', '\'') }
+        .filter { it.isNotBlank() && it !in skip && !it.contains('=') }
+        .map { it.substringAfterLast('/') }
+        .filter { it.length >= 3 }
+    val needles = (tokens + app.desktopId + app.name)
+        .map { it.lowercase() }
+        .filter { it.length >= 3 }
+        .distinct()
+    if (needles.isEmpty()) return AppUsage(false, 0L)
+    val matched = processes.filter { process ->
+        val name = process.name.lowercase()
+        val args = process.args.lowercase()
+        needles.any { needle ->
+            name == needle || args.contains(needle)
+        }
     }
+    return AppUsage(matched.isNotEmpty(), matched.sumOf { it.rssKb })
 }
 
 private fun essentialProcess(process: DsProcess): Boolean {
@@ -869,19 +1024,24 @@ private fun essentialService(name: String): Boolean {
         )
 }
 
-private fun processTree(processes: List<DsProcess>): List<Pair<DsProcess, Int>> {
+private fun visibleProcessTree(
+    processes: List<DsProcess>,
+    expanded: Set<String>,
+): List<Triple<DsProcess, Int, Boolean>> {
     if (processes.isEmpty()) return emptyList()
     val byPid = processes.associateBy { it.pid }
     val children = processes.groupBy { it.ppid }
     val visited = mutableSetOf<String>()
-    val result = mutableListOf<Pair<DsProcess, Int>>()
+    val result = mutableListOf<Triple<DsProcess, Int, Boolean>>()
     fun walk(process: DsProcess, depth: Int) {
         if (!visited.add(process.pid)) return
-        result += process to depth
-        children[process.pid]
+        val childList = children[process.pid]
             .orEmpty()
             .sortedBy { it.pid.toIntOrNull() ?: 0 }
-            .forEach { walk(it, depth + 1) }
+        result += Triple(process, depth, childList.isNotEmpty())
+        if (process.pid in expanded) {
+            childList.forEach { walk(it, depth + 1) }
+        }
     }
     processes
         .filter { it.ppid !in byPid || it.ppid == it.pid }
@@ -889,4 +1049,13 @@ private fun processTree(processes: List<DsProcess>): List<Pair<DsProcess, Int>> 
         .forEach { walk(it, 0) }
     processes.filter { it.pid !in visited }.forEach { walk(it, 0) }
     return result
+}
+
+private fun cpuPercent(container: DsContainer): Float {
+    val value = if (container.cpuLimitPermill > 0) {
+        container.cpuPermill * 100.0 / container.cpuLimitPermill
+    } else {
+        container.cpuPermill / 10.0
+    }
+    return value.coerceIn(0.0, 100.0).toFloat()
 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -55,7 +56,8 @@ fun DroidspacesTerminalScreen(
     containerName: String,
     onBack: () -> Unit,
 ) {
-    val session = remember(containerName) { DroidspacesTerminals.getOrOpen(containerName) }
+    val context = LocalContext.current
+    val session = remember(containerName) { DroidspacesTerminals.getOrOpen(context, containerName) }
     val output by session.output.collectAsState()
     val connected by session.connected.collectAsState()
     var command by remember { mutableStateOf("") }
