@@ -3,13 +3,9 @@ package io.github.dryearth.Nanaya.ui.components
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.util.Base64
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -25,12 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.OnApplyWindowInsetsListener
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import io.github.dryearth.Nanaya.core.TerminalFrame
 import kotlinx.coroutines.flow.StateFlow
 
@@ -42,6 +34,7 @@ class XtermController {
     var scrollPages: (Int) -> Unit = {}
     var scrollTop: () -> Unit = {}
     var scrollBottom: () -> Unit = {}
+    var refit: () -> Unit = {}
 }
 
 /**
@@ -61,18 +54,7 @@ fun XtermTerminal(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val hasHardwareKeyboard = configuration.keyboard != Configuration.KEYBOARD_NOKEYS
     val currentFrame by frame.collectAsState()
-
-    // With a physical keyboard attached the soft keyboard only covers the
-    // prompt. Block the input connection until the user taps 键盘 on purpose.
-    var allowIme by remember { mutableStateOf(!hasHardwareKeyboard) }
-    var imeWasVisible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(hasHardwareKeyboard) {
-        allowIme = !hasHardwareKeyboard
-    }
 
     var ready by remember { mutableStateOf(false) }
     var sentRevision by remember { mutableStateOf(0L) }
@@ -81,14 +63,7 @@ fun XtermTerminal(
     var outstanding by remember { mutableIntStateOf(0) }
 
     val webView = remember {
-        object : WebView(context) {
-            override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
-                // Hardware keys arrive through dispatchKeyEvent, not the input
-                // connection, so typing still works while the IME is blocked.
-                if (!allowIme) return null
-                return super.onCreateInputConnection(outAttrs)
-            }
-        }.apply {
+        WebView(context).apply {
             setBackgroundColor(AndroidColor.TRANSPARENT)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -108,42 +83,9 @@ fun XtermTerminal(
         }
     }
 
-    // Once the user dismisses the soft keyboard, go back to hardware mode.
-    DisposableEffect(hasHardwareKeyboard) {
-        val listener = object : OnApplyWindowInsetsListener {
-            override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
-                val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-                if (imeVisible) {
-                    imeWasVisible = true
-                } else if (imeWasVisible) {
-                    imeWasVisible = false
-                    if (hasHardwareKeyboard) allowIme = false
-                }
-                return insets
-            }
-        }
-        ViewCompat.setOnApplyWindowInsetsListener(webView, listener)
-        onDispose {
-            ViewCompat.setOnApplyWindowInsetsListener(
-                webView,
-                null as OnApplyWindowInsetsListener?,
-            )
-        }
-    }
-
     LaunchedEffect(Unit) {
         controller.focus = {
-            if (hasHardwareKeyboard) {
-                allowIme = true
-                webView.requestFocus()
-                webView.evaluateJavascript("window.xtermFocus()", null)
-                webView.postDelayed({
-                    val imm = context.getSystemService(InputMethodManager::class.java)
-                    imm?.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
-                }, 120)
-            } else {
-                webView.evaluateJavascript("window.xtermFocus()", null)
-            }
+            webView.evaluateJavascript("window.xtermFocus()", null)
         }
         controller.copy = {
             webView.evaluateJavascript("window.xtermCopy()", null)
@@ -165,6 +107,9 @@ fun XtermTerminal(
         }
         controller.scrollBottom = {
             webView.evaluateJavascript("window.xtermBottom()", null)
+        }
+        controller.refit = {
+            webView.evaluateJavascript("window.xtermFit()", null)
         }
 
         val bridge = object {

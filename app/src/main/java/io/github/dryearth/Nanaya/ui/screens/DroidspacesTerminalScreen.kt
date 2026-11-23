@@ -3,12 +3,14 @@ package io.github.dryearth.Nanaya.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -52,6 +55,15 @@ fun DroidspacesTerminalScreen(
     val controller = remember { XtermController() }
     var lastCols by remember { mutableIntStateOf(0) }
     var lastRows by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+
+    // The WebView's own resize event is not always delivered while the IME
+    // animates in, so refit explicitly after the insets settle.
+    LaunchedEffect(imeBottom) {
+        kotlinx.coroutines.delay(150)
+        controller.refit()
+    }
 
     // xterm usually reports its grid before the shell finishes starting, so
     // retry the initial PTY sizing once the session connects.
@@ -162,7 +174,7 @@ fun DroidspacesTerminalScreen(
         }
 
         Text(
-            "点终端区域输入，上下滑动终端可翻历史。复制取选区，没有选区就复制最近的屏幕内容。",
+            "点终端区域输入，软键盘弹出后会自动重排到最新一行；上下滑动终端可翻历史。",
             style = MaterialTheme.typography.labelSmall,
             color = Glass.Faint,
         )

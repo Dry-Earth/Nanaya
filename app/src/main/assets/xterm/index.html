@@ -169,6 +169,7 @@
       setTimeout(function () { try { term.focus(); } catch (e) {} }, 30);
     } catch (e) {}
   };
+  window.xtermFit = function () { doFit(); };
   window.xtermScroll = function (pages) {
     try { term.scrollPages(pages); } catch (e) {}
   };
