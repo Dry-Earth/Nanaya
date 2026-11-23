@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #term {
+    position: absolute;
+    inset: 0;
+    padding: 4px 2px;
+    box-sizing: border-box;
+  }
+  .xterm .xterm-viewport {
+    background: transparent !important;
+    scrollbar-width: none;
+  }
+  .xterm .xterm-screen {
+    background: transparent;
+  }
+  .xterm .xterm-helper-textarea {
+    font-size: 16px !important;
+  }
+</style>
+</head>
+<body>
+<div id="term"></div>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+<script src="addon-serialize.js"></script>
+<script>
+(function () {
+  var term = new Terminal({
+    cursorBlink: true,
+    cursorStyle: "block",
+    fontFamily: "monospace",
+    fontSize: 12,
+    lineHeight: 1.15,
+    scrollback: 2000,
+    allowProposedApi: true,
+    theme: {
+      background: "rgba(8,10,14,0.58)",
+      foreground: "#E5E7EB",
+      cursor: "#67E8F9",
+      selectionBackground: "#33415588",
+      black: "#1F2937",
+      red: "#F87171",
+      green: "#6EE7B7",
+      yellow: "#FBBF24",
+      blue: "#60A5FA",
+      magenta: "#E879F9",
+      cyan: "#67E8F9",
+      white: "#E5E7EB",
+      brightBlack: "#6B7280",
+      brightRed: "#FCA5A5",
+      brightGreen: "#A7F3D0",
+      brightYellow: "#FDE68A",
+      brightBlue: "#93C5FD",
+      brightMagenta: "#F0ABFC",
+      brightCyan: "#A5F3FC",
+      brightWhite: "#FFFFFF"
+    }
+  });
+  var fit = new FitAddon.FitAddon();
+  var serialize = new SerializeAddon.SerializeAddon();
+  term.loadAddon(fit);
+  term.loadAddon(serialize);
+  term.open(document.getElementById("term"));
+
+  function doFit() {
+    try { fit.fit(); } catch (e) {}
+  }
+  requestAnimationFrame(doFit);
+  window.addEventListener("resize", doFit);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", doFit);
+  }
+
+  term.onData(function (data) {
+    try {
+      var bytes = new TextEncoder().encode(data);
+      var bin = "";
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      AndroidBridge.send(btoa(bin));
+    } catch (e) {}
+  });
+
+  term.onResize(function (size) {
+    try { AndroidBridge.resize(size.cols, size.rows); } catch (e) {}
+  });
+
+  function b64ToBytes(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  window.xtermWrite = function (b64) { term.write(b64ToBytes(b64)); };
+  window.xtermReset = function () { term.reset(); };
+  window.xtermFocus = function () { term.focus(); };
+
+  try { AndroidBridge.ready(); } catch (e) {}
+})();
+</script>
+</body>
+</html>

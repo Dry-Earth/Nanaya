@@ -95,10 +95,10 @@ object DroidspacesTerminals {
                         while (isActive) {
                             val read = p.inputStream.read(buffer)
                             if (read <= 0) break
-                            val text = stripNoise(String(buffer, 0, read, Charsets.UTF_8))
+                            val text = String(buffer, 0, read, Charsets.UTF_8)
                             if (text.isNotEmpty()) {
                                 withContext(Dispatchers.Main) {
-                                    _output.value = (_output.value + text).takeLast(120_000)
+                                    _output.value = (_output.value + text).takeLast(240_000)
                                 }
                             }
                         }
@@ -138,10 +138,4 @@ object DroidspacesTerminals {
             onStateChanged?.invoke()
         }
     }
-
-    private val ansiCsi = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]")
-    private val ansiOsc = Regex("\u001B\\][^\u0007]*(\u0007|\u001B\\\\)")
-
-    private fun stripNoise(value: String): String =
-        value.replace(ansiOsc, "").replace(ansiCsi, "").replace("\r", "")
 }
