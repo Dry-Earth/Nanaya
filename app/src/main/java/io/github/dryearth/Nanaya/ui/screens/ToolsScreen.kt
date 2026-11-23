@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Usb
@@ -37,6 +38,7 @@ fun ToolsScreen(
     onOpenLocal: () -> Unit,
     onOpenUsb: () -> Unit,
     onOpenMusic: () -> Unit,
+    onOpenDroidspaces: () -> Unit,
 ) {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
@@ -66,6 +68,27 @@ fun ToolsScreen(
                         Text("音乐", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
                             "安装音源插件，搜索或直接说「播放稻香」",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
+
+        item {
+            SectionHeader("容器", "Linux 容器与开发环境")
+        }
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpenDroidspaces) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Dns, null, tint = Glass.Accent)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Droidspaces", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "扫描容器，查看进程、应用、硬件占用与系统服务",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )
