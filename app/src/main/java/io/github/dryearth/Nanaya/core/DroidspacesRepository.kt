@@ -189,6 +189,13 @@ object DroidspacesRepository {
         }.getOrDefault(emptyMap<String, JSONObject>() to 0L)
     }
 
+    fun openTerminal(name: String): Process? {
+        if (!validContainer(name)) return null
+        val command = "export TERM=xterm-256color COLUMNS=100 LINES=40; " +
+            "exec $BINARY --name=${quote(name)} enter"
+        return Shell.interactiveProcess(command)
+    }
+
     suspend fun start(name: String): String? = withContext(Dispatchers.IO) {
         val r = Shell.run("$BINARY --name=${quote(name)} start", 120_000)
         if (r.ok) null else r.text.ifBlank { "启动失败（${r.code}）" }

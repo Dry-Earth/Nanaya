@@ -76,6 +76,19 @@ object Shell {
         }
     }
 
+    /**
+     * Starts a long-lived root process with piped stdin/stdout (used by the
+     * container terminal). The caller owns the Process and must destroy it.
+     */
+    fun interactiveProcess(cmd: String): Process? {
+        if (!detectRoot()) return null
+        return runCatching {
+            ProcessBuilder(rootBinary, "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
+        }.getOrNull()
+    }
+
     /** Force one backend, used by the UI to preview the exact command. */
     fun runAs(backend: Backend, cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when (backend) {

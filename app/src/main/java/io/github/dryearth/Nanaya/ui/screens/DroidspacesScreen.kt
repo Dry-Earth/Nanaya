@@ -1,5 +1,6 @@
 package io.github.dryearth.Nanaya.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -81,6 +82,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var panelLoading by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
+    var terminalFor by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
         scope.launch {
@@ -172,6 +174,12 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                 },
             )
         }
+    }
+
+    BackHandler(enabled = terminalFor != null) { terminalFor = null }
+    terminalFor?.let { name ->
+        DroidspacesTerminalScreen(containerName = name, onBack = { terminalFor = null })
+        return
     }
 
     Column(
@@ -336,6 +344,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                             DroidspacesRepository.serviceAction(container.name, initType, service.name, action)
                         }
                     },
+                    onOpenTerminal = { terminalFor = container.name },
                 )
             }
             if (containers.isEmpty() && !loading && snapshot?.binaryFound == true) {
@@ -397,6 +406,7 @@ private fun ContainerCard(
     onStartApp: (DsApp) -> Unit,
     onStopApp: (DsApp) -> Unit,
     onServiceAction: (DsService, String) -> Unit,
+    onOpenTerminal: () -> Unit,
 ) {
     GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
         Row(
@@ -500,6 +510,9 @@ private fun ContainerCard(
             Pill("进程", selected = tab == "process", color = Glass.Accent) { onTab("process") }
             Pill("应用", selected = tab == "app", color = Glass.Violet) { onTab("app") }
             Pill("服务", selected = tab == "service", color = Glass.Mint) { onTab("service") }
+            if (container.running) {
+                Pill("终端", color = Glass.Accent) { onOpenTerminal() }
+            }
             Pill("刷新", color = Glass.Faint) { onRefresh() }
         }
 
