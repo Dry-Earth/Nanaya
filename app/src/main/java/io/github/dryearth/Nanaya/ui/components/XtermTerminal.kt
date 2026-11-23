@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.OnApplyWindowInsetsListener
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import io.github.dryearth.Nanaya.core.TerminalFrame
@@ -109,7 +110,7 @@ fun XtermTerminal(
 
     // Once the user dismisses the soft keyboard, go back to hardware mode.
     DisposableEffect(hasHardwareKeyboard) {
-        val listener = object : ViewCompat.OnApplyWindowInsetsListener {
+        val listener = object : OnApplyWindowInsetsListener {
             override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat {
                 val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
                 if (imeVisible) {
@@ -125,7 +126,7 @@ fun XtermTerminal(
         onDispose {
             ViewCompat.setOnApplyWindowInsetsListener(
                 webView,
-                null as ViewCompat.OnApplyWindowInsetsListener?,
+                null as OnApplyWindowInsetsListener?,
             )
         }
     }
