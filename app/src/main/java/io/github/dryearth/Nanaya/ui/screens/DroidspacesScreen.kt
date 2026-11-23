@@ -1,7 +1,6 @@
 package io.github.dryearth.Nanaya.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -39,11 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -90,7 +85,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var initType by remember { mutableStateOf("unknown") }
     var logText by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("") }
-    val cpuHistory = remember { mutableStateMapOf<String, List<Float>>() }
     var processes by remember { mutableStateOf<List<DsProcess>>(emptyList()) }
     var apps by remember { mutableStateOf<List<DsApp>>(emptyList()) }
     var services by remember { mutableStateOf<List<DsService>>(emptyList()) }
@@ -202,12 +196,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
             snapshot = current.copy(
                 hostRamKb = if (hostRam > 0) hostRam else current.hostRamKb,
                 containers = current.containers.map {
-                    val merged = it.mergeLive(live[it.name] ?: live[it.folder])
-                    if (merged.running) {
-                        cpuHistory[it.name] = ((cpuHistory[it.name] ?: emptyList()) +
-                            cpuPercent(merged)).takeLast(40)
-                    }
-                    merged
+                    it.mergeLive(live[it.name] ?: live[it.folder])
                 },
             )
         }
@@ -404,7 +393,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     expandedPids = expandedPids,
                     filter = filter,
                     onFilterChange = { filter = it },
-                    cpuHistory = cpuHistory[container.name].orEmpty(),
                     onTogglePid = { pid ->
                         expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
                     },
@@ -465,7 +453,6 @@ private fun ContainerCard(
     onTogglePid: (String) -> Unit,
     filter: String,
     onFilterChange: (String) -> Unit,
-    cpuHistory: List<Float>,
 ) {
     GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
         Row(
@@ -580,34 +567,6 @@ private fun ContainerCard(
         if (container.memoryLimit > 0) InfoRow("内存上限", formatBytes(container.memoryLimit))
         if (container.cpus.isNotBlank()) InfoRow("CPU 配额", container.cpus)
         if (container.pidsLimit > 0) InfoRow("进程上限", container.pidsLimit.toString())
-
-        if (cpuHistory.size >= 2) {
-            Spacer(Modifier.height(6.dp))
-            Canvas(Modifier.fillMaxWidth().height(26.dp)) {
-                val max = 100f
-                val step = size.width / (cpuHistory.size - 1).coerceAtLeast(1)
-                val path = Path()
-                cpuHistory.forEachIndexed { index, value ->
-                    val x = index * step
-                    val y = size.height - (value.coerceIn(0f, max) / max) * size.height
-                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                drawPath(
-                    path = path,
-                    color = Glass.Accent,
-                    style = Stroke(
-                        width = 1.4.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
-                )
-            }
-            Text(
-                "CPU 近 ${cpuHistory.size} 次采样",
-                style = MaterialTheme.typography.labelSmall,
-                color = Glass.Faint,
-            )
-        }
 
         Spacer(Modifier.height(8.dp))
         Row(
@@ -1051,13 +1010,4 @@ private fun visibleProcessTree(
         .forEach { walk(it, 0) }
     processes.filter { it.pid !in visited }.forEach { walk(it, 0) }
     return result
-}
-
-private fun cpuPercent(container: DsContainer): Float {
-    val value = if (container.cpuLimitPermill > 0) {
-        container.cpuPermill * 100.0 / container.cpuLimitPermill
-    } else {
-        container.cpuPermill / 10.0
-    }
-    return value.coerceIn(0.0, 100.0).toFloat()
 }
