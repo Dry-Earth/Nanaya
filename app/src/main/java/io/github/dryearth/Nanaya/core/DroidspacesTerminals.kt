@@ -89,9 +89,14 @@ object DroidspacesTerminals {
         private val input = Channel<ByteArray>(Channel.UNLIMITED)
         private var writerJob: Job? = null
 
-        /** The guest PTY starts at 0x0 because the host side is a pipe. */
-        internal var sized = false
-            private set
+        /**
+         * The guest PTY starts at 0x0 because the host side is a pipe.
+         * Sizes are re-applied only until the user starts typing, after which
+         * injecting stty lines would land inside top/htop.
+         */
+        private var userTyped = false
+        private var appliedCols = 0
+        private var appliedRows = 0
 
         internal fun fail(message: String) {
             append(message)
@@ -161,6 +166,12 @@ object DroidspacesTerminals {
 
         fun write(text: String) {
             if (text.isEmpty() || !_connected.value) return
+            userTyped = true
+            send(text)
+        }
+
+        private fun send(text: String) {
+            if (text.isEmpty() || !_connected.value) return
             input.trySend(text.toByteArray(Charsets.UTF_8))
         }
 
@@ -173,16 +184,27 @@ object DroidspacesTerminals {
         fun applySize(cols: Int, rows: Int) {
             // xterm's fit addon can report a 1x1 grid before the WebView has
             // been laid out; never let that become the guest PTY size.
-            if (cols < 20 || rows < 5) return
-            if (sized || !_connected.value) return
-            sized = true
-            write("export TERM=xterm-256color; stty rows $rows cols $cols 2>/dev/null; printf '\\033[2J\\033[H'\r")
+            if (cols < 20 || rows < 5 || !_connected.value) return
+            if (userTyped) return
+            if (cols == appliedCols && rows == appliedRows) return
+            appliedCols = cols
+            appliedRows = rows
+            send(
+                "unset COLUMNS LINES 2>/dev/null; export TERM=xterm-256color; " +
+                    "stty rows $rows cols $cols 2>/dev/null; " +
+                    "printf '\\033[2J\\033[H'\r",
+            )
         }
 
-        /** Manual re-sync after the on-screen keyboard or rotation changed the grid. */
+        /**
+         * Manual re-sync after keyboard or rotation. Run it at the shell
+         * prompt: while a full-screen app is active its input is this line.
+         */
         fun forceSize(cols: Int, rows: Int) {
             if (cols < 20 || rows < 5 || !_connected.value) return
-            write("stty rows $rows cols $cols 2>/dev/null\r")
+            appliedCols = cols
+            appliedRows = rows
+            send("unset COLUMNS LINES 2>/dev/null; stty rows $rows cols $cols 2>/dev/null\r")
         }
 
         fun close() {

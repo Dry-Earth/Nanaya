@@ -197,7 +197,10 @@ object DroidspacesRepository {
 
     fun openTerminal(name: String): Process? {
         if (!validContainer(name)) return null
-        val command = "export DS_NO_PROXY=1 TERM=xterm-256color COLUMNS=100 LINES=40; " +
+        // Do not export COLUMNS/LINES: ncurses (htop, top, vi) gives them
+        // priority over the real PTY size, so a fixed 100x40 makes every
+        // full-screen app draw past the edge of the visible grid.
+        val command = "unset COLUMNS LINES; export DS_NO_PROXY=1 TERM=xterm-256color; " +
             "exec $BINARY --name=${quote(name)} enter"
         return Shell.interactiveProcess(command)
     }
