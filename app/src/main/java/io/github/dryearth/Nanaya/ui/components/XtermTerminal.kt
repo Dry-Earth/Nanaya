@@ -42,7 +42,6 @@ fun XtermTerminal(
 ) {
     val context = LocalContext.current
     val currentFrame by frame.collectAsState()
-    val isConnected by connected.collectAsState()
 
     var ready by remember { mutableStateOf(false) }
     var sentRevision by remember { mutableStateOf(0L) }
@@ -123,14 +122,6 @@ fun XtermTerminal(
             val encoded = Base64.encodeToString(delta.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
             webView.evaluateJavascript("window.xtermWrite('$encoded')", null)
             sentRevision = snapshot.revision
-        }
-    }
-
-    LaunchedEffect(isConnected) {
-        if (isConnected) {
-            // Give the fit addon a moment to report the real grid.
-            kotlinx.coroutines.delay(150)
-            webView.evaluateJavascript("window.xtermFocus()", null)
         }
     }
 
