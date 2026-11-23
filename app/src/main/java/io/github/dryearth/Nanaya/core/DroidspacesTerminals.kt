@@ -30,6 +30,8 @@ data class TerminalFrame(
  */
 object DroidspacesTerminals {
     private const val MAX_BUFFER = 240_000
+    private const val INITIAL_COLS = 80
+    private const val INITIAL_ROWS = 24
 
     private val sessions = mutableMapOf<String, Session>()
     private var appContext: Context? = null
@@ -75,6 +77,7 @@ object DroidspacesTerminals {
     class Session internal constructor(val name: String) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private var process: Process? = null
+        @Volatile private var pty: PtyBridge.Channel? = null
         private var readerJob: Job? = null
         internal var onStateChanged: (() -> Unit)? = null
 
@@ -88,15 +91,7 @@ object DroidspacesTerminals {
 
         private val input = Channel<ByteArray>(Channel.UNLIMITED)
         private var writerJob: Job? = null
-
-        /**
-         * The guest PTY starts at 0x0 because the host side is a pipe.
-         * Size it exactly once, right after connecting and before the user
-         * starts typing; later injections would race with their keystrokes and
-         * land inside top/htop. The 适配 button covers keyboard/rotation.
-         */
-        internal var sized = false
-            private set
+        private var pipeSized = false
 
         internal fun fail(message: String) {
             append(message)
@@ -112,31 +107,49 @@ object DroidspacesTerminals {
             _frame.value = TerminalFrame(emitted, buffer.toString())
         }
 
+        private fun connected() {
+            _connected.value = true
+            onStateChanged?.invoke()
+        }
+
         internal fun start() {
             writerJob = scope.launch(Dispatchers.IO) {
                 for (bytes in input) {
-                    val p = process ?: continue
+                    val out = pty?.output ?: process?.outputStream ?: continue
                     runCatching {
-                        p.outputStream.write(bytes)
-                        p.outputStream.flush()
+                        out.write(bytes)
+                        out.flush()
                     }
                 }
             }
             readerJob = scope.launch {
-                val p = withContext(Dispatchers.IO) {
-                    DroidspacesRepository.openTerminal(name)
+                // A host PTY gives droidspaces a real TTY and a real window
+                // size. Only fall back to the pipe + stty path if the native
+                // bridge is unavailable.
+                val channel = withContext(Dispatchers.IO) {
+                    DroidspacesRepository.openTerminalPty(name, INITIAL_COLS, INITIAL_ROWS)
                 }
-                if (p == null) {
-                    fail("无法启动容器终端。\nDroidspaces 终端需要 Root。")
-                    onStateChanged?.invoke()
-                    return@launch
+                val stream: java.io.InputStream
+                if (channel != null) {
+                    pty = channel
+                    stream = channel.input
+                    connected()
+                } else {
+                    val p = withContext(Dispatchers.IO) {
+                        DroidspacesRepository.openTerminal(name)
+                    }
+                    if (p == null) {
+                        fail("无法启动容器终端。\nDroidspaces 终端需要 Root。")
+                        onStateChanged?.invoke()
+                        return@launch
+                    }
+                    process = p
+                    stream = p.inputStream
+                    connected()
                 }
-                process = p
-                _connected.value = true
-                onStateChanged?.invoke()
                 try {
                     withContext(Dispatchers.IO) {
-                        val reader = p.inputStream.reader(Charsets.UTF_8)
+                        val reader = stream.reader(Charsets.UTF_8)
                         val chars = CharArray(8192)
                         while (isActive) {
                             // The reader keeps partial UTF-8 sequences between
@@ -154,6 +167,9 @@ object DroidspacesTerminals {
                         append("\n[终端错误：${e.message ?: "读取失败"}]\n")
                     }
                 } finally {
+                    runCatching { pty?.close() }
+                    runCatching { process?.destroy() }
+                    pty = null
                     process = null
                     _connected.value = false
                     withContext(Dispatchers.Main) {
@@ -175,33 +191,38 @@ object DroidspacesTerminals {
         }
 
         /**
-         * The container's PTY inherits its size from the host stdin, which is a
-         * pipe here, so it comes up as 0x0 and full-screen tools (top, htop,
-         * vi) draw nothing. Set it once per shell session, before the user
-         * starts typing, and never clear the screen (that hid the banner).
+         * With a PTY this is a single ioctl: the kernel sends SIGWINCH to the
+         * foreground process and droidspaces forwards the new size to the
+         * container PTY. The pipe fallback still needs an stty line.
          */
         fun applySize(cols: Int, rows: Int) {
-            // xterm's fit addon can report a 1x1 grid before the WebView has
-            // been laid out; never let that become the guest PTY size.
-            if (cols < 20 || rows < 5 || !_connected.value) return
-            if (sized) return
-            sized = true
-            // No screen clear here: it was wiping the login banner. The one
-            // echoed stty line is harmless and keeps the session history.
+            if (cols < 20 || rows < 5) return
+            val channel = pty
+            if (channel != null) {
+                channel.resize(cols, rows)
+                return
+            }
+            if (!_connected.value || pipeSized) return
+            pipeSized = true
             send("stty rows $rows cols $cols 2>/dev/null\r")
         }
 
-        /**
-         * Manual re-sync after keyboard or rotation. Run it at the shell
-         * prompt: while a full-screen app is active its input is this line.
-         */
+        /** Manual re-sync after keyboard or rotation. */
         fun forceSize(cols: Int, rows: Int) {
-            if (cols < 20 || rows < 5 || !_connected.value) return
+            if (cols < 20 || rows < 5) return
+            val channel = pty
+            if (channel != null) {
+                channel.resize(cols, rows)
+                return
+            }
+            if (!_connected.value) return
             send("stty rows $rows cols $cols 2>/dev/null\r")
         }
 
         fun close() {
+            runCatching { pty?.close() }
             runCatching { process?.destroy() }
+            pty = null
             process = null
             _connected.value = false
             readerJob?.cancel()

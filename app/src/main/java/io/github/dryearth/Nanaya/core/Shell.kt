@@ -64,6 +64,32 @@ object Shell {
         return false
     }
 
+    /**
+     * Absolute path to the working su binary. exec() does not search PATH, so
+     * the native PTY bridge needs a path with a slash in it.
+     */
+    fun rootShellPath(): String? {
+        if (!detectRoot()) return null
+        val bin = rootBinary
+        if (bin.contains('/')) return bin
+        val fromPath = (System.getenv("PATH") ?: "")
+            .split(':')
+            .asSequence()
+            .filter { it.isNotBlank() }
+            .map { File(it, bin) }
+            .firstOrNull { it.canExecute() }
+        if (fromPath != null) return fromPath.absolutePath
+        val known = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/debug_ramdisk/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/magisk/su",
+        )
+        return known.firstOrNull { File(it).canExecute() }
+    }
+
     fun run(cmd: String, timeoutMs: Long = DEFAULT_TIMEOUT): ShellResult {
         return when {
             rootReady || detectRoot() -> exec(arrayOf(rootBinary, "-c", cmd), timeoutMs)

@@ -21,3 +21,7 @@
 -keep class android.sun.security.** { *; }
 -keep class io.github.muntashirakon.crypto.spake2.** { *; }
 -keep class android.sun.misc.** { *; }
+
+# Host PTY JNI bridge
+-keep class io.github.dryearth.Nanaya.core.PtyBridge { *; }
+-keepclasseswithmembernames class * { native <methods>; }

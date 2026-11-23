@@ -195,14 +195,31 @@ object DroidspacesRepository {
         }.getOrDefault(emptyMap<String, JSONObject>() to 0L)
     }
 
-    fun openTerminal(name: String): Process? {
+    private fun terminalCommand(name: String): String? {
         if (!validContainer(name)) return null
         // Do not export COLUMNS/LINES: ncurses (htop, top, vi) gives them
-        // priority over the real PTY size, so a fixed 100x40 makes every
-        // full-screen app draw past the edge of the visible grid.
-        val command = "unset COLUMNS LINES; export DS_NO_PROXY=1 TERM=xterm-256color; " +
+        // priority over the real PTY size.
+        return "export DS_NO_PROXY=1 TERM=xterm-256color; " +
             "exec $BINARY --name=${quote(name)} enter"
+    }
+
+    /**
+     * Pipe fallback used when the native PTY bridge is unavailable.
+     */
+    fun openTerminal(name: String): Process? {
+        val command = terminalCommand(name) ?: return null
         return Shell.interactiveProcess(command)
+    }
+
+    /**
+     * Start the container shell on a real host PTY. This is the preferred
+     * path: `droidspaces enter` sees a TTY, inherits the window size and
+     * receives SIGWINCH when the master is resized.
+     */
+    fun openTerminalPty(name: String, cols: Int, rows: Int): PtyBridge.Channel? {
+        val command = terminalCommand(name) ?: return null
+        val su = Shell.rootShellPath() ?: return null
+        return PtyBridge.open(su, command, cols, rows)
     }
 
     suspend fun start(name: String): String? = withContext(Dispatchers.IO) {
