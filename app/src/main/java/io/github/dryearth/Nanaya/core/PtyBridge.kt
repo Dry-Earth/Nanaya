@@ -1,7 +1,7 @@
 package io.github.dryearth.Nanaya.core
 
 import android.os.ParcelFileDescriptor
-import android.system.Os
+import android.system.OsConstants
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
@@ -43,7 +43,7 @@ object PtyBridge {
 
     class Channel internal constructor(fd: Int, val pid: Int) {
         private val readPfd = ParcelFileDescriptor.adoptFd(fd)
-        private val writePfd = ParcelFileDescriptor.adoptFd(Os.dup(readPfd.fileDescriptor))
+        private val writePfd = ParcelFileDescriptor.dup(readPfd.fileDescriptor)
         val input = FileInputStream(readPfd.fileDescriptor)
         val output = FileOutputStream(writePfd.fileDescriptor)
 
@@ -62,6 +62,9 @@ object PtyBridge {
         fun resize(cols: Int, rows: Int) {
             if (cols <= 0 || rows <= 0) return
             runCatching { nativeResize(readPfd.fd, cols, rows) }
+            // The kernel only signals the tty's foreground group. If su moved
+            // the shell to another process group, nudge -pid as well.
+            if (alive) runCatching { nativeSignal(-pid, OsConstants.SIGWINCH) }
         }
 
         fun close() {

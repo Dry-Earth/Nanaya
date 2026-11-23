@@ -92,6 +92,8 @@ object DroidspacesTerminals {
         private val input = Channel<ByteArray>(Channel.UNLIMITED)
         private var writerJob: Job? = null
         private var pipeSized = false
+        private var requestedCols = INITIAL_COLS
+        private var requestedRows = INITIAL_ROWS
 
         internal fun fail(message: String) {
             append(message)
@@ -110,6 +112,12 @@ object DroidspacesTerminals {
         private fun connected() {
             _connected.value = true
             onStateChanged?.invoke()
+            // The UI may have reported its grid before droidspaces installed
+            // its SIGWINCH handler; apply the last known size once more.
+            scope.launch {
+                kotlinx.coroutines.delay(900)
+                pty?.resize(requestedCols, requestedRows)
+            }
         }
 
         internal fun start() {
@@ -197,6 +205,8 @@ object DroidspacesTerminals {
          */
         fun applySize(cols: Int, rows: Int) {
             if (cols < 20 || rows < 5) return
+            requestedCols = cols
+            requestedRows = rows
             val channel = pty
             if (channel != null) {
                 channel.resize(cols, rows)
@@ -210,6 +220,8 @@ object DroidspacesTerminals {
         /** Manual re-sync after keyboard or rotation. */
         fun forceSize(cols: Int, rows: Int) {
             if (cols < 20 || rows < 5) return
+            requestedCols = cols
+            requestedRows = rows
             val channel = pty
             if (channel != null) {
                 channel.resize(cols, rows)
