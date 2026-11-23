@@ -91,12 +91,12 @@ object DroidspacesTerminals {
 
         /**
          * The guest PTY starts at 0x0 because the host side is a pipe.
-         * Sizes are re-applied only until the user starts typing, after which
-         * injecting stty lines would land inside top/htop.
+         * Size it exactly once, right after connecting and before the user
+         * starts typing; later injections would race with their keystrokes and
+         * land inside top/htop. The 适配 button covers keyboard/rotation.
          */
-        private var userTyped = false
-        private var appliedCols = 0
-        private var appliedRows = 0
+        internal var sized = false
+            private set
 
         internal fun fail(message: String) {
             append(message)
@@ -166,8 +166,7 @@ object DroidspacesTerminals {
 
         fun write(text: String) {
             if (text.isEmpty() || !_connected.value) return
-            userTyped = true
-            send(text)
+            input.trySend(text.toByteArray(Charsets.UTF_8))
         }
 
         private fun send(text: String) {
@@ -178,22 +177,18 @@ object DroidspacesTerminals {
         /**
          * The container's PTY inherits its size from the host stdin, which is a
          * pipe here, so it comes up as 0x0 and full-screen tools (top, htop,
-         * vi) draw nothing. Set the size once per shell session and clear the
-         * echoed setup line.
+         * vi) draw nothing. Set it once per shell session, before the user
+         * starts typing, and never clear the screen (that hid the banner).
          */
         fun applySize(cols: Int, rows: Int) {
             // xterm's fit addon can report a 1x1 grid before the WebView has
             // been laid out; never let that become the guest PTY size.
             if (cols < 20 || rows < 5 || !_connected.value) return
-            if (userTyped) return
-            if (cols == appliedCols && rows == appliedRows) return
-            appliedCols = cols
-            appliedRows = rows
-            send(
-                "unset COLUMNS LINES 2>/dev/null; export TERM=xterm-256color; " +
-                    "stty rows $rows cols $cols 2>/dev/null; " +
-                    "printf '\\033[2J\\033[H'\r",
-            )
+            if (sized) return
+            sized = true
+            // No screen clear here: it was wiping the login banner. The one
+            // echoed stty line is harmless and keeps the session history.
+            send("stty rows $rows cols $cols 2>/dev/null\r")
         }
 
         /**
@@ -202,9 +197,7 @@ object DroidspacesTerminals {
          */
         fun forceSize(cols: Int, rows: Int) {
             if (cols < 20 || rows < 5 || !_connected.value) return
-            appliedCols = cols
-            appliedRows = rows
-            send("unset COLUMNS LINES 2>/dev/null; stty rows $rows cols $cols 2>/dev/null\r")
+            send("stty rows $rows cols $cols 2>/dev/null\r")
         }
 
         fun close() {

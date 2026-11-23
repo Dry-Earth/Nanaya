@@ -58,6 +58,8 @@ fun XtermTerminal(
 
     var ready by remember { mutableStateOf(false) }
     var sentRevision by remember { mutableStateOf(0L) }
+    // Keep the JS interface reachable for the lifetime of the screen.
+    val bridgeRef = remember { mutableStateOf<Any?>(null) }
     // At most three unacknowledged chunks may be in flight. Without this a
     // fast producer (htop, yes, a big log) floods the WebView JS queue.
     var outstanding by remember { mutableIntStateOf(0) }
@@ -152,8 +154,18 @@ fun XtermTerminal(
                 }
             }
         }
+        bridgeRef.value = bridge
         webView.addJavascriptInterface(bridge, "AndroidBridge")
         webView.loadUrl("file:///android_asset/xterm/index.html")
+    }
+
+    // If the page stops acknowledging chunks, unblock instead of freezing the
+    // display forever. Old chunks are not resent, so this cannot duplicate text.
+    LaunchedEffect(outstanding) {
+        if (outstanding > 0) {
+            kotlinx.coroutines.delay(4_000)
+            if (outstanding > 0) outstanding = 0
+        }
     }
 
     // Replay only the unseen tail. When the buffer has been trimmed the frame

@@ -91,7 +91,11 @@ fun DroidspacesTerminalScreen(
                     color = Glass.Text,
                 )
                 Text(
-                    "容器终端 · ANSI / 光标 / 全屏 TUI",
+                    if (lastCols > 0 && lastRows > 0) {
+                        "容器终端 · ${lastCols}×${lastRows}"
+                    } else {
+                        "容器终端 · 正在测量窗口"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Glass.Muted,
                 )
