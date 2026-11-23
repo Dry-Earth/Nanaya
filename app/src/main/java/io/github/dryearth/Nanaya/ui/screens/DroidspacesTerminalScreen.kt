@@ -49,6 +49,7 @@ fun DroidspacesTerminalScreen(
     }
     val connected by session.connected.collectAsState()
     var focusSignal by remember { mutableIntStateOf(0) }
+    var bottomSignal by remember { mutableIntStateOf(0) }
     var lastCols by remember { mutableIntStateOf(0) }
     var lastRows by remember { mutableIntStateOf(0) }
 
@@ -106,6 +107,7 @@ fun DroidspacesTerminalScreen(
                 onWrite = { text -> session.write(text) },
                 modifier = Modifier.fillMaxSize(),
                 focusSignal = focusSignal,
+                bottomSignal = bottomSignal,
                 onSize = { cols, rows ->
                     lastCols = cols
                     lastRows = rows
@@ -150,6 +152,7 @@ fun DroidspacesTerminalScreen(
             key("Enter", Glass.Accent, "\r")
             key("清屏", Glass.Faint, "\u000c")
             Pill("键盘", color = Glass.Mint) { focusSignal++ }
+            Pill("底部", color = Glass.Mint) { bottomSignal++ }
             Pill("适配", color = Glass.Faint) {
                 session.forceSize(lastCols, lastRows)
             }

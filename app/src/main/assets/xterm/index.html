@@ -109,7 +109,10 @@
     return bytes;
   }
 
-  window.xtermWrite = function (b64) { term.write(b64ToBytes(b64)); };
+  window.xtermWrite = function (b64) {
+    term.write(b64ToBytes(b64), function () { term.scrollToBottom(); });
+  };
+  window.xtermBottom = function () { term.scrollToBottom(); };
   window.xtermReset = function () { term.reset(); };
   window.xtermFocus = function () { term.focus(); };
 

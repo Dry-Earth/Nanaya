@@ -38,6 +38,7 @@ fun XtermTerminal(
     onSize: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     focusSignal: Int = 0,
+    bottomSignal: Int = 0,
 ) {
     val context = LocalContext.current
     val currentFrame by frame.collectAsState()
@@ -92,6 +93,12 @@ fun XtermTerminal(
         }
         webView.addJavascriptInterface(bridge, "AndroidBridge")
         webView.loadUrl("file:///android_asset/xterm/index.html")
+    }
+
+    LaunchedEffect(bottomSignal, ready) {
+        if (ready && bottomSignal > 0) {
+            webView.evaluateJavascript("window.xtermBottom()", null)
+        }
     }
 
     LaunchedEffect(focusSignal, ready) {
