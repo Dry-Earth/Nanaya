@@ -89,6 +89,12 @@ object DroidspacesTerminals {
         private val _connected = MutableStateFlow(false)
         val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
+        private val _transport = MutableStateFlow("连接中")
+        val transport: StateFlow<String> = _transport.asStateFlow()
+
+        private val _note = MutableStateFlow("")
+        val note: StateFlow<String> = _note.asStateFlow()
+
         private val input = Channel<ByteArray>(Channel.UNLIMITED)
         private var writerJob: Job? = null
         private var pipeSized = false
@@ -140,13 +146,17 @@ object DroidspacesTerminals {
                 val stream: java.io.InputStream
                 if (channel != null) {
                     pty = channel
+                    _transport.value = "宿主 PTY"
                     stream = channel.input
                     connected()
                 } else {
+                    _transport.value = "管道回退"
+                    _note.value = PtyBridge.lastError.ifBlank { "未启用宿主 PTY" }
                     val p = withContext(Dispatchers.IO) {
                         DroidspacesRepository.openTerminal(name)
                     }
                     if (p == null) {
+                        _transport.value = "启动失败"
                         fail("无法启动容器终端。\nDroidspaces 终端需要 Root。")
                         onStateChanged?.invoke()
                         return@launch
@@ -180,6 +190,7 @@ object DroidspacesTerminals {
                     pty = null
                     process = null
                     _connected.value = false
+                    _transport.value = "已结束"
                     withContext(Dispatchers.Main) {
                         append("\n[会话结束]\n")
                     }

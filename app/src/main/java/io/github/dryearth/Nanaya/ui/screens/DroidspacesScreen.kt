@@ -93,6 +93,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
     var terminalFor by remember { mutableStateOf<String?>(null) }
+    var commandFor by remember { mutableStateOf<String?>(null) }
     val activeTerminals by DroidspacesTerminals.active.collectAsState()
 
     fun reload() {
@@ -205,6 +206,12 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     BackHandler(enabled = terminalFor != null) { terminalFor = null }
     terminalFor?.let { name ->
         DroidspacesTerminalScreen(containerName = name, onBack = { terminalFor = null })
+        return
+    }
+
+    BackHandler(enabled = commandFor != null) { commandFor = null }
+    commandFor?.let { name ->
+        DroidspacesCommandScreen(containerName = name, onBack = { commandFor = null })
         return
     }
 
@@ -397,6 +404,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                         expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
                     },
                     onOpenTerminal = { terminalFor = container.name },
+                    onOpenCommand = { commandFor = container.name },
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
                     },
@@ -447,6 +455,7 @@ private fun ContainerCard(
     onStopApp: (DsApp) -> Unit,
     onServiceAction: (DsService, String) -> Unit,
     onOpenTerminal: () -> Unit,
+    onOpenCommand: () -> Unit,
     onOpenDesktop: () -> Unit,
     hasTerminal: Boolean,
     expandedPids: Set<String>,
@@ -546,6 +555,12 @@ private fun ContainerCard(
                 enabled = container.running,
                 modifier = Modifier.weight(1f),
                 onClick = onOpenTerminal,
+            )
+            ActionButton(
+                "命令",
+                enabled = container.running,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenCommand,
             )
         }
 

@@ -222,6 +222,21 @@ object DroidspacesRepository {
         return PtyBridge.open(su, command, cols, rows)
     }
 
+    /**
+     * One-off command through `droidspaces --name=<name> run '<command>'`.
+     * No PTY is allocated, so this is for queries and batch jobs; interactive
+     * programs still belong in the terminal.
+     */
+    suspend fun runCommand(
+        name: String,
+        command: String,
+        timeoutMs: Long = 120_000,
+    ): ShellResult = withContext(Dispatchers.IO) {
+        if (!validContainer(name)) return@withContext ShellResult(2, "", "容器名不合法")
+        if (command.isBlank()) return@withContext ShellResult(2, "", "命令为空")
+        runIn(name, command, timeoutMs)
+    }
+
     suspend fun start(name: String): String? = withContext(Dispatchers.IO) {
         val r = Shell.run("$BINARY --name=${quote(name)} start", 120_000)
         if (r.ok) null else r.text.ifBlank { "启动失败（${r.code}）" }

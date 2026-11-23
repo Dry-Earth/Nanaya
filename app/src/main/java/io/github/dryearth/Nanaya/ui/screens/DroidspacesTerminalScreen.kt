@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -52,11 +53,18 @@ fun DroidspacesTerminalScreen(
         DroidspacesTerminals.getOrOpen(context, containerName)
     }
     val connected by session.connected.collectAsState()
+    val transport by session.transport.collectAsState()
+    val note by session.note.collectAsState()
+    val keyboard = LocalSoftwareKeyboardController.current
     val controller = remember { XtermController() }
     var lastCols by remember { mutableIntStateOf(0) }
     var lastRows by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val imeBottom = WindowInsets.ime.getBottom(density)
+
+    // The list screen may still have its filter keyboard open; start the
+    // terminal full height instead of inheriting it.
+    LaunchedEffect(Unit) { keyboard?.hide() }
 
     // The WebView's own resize event is not always delivered while the IME
     // animates in, so refit explicitly after the insets settle.
@@ -92,9 +100,9 @@ fun DroidspacesTerminalScreen(
                 )
                 Text(
                     if (lastCols > 0 && lastRows > 0) {
-                        "容器终端 · ${lastCols}×${lastRows}"
+                        "$transport · ${lastCols}×${lastRows}"
                     } else {
-                        "容器终端 · 正在测量窗口"
+                        "$transport · 正在测量窗口"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Glass.Muted,
@@ -165,7 +173,9 @@ fun DroidspacesTerminalScreen(
             key("PgDn", Glass.Muted, "\u001b[6~")
             key("Enter", Glass.Accent, "\r")
             key("清屏", Glass.Faint, "\u000c")
-            Pill("键盘", color = Glass.Mint) { controller.focus() }
+            Pill(if (imeBottom > 0) "收起键盘" else "键盘", color = Glass.Mint) {
+                if (imeBottom > 0) keyboard?.hide() else controller.focus()
+            }
             Pill("复制", color = Glass.Mint) { controller.copy() }
             Pill("粘贴", color = Glass.Accent) { controller.paste() }
             Pill("上翻", color = Glass.Muted) { controller.scrollPages(-1) }

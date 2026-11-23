@@ -14,7 +14,12 @@ import java.io.FileOutputStream
  * the master with TIOCSWINSZ reaches the container through SIGWINCH.
  */
 object PtyBridge {
-    private val loaded: Boolean = runCatching { System.loadLibrary("ptybridge") }.isSuccess
+    @Volatile var lastError: String = ""
+        private set
+
+    private val loaded: Boolean = runCatching { System.loadLibrary("ptybridge") }
+        .onFailure { lastError = "libptybridge 加载失败：${it.message ?: it.javaClass.simpleName}" }
+        .isSuccess
     val available: Boolean get() = loaded
 
     private external fun nativeOpen(
@@ -29,14 +34,32 @@ object PtyBridge {
     private external fun nativeSignal(pid: Int, signal: Int): Int
 
     fun open(suPath: String, command: String, cols: Int, rows: Int): Channel? {
-        if (!loaded) return null
-        val values = runCatching { nativeOpen(suPath, command, cols, rows) }.getOrNull()
-            ?: return null
-        if (values.size < 2 || values[0] < 0 || values[1] <= 0) return null
-        val channel = runCatching { Channel(values[0], values[1]) }.getOrNull()
-        if (channel == null) {
+        lastError = ""
+        if (!loaded) {
+            lastError = "libptybridge 未加载"
+            return null
+        }
+        val values = try {
+            nativeOpen(suPath, command, cols, rows)
+        } catch (e: Throwable) {
+            lastError = "nativeOpen 异常：${e.message ?: e.javaClass.simpleName}"
+            return null
+        }
+        if (values == null) {
+            lastError = "nativeOpen 返回空（posix_openpt/fork 失败）"
+            return null
+        }
+        if (values.size < 2 || values[0] < 0 || values[1] <= 0) {
+            lastError = "nativeOpen 返回值无效"
+            return null
+        }
+        val channel = try {
+            Channel(values[0], values[1])
+        } catch (e: Throwable) {
+            lastError = "PTY 通道初始化失败：${e.message ?: e.javaClass.simpleName}"
             runCatching { ParcelFileDescriptor.adoptFd(values[0]).close() }
             runCatching { nativeSignal(values[1], 9) }
+            null
         }
         return channel
     }
