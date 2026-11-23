@@ -1,5 +1,6 @@
 package io.github.dryearth.Nanaya.ui.screens
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,6 +37,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -43,7 +45,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -63,6 +67,8 @@ fun DroidspacesTerminalScreen(
     var command by remember { mutableStateOf("") }
     val scroll = rememberScrollState()
     val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val hasHardwareKeyboard = LocalConfiguration.current.keyboard != Configuration.KEYBOARD_NOKEYS
 
     fun write(text: String) = session.write(text)
 
@@ -71,10 +77,14 @@ fun DroidspacesTerminalScreen(
         command = ""
     }
 
-    LaunchedEffect(connected) {
+    LaunchedEffect(connected, hasHardwareKeyboard) {
         if (connected) {
             kotlinx.coroutines.delay(120)
             runCatching { focus.requestFocus() }
+            if (hasHardwareKeyboard) {
+                kotlinx.coroutines.delay(80)
+                keyboard?.hide()
+            }
         }
     }
 
@@ -112,6 +122,11 @@ fun DroidspacesTerminalScreen(
                 selected = connected,
                 color = if (connected) Glass.Mint else Glass.Amber,
             )
+            Spacer(Modifier.width(8.dp))
+            Pill("键盘", color = Glass.Accent) {
+                focus.requestFocus()
+                keyboard?.show()
+            }
             Spacer(Modifier.width(8.dp))
             Pill("结束", color = Glass.Rose) {
                 DroidspacesTerminals.close(containerName)
@@ -174,10 +189,25 @@ fun DroidspacesTerminalScreen(
                             .weight(1f)
                             .focusRequester(focus)
                             .onPreviewKeyEvent { event ->
-                                if (
-                                    event.type == KeyEventType.KeyDown &&
-                                    (event.key == Key.Enter || event.key == Key.NumPadEnter)
-                                ) {
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                if (event.isCtrlPressed) {
+                                    when (event.key) {
+                                        Key.C -> {
+                                            write("\u0003")
+                                            command = ""
+                                            true
+                                        }
+                                        Key.D -> {
+                                            write("\u0004")
+                                            true
+                                        }
+                                        Key.L -> {
+                                            write("\u000C")
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                } else if (event.key == Key.Enter || event.key == Key.NumPadEnter) {
                                     submit()
                                     true
                                 } else {
@@ -202,7 +232,11 @@ fun DroidspacesTerminalScreen(
         }
 
         Text(
-            "输入框支持多行自动换行，长命令不会被截断。返回列表后会话仍在，按钮会显示「回到终端」。",
+            if (hasHardwareKeyboard) {
+                "检测到物理键盘，软键盘默认不弹出；点「键盘」可手动显示。返回列表后会话仍在，按钮会显示「回到终端」。"
+            } else {
+                "输入框支持多行自动换行，长命令不会被截断。返回列表后会话仍在，按钮会显示「回到终端」。"
+            },
             style = MaterialTheme.typography.labelSmall,
             color = Glass.Faint,
         )
