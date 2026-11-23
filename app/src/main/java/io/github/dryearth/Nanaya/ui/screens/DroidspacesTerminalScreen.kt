@@ -98,7 +98,6 @@ fun DroidspacesTerminalScreen(
         }
         process = p
         connected = true
-        focus.requestFocus()
         try {
             withContext(Dispatchers.IO) {
                 val buffer = ByteArray(4096)
@@ -129,6 +128,13 @@ fun DroidspacesTerminalScreen(
     DisposableEffect(Unit) {
         onDispose {
             runCatching { process?.destroy() }
+        }
+    }
+
+    LaunchedEffect(connected) {
+        if (connected) {
+            kotlinx.coroutines.delay(120)
+            runCatching { focus.requestFocus() }
         }
     }
 

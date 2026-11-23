@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.dryearth.Nanaya.core.DroidspacesDesktop
 import io.github.dryearth.Nanaya.core.DroidspacesRepository
 import io.github.dryearth.Nanaya.core.DsApp
 import io.github.dryearth.Nanaya.core.DsContainer
@@ -99,7 +100,16 @@ fun DroidspacesScreen(onBack: () -> Unit) {
         panelLoading = true
         scope.launch {
             when (kind) {
-                "app" -> apps = withContext(Dispatchers.IO) { DroidspacesRepository.apps(container.name) }
+                "app" -> {
+                    val loadedApps = withContext(Dispatchers.IO) {
+                        DroidspacesRepository.apps(container.name)
+                    }
+                    val loadedProcesses = withContext(Dispatchers.IO) {
+                        DroidspacesRepository.processes(container.name)
+                    }
+                    apps = loadedApps
+                    processes = loadedProcesses
+                }
                 "service" -> {
                     val (init, list) = withContext(Dispatchers.IO) {
                         DroidspacesRepository.services(container.name)
@@ -340,11 +350,22 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                         }
                     },
                     onServiceAction = { service, action ->
-                        operation("服务 $action") {
-                            DroidspacesRepository.serviceAction(container.name, initType, service.name, action)
+                        if (action == "stop" && essentialService(service.name)) {
+                            askConfirm("停止系统服务", service.name) {
+                                operation("停止服务") {
+                                    DroidspacesRepository.serviceAction(container.name, initType, service.name, action)
+                                }
+                            }
+                        } else {
+                            operation("服务 $action") {
+                                DroidspacesRepository.serviceAction(container.name, initType, service.name, action)
+                            }
                         }
                     },
                     onOpenTerminal = { terminalFor = container.name },
+                    onOpenDesktop = {
+                        message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
+                    },
                 )
             }
             if (containers.isEmpty() && !loading && snapshot?.binaryFound == true) {
@@ -407,6 +428,7 @@ private fun ContainerCard(
     onStopApp: (DsApp) -> Unit,
     onServiceAction: (DsService, String) -> Unit,
     onOpenTerminal: () -> Unit,
+    onOpenDesktop: () -> Unit,
 ) {
     GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
         Row(
@@ -463,23 +485,35 @@ private fun ContainerCard(
 
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!container.running) {
+                ActionButton(
+                    "启动",
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    onClick = onStart,
+                )
+            } else {
+                ActionButton(
+                    "停止",
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    onClick = onStop,
+                )
+                ActionButton(
+                    "重启",
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    onClick = onRestart,
+                )
+            }
+        }
+        if (container.running && (container.x11 || container.anlandSock.isNotBlank())) {
+            Spacer(Modifier.height(6.dp))
             ActionButton(
-                "启动",
-                enabled = !busy && !container.running,
-                modifier = Modifier.weight(1f),
-                onClick = onStart,
-            )
-            ActionButton(
-                "停止",
-                enabled = !busy && container.running,
-                modifier = Modifier.weight(1f),
-                onClick = onStop,
-            )
-            ActionButton(
-                "重启",
-                enabled = !busy && container.running,
-                modifier = Modifier.weight(1f),
-                onClick = onRestart,
+                "打开桌面",
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onOpenDesktop,
             )
         }
 
@@ -540,18 +574,30 @@ private fun ContainerCard(
                     )
                 }
                 apps.take(80).forEach { app ->
+                    val running = appIsRunning(app, processes)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(
-                                app.name,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Glass.Text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    app.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Glass.Text,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (app.systemApp) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "系统",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Glass.Faint,
+                                    )
+                                }
+                            }
                             Text(
                                 app.exec,
                                 style = TextStyle(
@@ -563,18 +609,21 @@ private fun ContainerCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Text(
-                            "打开",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Accent,
-                            modifier = Modifier.clickable { onStartApp(app) }.padding(horizontal = 5.dp),
-                        )
-                        Text(
-                            "关闭",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Rose,
-                            modifier = Modifier.clickable { onStopApp(app) }.padding(horizontal = 5.dp),
-                        )
+                        if (running) {
+                            Text(
+                                "关闭",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Rose,
+                                modifier = Modifier.clickable { onStopApp(app) }.padding(horizontal = 5.dp),
+                            )
+                        } else {
+                            Text(
+                                "打开",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Accent,
+                                modifier = Modifier.clickable { onStartApp(app) }.padding(horizontal = 5.dp),
+                            )
+                        }
                     }
                 }
                 Text(
@@ -597,40 +646,61 @@ private fun ContainerCard(
                     )
                 }
                 services.take(100).forEach { service ->
+                    val state = service.state.lowercase()
+                    val running = state.contains("active") || state.contains("running") ||
+                        state.contains("started")
+                    val stopped = state.contains("inactive") || state.contains("stopped") ||
+                        state.contains("down") || state.contains("dead")
+                    val essential = essentialService(service.name)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(
-                                service.name,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Glass.Text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    service.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Glass.Text,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (essential) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "系统",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Glass.Faint,
+                                    )
+                                }
+                            }
                             Text(
                                 service.state,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Glass.Faint,
                             )
                         }
-                        Text(
-                            "启动",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Accent,
-                            modifier = Modifier
-                                .clickable { onServiceAction(service, "start") }
-                                .padding(horizontal = 5.dp),
-                        )
-                        Text(
-                            "停止",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Rose,
-                            modifier = Modifier
-                                .clickable { onServiceAction(service, "stop") }
-                                .padding(horizontal = 5.dp),
-                        )
+                        if (!running) {
+                            Text(
+                                "启动",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Accent,
+                                modifier = Modifier
+                                    .clickable { onServiceAction(service, "start") }
+                                    .padding(horizontal = 5.dp),
+                            )
+                        }
+                        if (running || !stopped) {
+                            Text(
+                                "停止",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Rose,
+                                modifier = Modifier
+                                    .clickable { onServiceAction(service, "stop") }
+                                    .padding(horizontal = 5.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -643,21 +713,33 @@ private fun ContainerCard(
                     )
                 }
                 processes.take(60).forEach { process ->
+                    val essential = essentialProcess(process)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(
-                                "${process.name} · ${process.pid}",
-                                style = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                ),
-                                color = Glass.Text,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${process.name} · ${process.pid}",
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                    ),
+                                    color = Glass.Text,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                if (essential) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "系统",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Glass.Faint,
+                                    )
+                                }
+                            }
                             Text(
                                 process.args.ifBlank { process.user },
                                 style = TextStyle(
@@ -669,14 +751,16 @@ private fun ContainerCard(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        Text(
-                            "结束",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Glass.Rose,
-                            modifier = Modifier
-                                .clickable { onKillProcess(process) }
-                                .padding(horizontal = 5.dp),
-                        )
+                        if (!essential) {
+                            Text(
+                                "结束",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Rose,
+                                modifier = Modifier
+                                    .clickable { onKillProcess(process) }
+                                    .padding(horizontal = 5.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -729,4 +813,38 @@ private fun formatKb(kb: Long): String {
 private fun formatBytes(bytes: Long): String {
     val gb = bytes / (1024.0 * 1024.0 * 1024.0)
     return if (gb >= 1) String.format("%.1f GB", gb) else String.format("%.0f MB", bytes / (1024.0 * 1024.0))
+}
+
+private fun appIsRunning(app: DsApp, processes: List<DsProcess>): Boolean {
+    val token = app.exec.substringBefore(' ').substringAfterLast('/').lowercase()
+    if (token.isBlank()) return false
+    return processes.any { process ->
+        process.name.lowercase() == token ||
+            process.args.split(Regex("\\s+")).any {
+                it.substringAfterLast('/').lowercase() == token
+            }
+    }
+}
+
+private fun essentialProcess(process: DsProcess): Boolean {
+    if (process.pid == "1" || process.pid == "2") return true
+    val name = process.name.lowercase()
+    if (name.startsWith("[")) return true
+    return name in setOf(
+        "systemd", "init", "kthreadd", "systemd-journald", "systemd-udevd",
+        "systemd-logind", "dbus-daemon", "dbus-broker", "sshd", "cron",
+        "rsyslogd", "agetty", "login", "seatd", "elogind",
+    )
+}
+
+private fun essentialService(name: String): Boolean {
+    val unit = name.substringBefore('@').lowercase()
+    return unit.startsWith("systemd-") ||
+        unit.startsWith("dbus") ||
+        unit.startsWith("polkit") ||
+        unit.startsWith("udev") ||
+        unit in setOf(
+            "systemd", "init", "networkmanager", "wpa_supplicant", "connman",
+            "sshd", "cron", "rsyslog", "elogind", "seatd", "getty",
+        )
 }

@@ -23,6 +23,7 @@ data class DsContainer(
     val gpu: Boolean,
     val x11: Boolean,
     val anland: Boolean,
+    val anlandSock: String,
     val memoryLimit: Long,
     val cpus: String,
     val pidsLimit: Long,
@@ -45,6 +46,7 @@ data class DsApp(
     val name: String,
     val exec: String,
     val desktopId: String,
+    val systemApp: Boolean = false,
 )
 
 data class DsSnapshot(
@@ -133,6 +135,7 @@ object DroidspacesRepository {
                 gpu = config["enable_gpu_mode"] == "1",
                 x11 = config["enable_x11"] == "1",
                 anland = config["enable_anland"] == "1",
+                anlandSock = live?.optString("anland_sock").orEmpty(),
                 memoryLimit = config["memory_limit"]?.toLongOrNull() ?: 0L,
                 cpus = config["cpu_quota"].orEmpty(),
                 pidsLimit = config["pids_limit"]?.toLongOrNull() ?: 0L,
@@ -162,6 +165,7 @@ object DroidspacesRepository {
                 gpu = false,
                 x11 = live.optInt("x11") == 1,
                 anland = live.optString("anland_sock").isNotBlank(),
+                anlandSock = live.optString("anland_sock"),
                 memoryLimit = 0L,
                 cpus = "",
                 pidsLimit = 0L,
@@ -191,7 +195,7 @@ object DroidspacesRepository {
 
     fun openTerminal(name: String): Process? {
         if (!validContainer(name)) return null
-        val command = "export TERM=xterm-256color COLUMNS=100 LINES=40; " +
+        val command = "export DS_NO_PROXY=1 TERM=xterm-256color COLUMNS=100 LINES=40; " +
             "exec $BINARY --name=${quote(name)} enter"
         return Shell.interactiveProcess(command)
     }
@@ -272,14 +276,35 @@ object DroidspacesRepository {
                 }.toList()
             }
             "openrc" -> {
-                val r = runIn(name, "rc-service --list 2>/dev/null", 15_000)
-                r.out.lineSequence().map { it.trim() }.filter { it.isNotBlank() }
-                    .map { DsService(it, "状态未知") }.toList()
+                val r = runIn(name, "rc-status --all --color=no 2>/dev/null", 15_000)
+                r.out.lineSequence().mapNotNull { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("Runlevel:") || trimmed.startsWith("Dynamic")) {
+                        return@mapNotNull null
+                    }
+                    val match = Regex("^(\\S+)\\s+\\[([^]]+)]").find(trimmed)
+                        ?: return@mapNotNull null
+                    DsService(match.groupValues[1], match.groupValues[2])
+                }.toList()
             }
             "runit" -> {
-                val r = runIn(name, "ls -1 /etc/service /var/service 2>/dev/null", 10_000)
-                r.out.lineSequence().map { it.trim() }.filter { it.isNotBlank() }
-                    .distinct().map { DsService(it, "状态未知") }.toList()
+                val script = """
+                    for s in ${'$'}(ls -1 /etc/service /var/service 2>/dev/null | sort -u); do
+                      st=${'$'}(sv status "${'$'}s" 2>/dev/null | head -1)
+                      [ -n "${'$'}st" ] && echo "${'$'}s|${'$'}st"
+                    done | head -120
+                """.trimIndent()
+                val r = runIn(name, script, 15_000)
+                r.out.lineSequence().mapNotNull { line ->
+                    val parts = line.split('|', limit = 2)
+                    if (parts.size < 2) return@mapNotNull null
+                    val state = when {
+                        parts[1].startsWith("run:") -> "running"
+                        parts[1].startsWith("down:") || parts[1].startsWith("fail:") -> "stopped"
+                        else -> "状态未知"
+                    }
+                    DsService(parts[0], state)
+                }.toList()
             }
             "initd" -> {
                 val r = runIn(name, "ls -1 /etc/init.d 2>/dev/null", 10_000)
@@ -299,7 +324,8 @@ object DroidspacesRepository {
             val command = when (init) {
                 "systemd" -> "systemctl $action ${quote("$service.service")} 2>&1"
                 "openrc" -> "rc-service ${quote(service)} $action 2>&1"
-                "runit" -> "sv $action ${quote(service)} 2>&1"
+                "runit" -> "sv $action ${quote("/etc/service/$service")} 2>&1 || " +
+                    "sv $action ${quote("/var/service/$service")} 2>&1"
                 else -> "/etc/init.d/${quote(service)} $action 2>&1"
             }
             val r = runIn(name, command, 20_000)
@@ -313,14 +339,19 @@ object DroidspacesRepository {
               grep -q '^NoDisplay=true' "${'$'}f" && continue
               n=${'$'}(grep -m1 '^Name=' "${'$'}f" | cut -d= -f2-)
               e=${'$'}(grep -m1 '^Exec=' "${'$'}f" | cut -d= -f2-)
-              [ -n "${'$'}n" ] && [ -n "${'$'}e" ] && printf '%s\t%s\t%s\n' "${'$'}n" "${'$'}e" "${'$'}(basename "${'$'}f" .desktop)"
+              [ -n "${'$'}n" ] && [ -n "${'$'}e" ] && printf '%s\t%s\t%s\t%s\n' "${'$'}n" "${'$'}e" "${'$'}(basename "${'$'}f" .desktop)" "${'$'}f"
             done | head -80
         """.trimIndent()
         val r = runIn(name, script, 15_000)
         r.out.lineSequence().mapNotNull { line ->
             val parts = line.split('\t')
-            if (parts.size < 3) return@mapNotNull null
-            DsApp(parts[0], parts[1], parts[2])
+            if (parts.size < 4) return@mapNotNull null
+            DsApp(
+                name = parts[0],
+                exec = parts[1],
+                desktopId = parts[2],
+                systemApp = parts[3].startsWith("/usr/share/"),
+            )
         }.toList()
     }
 
@@ -392,5 +423,7 @@ fun DsContainer.mergeLive(live: JSONObject?): DsContainer {
         ramUsedKb = live.optLong("ram_used_kb"),
         ramLimitKb = live.optLong("ram_limit_kb"),
         cpuLimitPermill = live.optLong("cpu_limit_permill"),
+        anlandSock = live.optString("anland_sock"),
+        anland = anland || live.optString("anland_sock").isNotBlank(),
     )
 }
