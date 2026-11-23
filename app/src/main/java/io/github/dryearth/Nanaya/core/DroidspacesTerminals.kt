@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,10 +15,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * A snapshot of the raw terminal byte stream. [revision] is the number of
+ * characters ever emitted, so a re-attached xterm can replay only the part it
+ * has not seen even after the front of [text] has been trimmed.
+ */
+data class TerminalFrame(
+    val revision: Long,
+    val text: String,
+)
+
+/**
  * Long-lived container terminal sessions. Leaving the terminal screen no longer
  * kills the shell; the card can show "回到终端" while the process is alive.
  */
 object DroidspacesTerminals {
+    private const val MAX_BUFFER = 240_000
+
     private val sessions = mutableMapOf<String, Session>()
     private var appContext: Context? = null
     private val _active = MutableStateFlow<Set<String>>(emptySet())
@@ -65,18 +78,45 @@ object DroidspacesTerminals {
         private var readerJob: Job? = null
         internal var onStateChanged: (() -> Unit)? = null
 
-        private val _output = MutableStateFlow("")
-        val output: StateFlow<String> = _output.asStateFlow()
+        private val buffer = StringBuilder()
+        private var emitted = 0L
+        private val _frame = MutableStateFlow(TerminalFrame(0, ""))
+        val frame: StateFlow<TerminalFrame> = _frame.asStateFlow()
 
         private val _connected = MutableStateFlow(false)
         val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
+        private val input = Channel<ByteArray>(Channel.UNLIMITED)
+        private var writerJob: Job? = null
+
+        /** The guest PTY starts at 0x0 because the host side is a pipe. */
+        internal var sized = false
+            private set
+
         internal fun fail(message: String) {
-            _output.value = message
+            append(message)
             _connected.value = false
         }
 
+        private fun append(text: String) {
+            buffer.append(text)
+            if (buffer.length > MAX_BUFFER) {
+                buffer.delete(0, buffer.length - MAX_BUFFER)
+            }
+            emitted += text.length
+            _frame.value = TerminalFrame(emitted, buffer.toString())
+        }
+
         internal fun start() {
+            writerJob = scope.launch(Dispatchers.IO) {
+                for (bytes in input) {
+                    val p = process ?: continue
+                    runCatching {
+                        p.outputStream.write(bytes)
+                        p.outputStream.flush()
+                    }
+                }
+            }
             readerJob = scope.launch {
                 val p = withContext(Dispatchers.IO) {
                     DroidspacesRepository.openTerminal(name)
@@ -91,27 +131,28 @@ object DroidspacesTerminals {
                 onStateChanged?.invoke()
                 try {
                     withContext(Dispatchers.IO) {
-                        val buffer = ByteArray(4096)
+                        val reader = p.inputStream.reader(Charsets.UTF_8)
+                        val chars = CharArray(8192)
                         while (isActive) {
-                            val read = p.inputStream.read(buffer)
+                            // The reader keeps partial UTF-8 sequences between
+                            // reads, so split escape output is not corrupted.
+                            val read = reader.read(chars)
                             if (read <= 0) break
-                            val text = String(buffer, 0, read, Charsets.UTF_8)
+                            val text = String(chars, 0, read)
                             if (text.isNotEmpty()) {
-                                withContext(Dispatchers.Main) {
-                                    _output.value = (_output.value + text).takeLast(240_000)
-                                }
+                                withContext(Dispatchers.Main) { append(text) }
                             }
                         }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        _output.value += "\n[终端错误：${e.message ?: "读取失败"}]"
+                        append("\n[终端错误：${e.message ?: "读取失败"}]\n")
                     }
                 } finally {
                     process = null
                     _connected.value = false
                     withContext(Dispatchers.Main) {
-                        _output.value += "\n[会话结束]"
+                        append("\n[会话结束]\n")
                     }
                     onStateChanged?.invoke()
                 }
@@ -119,13 +160,29 @@ object DroidspacesTerminals {
         }
 
         fun write(text: String) {
-            val p = process ?: return
-            scope.launch(Dispatchers.IO) {
-                runCatching {
-                    p.outputStream.write(text.toByteArray(Charsets.UTF_8))
-                    p.outputStream.flush()
-                }
-            }
+            if (text.isEmpty() || !_connected.value) return
+            input.trySend(text.toByteArray(Charsets.UTF_8))
+        }
+
+        /**
+         * The container's PTY inherits its size from the host stdin, which is a
+         * pipe here, so it comes up as 0x0 and full-screen tools (top, htop,
+         * vi) draw nothing. Set the size once per shell session and clear the
+         * echoed setup line.
+         */
+        fun applySize(cols: Int, rows: Int) {
+            // xterm's fit addon can report a 1x1 grid before the WebView has
+            // been laid out; never let that become the guest PTY size.
+            if (cols < 20 || rows < 5) return
+            if (sized || !_connected.value) return
+            sized = true
+            write("export TERM=xterm-256color; stty rows $rows cols $cols 2>/dev/null; printf '\\033[2J\\033[H'\r")
+        }
+
+        /** Manual re-sync after the on-screen keyboard or rotation changed the grid. */
+        fun forceSize(cols: Int, rows: Int) {
+            if (cols < 20 || rows < 5 || !_connected.value) return
+            write("stty rows $rows cols $cols 2>/dev/null\r")
         }
 
         fun close() {
@@ -134,6 +191,9 @@ object DroidspacesTerminals {
             _connected.value = false
             readerJob?.cancel()
             readerJob = null
+            writerJob?.cancel()
+            writerJob = null
+            input.close()
             scope.coroutineContext[Job]?.cancel()
             onStateChanged?.invoke()
         }

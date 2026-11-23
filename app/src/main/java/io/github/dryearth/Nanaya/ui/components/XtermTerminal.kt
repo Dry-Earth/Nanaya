@@ -9,9 +9,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import io.github.dryearth.Nanaya.core.TerminalFrame
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -31,19 +32,19 @@ import kotlinx.coroutines.flow.StateFlow
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun XtermTerminal(
-    output: StateFlow<String>,
+    frame: StateFlow<TerminalFrame>,
     connected: StateFlow<Boolean>,
     onWrite: (String) -> Unit,
+    onSize: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
+    focusSignal: Int = 0,
 ) {
     val context = LocalContext.current
-    val rawOutput by output.collectAsState()
+    val currentFrame by frame.collectAsState()
     val isConnected by connected.collectAsState()
 
     var ready by remember { mutableStateOf(false) }
-    var sentChars by remember { mutableStateOf(0) }
-    var pendingSize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var sizeApplied by remember { mutableStateOf(false) }
+    var sentRevision by remember { mutableStateOf(0L) }
 
     val webView = remember {
         WebView(context).apply {
@@ -78,16 +79,14 @@ fun XtermTerminal(
 
             @JavascriptInterface
             fun resize(cols: Int, rows: Int) {
-                webView.post {
-                    pendingSize = cols to rows
-                }
+                webView.post { onSize(cols, rows) }
             }
 
             @JavascriptInterface
             fun ready() {
                 webView.post {
                     ready = true
-                    sentChars = 0
+                    sentRevision = 0
                 }
             }
         }
@@ -95,29 +94,36 @@ fun XtermTerminal(
         webView.loadUrl("file:///android_asset/xterm/index.html")
     }
 
-    // Size the guest PTY once. The Droidspaces PTY is created inside the
-    // container, so the host pipe has no winsize; stty is the reliable way.
-    LaunchedEffect(pendingSize, ready, isConnected, sizeApplied) {
-        val size = pendingSize ?: return@LaunchedEffect
-        if (!ready || !isConnected || sizeApplied) return@LaunchedEffect
-        if (size.first > 0 && size.second > 0) {
-            onWrite("stty rows ${size.second} cols ${size.first} 2>/dev/null\n")
-            sizeApplied = true
+    LaunchedEffect(focusSignal, ready) {
+        if (ready && focusSignal > 0) {
+            webView.evaluateJavascript("window.xtermFocus()", null)
         }
     }
 
-    LaunchedEffect(rawOutput, ready) {
+    // Replay only the unseen tail. When the buffer has been trimmed the frame
+    // revision tells us the client fell behind, so reset and redraw the buffer.
+    LaunchedEffect(currentFrame, ready) {
         if (!ready) return@LaunchedEffect
-        val current = rawOutput
-        if (current.length < sentChars) {
+        val snapshot = currentFrame
+        val start = snapshot.revision - snapshot.text.length
+        if (sentRevision < start) {
             webView.evaluateJavascript("window.xtermReset()", null)
-            sentChars = 0
+            sentRevision = start
         }
-        if (current.length > sentChars) {
-            val delta = current.substring(sentChars)
+        val offset = (sentRevision - start).toInt().coerceIn(0, snapshot.text.length)
+        if (snapshot.text.length > offset) {
+            val delta = snapshot.text.substring(offset)
             val encoded = Base64.encodeToString(delta.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
             webView.evaluateJavascript("window.xtermWrite('$encoded')", null)
-            sentChars = current.length
+            sentRevision = snapshot.revision
+        }
+    }
+
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            // Give the fit addon a moment to report the real grid.
+            kotlinx.coroutines.delay(150)
+            webView.evaluateJavascript("window.xtermFocus()", null)
         }
     }
 

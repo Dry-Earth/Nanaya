@@ -79,9 +79,14 @@
     try { fit.fit(); } catch (e) {}
   }
   requestAnimationFrame(doFit);
+  setTimeout(doFit, 200);
+  setTimeout(doFit, 700);
   window.addEventListener("resize", doFit);
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", doFit);
+  }
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(doFit).observe(document.getElementById("term")); } catch (e) {}
   }
 
   term.onData(function (data) {
