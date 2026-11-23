@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.dryearth.Nanaya"
         minSdk = 33
         targetSdk = targetSdkValue
-        versionCode = 184
-        versionName = "0.8.87"
+        versionCode = 185
+        versionName = "0.8.88"
         vectorDrawables { useSupportLibrary = true }
         resValue("string", "app_name", "Nanaya")
         ndk {
