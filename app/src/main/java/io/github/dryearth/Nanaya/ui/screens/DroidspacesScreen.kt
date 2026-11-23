@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.DroidspacesDesktop
 import io.github.dryearth.Nanaya.core.DroidspacesRepository
+import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.core.DsApp
 import io.github.dryearth.Nanaya.core.DsContainer
 import io.github.dryearth.Nanaya.core.DsProcess
@@ -51,6 +53,7 @@ import io.github.dryearth.Nanaya.core.DsSnapshot
 import io.github.dryearth.Nanaya.core.Shell
 import io.github.dryearth.Nanaya.core.mergeLive
 import io.github.dryearth.Nanaya.ui.components.ActionButton
+import io.github.dryearth.Nanaya.ui.components.FlowingRefreshButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
@@ -84,6 +87,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
     var terminalFor by remember { mutableStateOf<String?>(null) }
+    val activeTerminals by DroidspacesTerminals.active.collectAsState()
 
     fun reload() {
         scope.launch {
@@ -206,6 +210,12 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                 Text("Droidspaces", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
                 Text("容器进程、应用与系统服务", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
             }
+            FlowingRefreshButton(
+                refreshing = loading,
+                onClick = { reload() },
+                modifier = Modifier.size(38.dp),
+            )
+            Spacer(Modifier.width(6.dp))
             Pill(
                 when {
                     busy -> "处理中"
@@ -305,7 +315,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     expanded = expanded == container.name,
                     tab = tab,
                     disk = disks[container.name].orEmpty(),
-                    loading = panelLoading,
+                    loading = panelLoading || (loading && expanded == container.name),
                     processes = processes,
                     apps = apps,
                     services = services,
@@ -318,15 +328,20 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     },
                     onStop = {
                         askConfirm("停止容器", container.name) {
+                            DroidspacesTerminals.close(container.name)
                             operation("停止") { DroidspacesRepository.stop(container.name) }
                         }
                     },
                     onRestart = {
                         askConfirm("重启容器", container.name) {
+                            DroidspacesTerminals.close(container.name)
                             operation("重启") { DroidspacesRepository.restart(container.name) }
                         }
                     },
-                    onRefresh = { reload() },
+                    onRefresh = {
+                        reload()
+                        if (container.running) loadTab(container, tab)
+                    },
                     onKillProcess = { process ->
                         askConfirm(
                             "结束进程",
@@ -366,6 +381,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
                     },
+                    hasTerminal = container.name in activeTerminals,
                 )
             }
             if (containers.isEmpty() && !loading && snapshot?.binaryFound == true) {
@@ -384,23 +400,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton(
-                "刷新容器",
-                enabled = !busy,
-                modifier = Modifier.weight(1f),
-                onClick = { reload() },
-            )
-            ActionButton(
-                "刷新当前",
-                enabled = !busy && expanded != null,
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    val container = snapshot?.containers?.firstOrNull { it.name == expanded }
-                    if (container != null) loadTab(container, tab) else reload()
-                },
-            )
-        }
     }
 }
 
@@ -429,6 +428,7 @@ private fun ContainerCard(
     onServiceAction: (DsService, String) -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenDesktop: () -> Unit,
+    hasTerminal: Boolean,
 ) {
     GlassPanel(corner = 16.dp, padding = PaddingValues(12.dp)) {
         Row(
@@ -507,13 +507,21 @@ private fun ContainerCard(
                 )
             }
         }
-        if (container.running && (container.x11 || container.anlandSock.isNotBlank())) {
-            Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (container.running && (container.x11 || container.anlandSock.isNotBlank())) {
+                ActionButton(
+                    "打开桌面",
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenDesktop,
+                )
+            }
             ActionButton(
-                "打开桌面",
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onOpenDesktop,
+                if (hasTerminal) "回到终端" else "终端",
+                enabled = container.running,
+                modifier = Modifier.weight(1f),
+                onClick = onOpenTerminal,
             )
         }
 
@@ -544,10 +552,11 @@ private fun ContainerCard(
             Pill("进程", selected = tab == "process", color = Glass.Accent) { onTab("process") }
             Pill("应用", selected = tab == "app", color = Glass.Violet) { onTab("app") }
             Pill("服务", selected = tab == "service", color = Glass.Mint) { onTab("service") }
-            if (container.running) {
-                Pill("终端", color = Glass.Accent) { onOpenTerminal() }
-            }
-            Pill("刷新", color = Glass.Faint) { onRefresh() }
+            FlowingRefreshButton(
+                refreshing = loading,
+                onClick = onRefresh,
+                modifier = Modifier.size(34.dp),
+            )
         }
 
         Spacer(Modifier.height(6.dp))
@@ -589,6 +598,14 @@ private fun ContainerCard(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
+                                if (running) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "运行中",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Glass.Mint,
+                                    )
+                                }
                                 if (app.systemApp) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(
@@ -611,7 +628,7 @@ private fun ContainerCard(
                         }
                         if (running) {
                             Text(
-                                "关闭",
+                                "终止",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Glass.Rose,
                                 modifier = Modifier.clickable { onStopApp(app) }.padding(horizontal = 5.dp),
@@ -649,8 +666,6 @@ private fun ContainerCard(
                     val state = service.state.lowercase()
                     val running = state.contains("active") || state.contains("running") ||
                         state.contains("started")
-                    val stopped = state.contains("inactive") || state.contains("stopped") ||
-                        state.contains("down") || state.contains("dead")
                     val essential = essentialService(service.name)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -681,23 +696,22 @@ private fun ContainerCard(
                                 color = Glass.Faint,
                             )
                         }
-                        if (!running) {
-                            Text(
-                                "启动",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Glass.Accent,
-                                modifier = Modifier
-                                    .clickable { onServiceAction(service, "start") }
-                                    .padding(horizontal = 5.dp),
-                            )
-                        }
-                        if (running || !stopped) {
+                        if (running) {
                             Text(
                                 "停止",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Glass.Rose,
                                 modifier = Modifier
                                     .clickable { onServiceAction(service, "stop") }
+                                    .padding(horizontal = 5.dp),
+                            )
+                        } else {
+                            Text(
+                                "启用",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Accent,
+                                modifier = Modifier
+                                    .clickable { onServiceAction(service, "start") }
                                     .padding(horizontal = 5.dp),
                             )
                         }
@@ -712,7 +726,7 @@ private fun ContainerCard(
                         color = Glass.Muted,
                     )
                 }
-                processes.take(60).forEach { process ->
+                processTree(processes).take(80).forEach { (process, depth) ->
                     val essential = essentialProcess(process)
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -721,7 +735,13 @@ private fun ContainerCard(
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "${process.name} · ${process.pid}",
+                                    buildString {
+                                        repeat(depth) { append("  ") }
+                                        if (depth > 0) append("└─")
+                                        append(process.name)
+                                        append(" · ")
+                                        append(process.pid)
+                                    },
                                     style = TextStyle(
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 11.sp,
@@ -847,4 +867,26 @@ private fun essentialService(name: String): Boolean {
             "systemd", "init", "networkmanager", "wpa_supplicant", "connman",
             "sshd", "cron", "rsyslog", "elogind", "seatd", "getty",
         )
+}
+
+private fun processTree(processes: List<DsProcess>): List<Pair<DsProcess, Int>> {
+    if (processes.isEmpty()) return emptyList()
+    val byPid = processes.associateBy { it.pid }
+    val children = processes.groupBy { it.ppid }
+    val visited = mutableSetOf<String>()
+    val result = mutableListOf<Pair<DsProcess, Int>>()
+    fun walk(process: DsProcess, depth: Int) {
+        if (!visited.add(process.pid)) return
+        result += process to depth
+        children[process.pid]
+            .orEmpty()
+            .sortedBy { it.pid.toIntOrNull() ?: 0 }
+            .forEach { walk(it, depth + 1) }
+    }
+    processes
+        .filter { it.ppid !in byPid || it.ppid == it.pid }
+        .sortedBy { it.pid.toIntOrNull() ?: 0 }
+        .forEach { walk(it, 0) }
+    processes.filter { it.pid !in visited }.forEach { walk(it, 0) }
+    return result
 }

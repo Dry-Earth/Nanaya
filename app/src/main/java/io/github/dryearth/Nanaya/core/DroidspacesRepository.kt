@@ -32,6 +32,7 @@ data class DsContainer(
 
 data class DsProcess(
     val pid: String,
+    val ppid: String,
     val user: String,
     val name: String,
     val args: String,
@@ -218,7 +219,7 @@ object DroidspacesRepository {
     suspend fun processes(name: String): List<DsProcess> = withContext(Dispatchers.IO) {
         val r = runIn(
             name,
-            "ps -eo pid,user,comm,args 2>/dev/null || ps -ef 2>/dev/null",
+            "ps -eo pid,ppid,user,comm,args 2>/dev/null || ps -ef 2>/dev/null",
             15_000,
         )
         if (!r.ok) return@withContext emptyList()
@@ -228,18 +229,25 @@ object DroidspacesRepository {
             if (trimmed.isBlank()) continue
             val first = trimmed.substringBefore(' ')
             if (first.equals("PID", true) || first.equals("UID", true)) continue
-            val match = Regex("^\\s*(\\d+)\\s+(\\S+)\\s+(\\S+)\\s*(.*)$").find(trimmed)
+            val match = Regex("^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(\\S+)\\s*(.*)$").find(trimmed)
             if (match != null) {
                 list += DsProcess(
                     pid = match.groupValues[1],
-                    user = match.groupValues[2],
-                    name = match.groupValues[3],
-                    args = match.groupValues[4],
+                    ppid = match.groupValues[2],
+                    user = match.groupValues[3],
+                    name = match.groupValues[4],
+                    args = match.groupValues[5],
                 )
             } else {
                 val old = Regex("^\\s*(\\S+)\\s+(\\d+)\\s+(\\d+).*?\\d\\d:\\d\\d\\s+(.*)$").find(trimmed)
                 if (old != null) {
-                    list += DsProcess(old.groupValues[2], old.groupValues[1], old.groupValues[4].substringBefore(' '), old.groupValues[4])
+                    list += DsProcess(
+                        pid = old.groupValues[2],
+                        ppid = old.groupValues[3],
+                        user = old.groupValues[1],
+                        name = old.groupValues[4].substringBefore(' '),
+                        args = old.groupValues[4],
+                    )
                 }
             }
         }
