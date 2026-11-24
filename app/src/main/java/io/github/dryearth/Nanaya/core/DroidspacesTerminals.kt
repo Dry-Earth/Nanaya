@@ -156,6 +156,25 @@ object DroidspacesTerminals {
             }
         }
 
+        private val handler = Handler(Looper.getMainLooper())
+        private var scriptSized = false
+
+        /**
+         * script creates the container PTY before the view knows its grid, so
+         * pin the inner PTY to the real size once the emulator exists.
+         */
+        fun syncContainerTty() {
+            if (scriptSized) return
+            val emulator = terminalSession.emulator ?: return
+            val rows = emulator.mRows
+            val cols = emulator.mColumns
+            if (rows < 5 || cols < 20) return
+            scriptSized = true
+            handler.postDelayed({
+                write("stty rows $rows cols $cols 2>/dev/null\r")
+            }, 700)
+        }
+
         val terminalSession: TerminalSession = TerminalSession(
             "su",
             "/",

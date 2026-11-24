@@ -197,10 +197,16 @@ object DroidspacesRepository {
 
     private fun terminalCommand(name: String): String? {
         if (!validContainer(name)) return null
-        // Do not export COLUMNS/LINES: ncurses (htop, top, vi) gives them
-        // priority over the real PTY size.
+        // Do not use `droidspaces enter`: its session/PTY teardown is what
+        // crashes on some devices when the terminal closes. Instead `run
+        // --stdin` executes one command inside the container, and `script`
+        // allocates the PTY *inside* the container for the login shell. The
+        // host PTY only relays bytes, so closing it cannot tear down an enter
+        // session.
+        val loginShell = "export TERM=xterm-256color; exec su -l root"
         return "export DS_NO_PROXY=1 TERM=xterm-256color; " +
-            "exec $BINARY --name=${quote(name)} enter"
+            "exec $BINARY --name=${quote(name)} --stdin run " +
+            "script -qfc ${quote(loginShell)} /dev/null"
     }
 
     /** Command passed to su -c by the Termux TerminalSession. */

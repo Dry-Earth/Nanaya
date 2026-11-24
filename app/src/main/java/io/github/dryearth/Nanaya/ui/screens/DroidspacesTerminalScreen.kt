@@ -347,7 +347,9 @@ private fun TerminalHost(
                 session: TerminalSession,
             ) = false
 
-            override fun onEmulatorSet() = Unit
+            override fun onEmulatorSet() {
+                session.syncContainerTty()
+            }
 
             override fun logError(tag: String, message: String) {
                 Log.e(tag, message)
