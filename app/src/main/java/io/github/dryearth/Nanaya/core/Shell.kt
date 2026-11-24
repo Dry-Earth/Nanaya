@@ -31,12 +31,17 @@ object Shell {
     @Volatile private var rootChecked = false
     @Volatile private var rootBinary: String = "su"
 
+    /** When the last root probe actually ran, for foreground retries. */
+    @Volatile var lastRootCheckAt: Long = 0L
+        private set
+
     private const val DEFAULT_TIMEOUT = 25_000L
 
     fun detectRoot(force: Boolean = false): Boolean {
         if (rootReady) return true
         if (rootChecked && !force) return false
         rootChecked = true
+        lastRootCheckAt = System.currentTimeMillis()
         val candidates = listOf(
             "su",
             "/system/bin/su",

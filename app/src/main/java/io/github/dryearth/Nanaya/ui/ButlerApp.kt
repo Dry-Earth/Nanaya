@@ -231,7 +231,7 @@ fun ButlerApp(
                 Lifecycle.Event.ON_RESUME -> {
                     foreground = true
                     NanayaStatus.start(context)
-                    vm.refreshCapabilities()
+                    vm.onAppResumed()
                 }
                 Lifecycle.Event.ON_STOP -> {
                     foreground = false

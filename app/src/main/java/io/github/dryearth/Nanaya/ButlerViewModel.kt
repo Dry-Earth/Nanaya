@@ -126,6 +126,27 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 Shell.detectRoot(force = true)
             }
             refreshCapabilities(force = true)
+            refreshPerf(includeProcesses = true, includeHistory = true)
+        }
+    }
+
+    /**
+     * Called when the app returns to the foreground. A previously denied root
+     * grant is cached in Shell, so retry it automatically instead of making the
+     * user find "重新检测权限" or start a container to refresh the state.
+     */
+    fun onAppResumed() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                if (Shell.rootReady) {
+                    Shell.revalidate()
+                } else {
+                    val age = System.currentTimeMillis() - Shell.lastRootCheckAt
+                    if (age >= 15_000L) Shell.detectRoot(force = true)
+                }
+            }
+            refreshCapabilities()
+            refreshPerf(includeProcesses = true, includeHistory = true)
         }
     }
 
