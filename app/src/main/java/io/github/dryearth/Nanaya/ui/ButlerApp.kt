@@ -252,12 +252,11 @@ fun ButlerApp(
         sub != null -> sub!!
         else -> tab
     }
-    LaunchedEffect(screenKey, foreground) {
-        if (foreground && (screenKey == "home" || screenKey == "perf")) {
-            vm.startMonitoring()
-        } else {
-            vm.stopMonitoring()
-        }
+    LaunchedEffect(foreground) {
+        // Keep host CPU/GPU/RAM/process sampling alive across tabs. It used to
+        // stop whenever the user opened Droidspaces, which made device data
+        // look frozen or zero after stopping a container.
+        if (foreground) vm.startMonitoring() else vm.stopMonitoring()
     }
     LaunchedEffect(storageState.cleaning) {
         NanayaStatus.setCleaning(storageState.cleaning)
