@@ -189,7 +189,7 @@ fun ButlerApp(
         pageCount = { navItems.size },
     )
     val bottomBarReserve = with(density) {
-        (WindowInsets.navigationBars.getBottom(this) + 70.dp.toPx()).toDp()
+        (WindowInsets.navigationBars.getBottom(this) + 79.dp.toPx()).toDp()
     }
 
     LaunchedEffect(tab) {
@@ -871,7 +871,7 @@ private fun BottomBar(
     var dragCenterPx by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     val itemWidthPx = if (allItems.isEmpty()) 0f else widthPx / allItems.size
-    val barHeightDp = 46.dp
+    val barHeightDp = 55.dp
     val barHeightPx = with(density) { barHeightDp.toPx() }
     val press = pressAnim.value
     val barShape = CircleShape
@@ -1006,9 +1006,9 @@ private fun BottomBar(
             if (itemWidthPx > 0f) {
                 val gapPx = with(density) { 4.dp.toPx() }
                 val baseW = (itemWidthPx - gapPx * 2f).coerceAtLeast(1f)
-                val indicatorW = baseW * (1f + 0.9f * press)
-                val indicatorH = (barHeightPx - with(density) { 6.dp.toPx() }) *
-                    (1f + 0.6f * press)
+                val indicatorW = baseW * (1f + 1.05f * press)
+                val indicatorH = with(density) { 45.dp.toPx() } +
+                    with(density) { 6.dp.toPx() } * press
                 val center = if (dragging || press > 0.02f) dragCenterPx else centerAnim.value
                 val left = (center - indicatorW / 2f)
                     .coerceIn(0f, (widthPx - indicatorW).coerceAtLeast(0f))
@@ -1070,9 +1070,8 @@ private fun BottomBar(
                             item.icon,
                             contentDescription = item.label,
                             tint = if (selected) Glass.Accent else Glass.Faint,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(26.dp),
                         )
-                        Spacer(Modifier.height(1.dp))
                         Text(
                             item.label,
                             fontSize = 9.sp,
