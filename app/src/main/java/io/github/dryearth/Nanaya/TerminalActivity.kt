@@ -150,7 +150,7 @@ class TerminalActivity : ComponentActivity() {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color(0xFF0B0E13))
+            setBackgroundColor(0xFF0B0E13.toInt())
             setPadding(dp(10), dp(6), dp(8), dp(6))
         }
         val back = textButton("返回") { finish() }
@@ -171,7 +171,7 @@ class TerminalActivity : ComponentActivity() {
     private fun buildBottomBar(): HorizontalScrollView {
         val scroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
-            setBackgroundColor(Color(0xFF0B0E13))
+            setBackgroundColor(0xFF0B0E13.toInt())
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -311,15 +311,25 @@ class TerminalActivity : ComponentActivity() {
             session?.syncContainerTty()
         }
 
-        override fun logError(tag: String, message: String) = Log.e(tag, message)
+        override fun logError(tag: String, message: String) {
+            Log.e(tag, message)
+        }
 
-        override fun logWarn(tag: String, message: String) = Log.w(tag, message)
+        override fun logWarn(tag: String, message: String) {
+            Log.w(tag, message)
+        }
 
-        override fun logInfo(tag: String, message: String) = Log.i(tag, message)
+        override fun logInfo(tag: String, message: String) {
+            Log.i(tag, message)
+        }
 
-        override fun logDebug(tag: String, message: String) = Log.d(tag, message)
+        override fun logDebug(tag: String, message: String) {
+            Log.d(tag, message)
+        }
 
-        override fun logVerbose(tag: String, message: String) = Log.v(tag, message)
+        override fun logVerbose(tag: String, message: String) {
+            Log.v(tag, message)
+        }
 
         override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) {
             Log.e(tag, message, e)
