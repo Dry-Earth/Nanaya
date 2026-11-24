@@ -146,6 +146,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             refreshCapabilities()
+            refreshCharging()
             refreshPerf(includeProcesses = true, includeHistory = true)
         }
     }
@@ -422,7 +423,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     if (before != Shell.isPrivileged()) refreshCapabilities()
                 }
                 val slow = now - lastSlowAt >= 30_000
-                if (slow) lastSlowAt = now
+                if (slow) {
+                    lastSlowAt = now
+                    refreshCharging()
+                }
                 // One transient sysfs/binder failure must not kill the whole
                 // sampler; otherwise every metric stays frozen at its default.
                 runCatching {
@@ -452,34 +456,59 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         _perf.update { it.copy(monitoring = false) }
     }
 
+    @Volatile private var chargingBusy = false
+
+    /**
+     * LineageHealth is a binder service. Keep it off the sampling critical path:
+     * a dead/blocked binder must not freeze CPU/GPU/RAM updates.
+     */
+    private fun refreshCharging() {
+        if (chargingBusy) return
+        chargingBusy = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val charging = LineageHealth.read()
+                _perf.update { it.copy(charging = charging) }
+            }
+            chargingBusy = false
+        }
+    }
+
     private suspend fun refreshPerf(
         includeProcesses: Boolean = false,
         includeHistory: Boolean = false,
     ) {
-        val (snap, charging) = withContext(Dispatchers.IO) {
-            perfRepo.snapshot(includeProcesses = includeProcesses) to LineageHealth.read()
-        }
-        val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
-        val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
-        val batteryHistory = if (includeHistory) {
-            withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
-        } else {
-            null
+        // Publish the fast metrics first. Process listing, LineageHealth binder
+        // calls and battery history can be slow or block; they must never hold
+        // back CPU/GPU/RAM from the UI.
+        val snap = withContext(Dispatchers.IO) {
+            perfRepo.snapshot(includeProcesses = false)
         }
         _perf.update {
             val cpuHist = (it.cpuHistory + snap.cpu.loadPct).takeLast(90)
             val ramHist = (it.ramHistory + safePct(snap.ramUsed, snap.ramTotal) * 100f).takeLast(90)
             it.copy(
-                snapshot = if (includeProcesses) snap else snap.copy(processes = it.snapshot.processes),
-                charging = charging,
+                snapshot = snap.copy(processes = it.snapshot.processes),
                 cpuHistory = cpuHist,
                 ramHistory = ramHist,
-                governor = governor,
-                presets = presets,
-                history = batteryHistory ?: it.history,
             )
         }
+        val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
+        val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
+        _perf.update { it.copy(governor = governor, presets = presets) }
+        if (includeProcesses) {
+            // Async and non-blocking: a slow root shell or dumpsys cannot stall
+            // the sampler any more.
+            viewModelScope.launch(Dispatchers.IO) {
+                val procs = runCatching { perfRepo.processLoads() }.getOrDefault(emptyList())
+                _perf.update { current ->
+                    current.copy(snapshot = current.snapshot.copy(processes = procs))
+                }
+            }
+        }
         if (includeHistory) {
+            val batteryHistory = withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
+            _perf.update { it.copy(history = batteryHistory ?: it.history) }
             withContext(Dispatchers.IO) { perfRepo.recordBattery(snap.battery) }
         }
     }

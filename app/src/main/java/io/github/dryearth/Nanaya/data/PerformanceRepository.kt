@@ -262,6 +262,11 @@ class PerformanceRepository(private val context: Context) {
         }
     }.getOrDefault("")
 
+    fun processLoads(force: Boolean = false): List<ProcLoad> {
+        if (force) lastProcAt = 0
+        return readProcesses()
+    }
+
     private fun readProcesses(): List<ProcLoad> {
         val now = System.currentTimeMillis()
         if (now - lastProcAt < 10_000) return lastProcList
