@@ -248,6 +248,11 @@ fun DroidspacesTerminalScreen(
                 modifier = Modifier.weight(1f),
                 corner = 16.dp,
                 padding = PaddingValues(4.dp),
+                // A native TerminalView invalidates the whole panel on every
+                // keystroke and cursor blink. The live backdrop blur behind it
+                // was being recomputed each frame even when the terminal was
+                // opaque, which made the whole screen feel frozen.
+                opaque = true,
             ) {
                 Box(Modifier.fillMaxSize()) {
                     if (backdrop == TerminalBackdrop.GLASS) {
