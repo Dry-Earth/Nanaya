@@ -102,7 +102,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             refreshCapabilities()
             refreshApps()
-            refreshPerf()
+            startMonitoring()
             refreshSecurity()
             _chat.update { it.copy(modelLabel = ai.describe(), modelConfigured = ai.configured()) }
         }
@@ -423,7 +423,11 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val slow = now - lastSlowAt >= 30_000
                 if (slow) lastSlowAt = now
-                refreshPerf(includeProcesses = slow, includeHistory = slow)
+                // One transient sysfs/binder failure must not kill the whole
+                // sampler; otherwise every metric stays frozen at its default.
+                runCatching {
+                    refreshPerf(includeProcesses = slow, includeHistory = slow)
+                }
                 tick++
                 delay(interval)
             }

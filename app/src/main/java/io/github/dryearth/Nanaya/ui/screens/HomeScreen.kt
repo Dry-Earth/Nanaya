@@ -82,6 +82,7 @@ fun HomeScreen(
     val security by vm.security.collectAsStateWithLifecycle()
 
     ToastEffect(perf.toast) { vm.clearPerfToast() }
+    LaunchedEffect(Unit) { vm.startMonitoring() }
     val topInset = statusBarInset()
     val listState = rememberLazyListState()
     LaunchedEffect(listState) {

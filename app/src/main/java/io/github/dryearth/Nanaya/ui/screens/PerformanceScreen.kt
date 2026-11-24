@@ -72,7 +72,10 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
     val perf by vm.perf.collectAsStateWithLifecycle()
     ToastEffect(perf.toast) { vm.clearPerfToast() }
 
-    LaunchedEffect(Unit) { vm.refreshDrain() }
+    LaunchedEffect(Unit) {
+        vm.startMonitoring()
+        vm.refreshDrain()
+    }
 
     val topInset = statusBarInset()
 
