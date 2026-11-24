@@ -227,7 +227,7 @@ object DroidspacesRepository {
         }
         val root = quote(rootfs)
         val direct = buildString {
-            appendLine("export DS_NO_PROXY=1 TERM=xterm-256color")
+            appendLine("export DS_NO_PROXY=1 TERM=xterm-256color HOME=/root")
             appendLine("ROOT=$root")
             appendLine("PID=$pid")
             appendLine("LD=")
@@ -240,7 +240,7 @@ object DroidspacesRepository {
             appendLine("  exit 1")
             appendLine("fi")
             appendLine("LIBS=\"\$ROOT/lib/aarch64-linux-gnu:\$ROOT/usr/lib/aarch64-linux-gnu:\$ROOT/lib64:\$ROOT/usr/lib64:\$ROOT/lib:\$ROOT/usr/lib\"")
-            appendLine("\"\$LD\" --library-path \"\$LIBS\" \"\$NSE\" -t \"\$PID\" -m -u -i -p -n -w / -- /bin/su -l root")
+            appendLine("\"\$LD\" --library-path \"\$LIBS\" \"\$NSE\" -t \"\$PID\" -m -u -i -p -n -w /root -- /bin/sh -c 'if [ -x /bin/bash ]; then exec /bin/bash -l; else exec /bin/sh -l; fi'")
             appendLine("RC=\$?")
             appendLine("if [ \"\$RC\" -eq 0 ]; then exit 0; fi")
             appendLine("echo \"直连失败（exit \$RC），回退到 run + script\"")
