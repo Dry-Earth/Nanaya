@@ -328,10 +328,10 @@ private fun TerminalHost(
 
             override fun shouldBackButtonBeMappedToEscape() = false
 
-            // Termux defaults to TYPE_NULL here. The char-based visible
-            // password mode makes some IMEs buffer a whole word and only
-            // deliver it on commit, which feels like input lag.
-            override fun shouldEnforceCharBasedInput() = false
+            // Force per-character input. TYPE_NULL still lets some IMEs keep
+            // the text in a composing region, so nothing reaches the terminal
+            // until the word is committed (looks like huge input lag).
+            override fun shouldEnforceCharBasedInput() = true
 
             override fun shouldUseCtrlSpaceWorkaround() = false
 
