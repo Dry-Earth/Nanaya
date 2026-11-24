@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.pager.HorizontalPager
@@ -879,16 +880,18 @@ private fun BottomBar(
     }
 
     Box(
-        modifier.navigationBarsPadding().padding(horizontal = 18.dp, vertical = 6.dp),
+        modifier
+            .navigationBarsPadding()
+            .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(66.dp)
+                .height(54.dp)
                 .onSizeChanged { widthPx = it.width.toFloat() }
                 .graphicsLayer {
-                    val scale = 1f + 0.06f * press
+                    val scale = 1f + 0.03f * press
                     scaleX = scale
                     scaleY = scale
                 }
@@ -911,6 +914,13 @@ private fun BottomBar(
                     },
                 )
                 .clip(shape)
+                .pointerInput(allItems.size) {
+                    detectTapGestures { offset ->
+                        val index = indexAt(offset.x)
+                        val item = allItems[index]
+                        if (item.id == settingsItem.id) onOpenSettings() else onSelect(item.id)
+                    }
+                }
                 .pointerInput(allItems.size) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
@@ -946,14 +956,34 @@ private fun BottomBar(
         ) {
             val indicator = if (dragging) dragIndex else indexAnim.value
             if (itemWidthPx > 0f) {
+                val indicatorScale = 1f + 0.18f * press
                 Box(
                     Modifier
                         .offset(x = with(density) { (indicator * itemWidthPx).toDp() })
                         .width(with(density) { itemWidthPx.toDp() })
                         .fillMaxHeight()
-                        .padding(5.dp)
+                        .padding(horizontal = 5.dp, vertical = 5.dp)
+                        .graphicsLayer {
+                            scaleX = indicatorScale
+                            scaleY = indicatorScale
+                        }
+                        .drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(24.dp) },
+                            effects = {
+                                vibrancy()
+                                blur(3.dp.toPx(), 3.dp.toPx())
+                                lens(
+                                    refractionHeight = 14.dp.toPx() * (1f + 0.5f * press),
+                                    refractionAmount = 18.dp.toPx() * (1f + 0.5f * press),
+                                )
+                            },
+                            onDrawSurface = {
+                                drawRect(Color.White.copy(alpha = 0.08f + 0.06f * press))
+                            },
+                        )
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Glass.Accent.copy(alpha = 0.10f + 0.12f * press)),
+                        .background(Glass.Accent.copy(alpha = 0.04f + 0.05f * press)),
                 )
             }
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
@@ -962,10 +992,7 @@ private fun BottomBar(
                     Column(
                         Modifier
                             .weight(1f)
-                            .fillMaxHeight()
-                            .clickable {
-                                if (item.id == settingsItem.id) onOpenSettings() else onSelect(item.id)
-                            },
+                            .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
@@ -973,7 +1000,7 @@ private fun BottomBar(
                             item.icon,
                             contentDescription = item.label,
                             tint = if (selected) Glass.Accent else Glass.Faint,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(19.dp),
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
