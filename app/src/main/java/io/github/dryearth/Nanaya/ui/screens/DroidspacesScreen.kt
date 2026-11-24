@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.dryearth.Nanaya.core.DroidspacesDesktop
 import io.github.dryearth.Nanaya.core.DroidspacesRepository
-import io.github.dryearth.Nanaya.core.DroidspacesTerminals
 import io.github.dryearth.Nanaya.core.DsApp
 import io.github.dryearth.Nanaya.core.DsContainer
 import io.github.dryearth.Nanaya.core.DsProcess
@@ -57,7 +56,6 @@ import io.github.dryearth.Nanaya.core.Shell
 import io.github.dryearth.Nanaya.core.mergeLive
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.FlowingRefreshButton
-import io.github.dryearth.Nanaya.TerminalActivity
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
@@ -94,7 +92,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
     var commandFor by remember { mutableStateOf<String?>(null) }
-    val activeTerminals by DroidspacesTerminals.active.collectAsState()
 
     fun reload() {
         scope.launch {
@@ -342,13 +339,11 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     },
                     onStop = {
                         askConfirm("停止容器", container.name) {
-                            DroidspacesTerminals.close(container.name)
                             operation("停止") { DroidspacesRepository.stop(container.name) }
                         }
                     },
                     onRestart = {
                         askConfirm("重启容器", container.name) {
-                            DroidspacesTerminals.close(container.name)
                             operation("重启") { DroidspacesRepository.restart(container.name) }
                         }
                     },
@@ -397,21 +392,10 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     onTogglePid = { pid ->
                         expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
                     },
-                    onOpenTerminal = {
-                        context.startActivity(
-                            TerminalActivity.intent(
-                                context,
-                                container.name,
-                                container.pid,
-                                container.rootfs,
-                            ),
-                        )
-                    },
                     onOpenCommand = { commandFor = container.name },
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
                     },
-                    hasTerminal = container.name in activeTerminals,
                 )
             }
             if (containers.isEmpty() && !loading && snapshot?.binaryFound == true) {
@@ -457,10 +441,8 @@ private fun ContainerCard(
     onStartApp: (DsApp) -> Unit,
     onStopApp: (DsApp) -> Unit,
     onServiceAction: (DsService, String) -> Unit,
-    onOpenTerminal: () -> Unit,
     onOpenCommand: () -> Unit,
     onOpenDesktop: () -> Unit,
-    hasTerminal: Boolean,
     expandedPids: Set<String>,
     onTogglePid: (String) -> Unit,
     filter: String,
@@ -553,12 +535,6 @@ private fun ContainerCard(
                     onClick = onOpenDesktop,
                 )
             }
-            ActionButton(
-                if (hasTerminal) "回到终端" else "终端",
-                enabled = container.running,
-                modifier = Modifier.weight(1f),
-                onClick = onOpenTerminal,
-            )
             ActionButton(
                 "命令",
                 enabled = container.running,
