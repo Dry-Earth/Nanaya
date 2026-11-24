@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Nanaya"
 include(":app")
+include(":termux-terminal:terminal-emulator")
+include(":termux-terminal:terminal-view")

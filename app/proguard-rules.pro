@@ -22,6 +22,7 @@
 -keep class io.github.muntashirakon.crypto.spake2.** { *; }
 -keep class android.sun.misc.** { *; }
 
-# Host PTY JNI bridge
--keep class io.github.dryearth.Nanaya.core.PtyBridge { *; }
--keepclasseswithmembernames class * { native <methods>; }
+
+# Termux terminal-emulator / terminal-view (Apache 2.0)
+-keep class com.termux.** { *; }
+-keepclasseswithmembernames class com.termux.** { native <methods>; }

@@ -203,24 +203,8 @@ object DroidspacesRepository {
             "exec $BINARY --name=${quote(name)} enter"
     }
 
-    /**
-     * Pipe fallback used when the native PTY bridge is unavailable.
-     */
-    fun openTerminal(name: String): Process? {
-        val command = terminalCommand(name) ?: return null
-        return Shell.interactiveProcess(command)
-    }
-
-    /**
-     * Start the container shell on a real host PTY. This is the preferred
-     * path: `droidspaces enter` sees a TTY, inherits the window size and
-     * receives SIGWINCH when the master is resized.
-     */
-    fun openTerminalPty(name: String, cols: Int, rows: Int): PtyBridge.Channel? {
-        val command = terminalCommand(name) ?: return null
-        val su = Shell.rootShellPath() ?: return null
-        return PtyBridge.open(su, command, cols, rows)
-    }
+    /** Command passed to su -c by the Termux TerminalSession. */
+    fun terminalShellCommand(name: String): String? = terminalCommand(name)
 
     /**
      * One-off command through `droidspaces --name=<name> run '<command>'`.
