@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ import io.github.dryearth.Nanaya.core.Prefs
 import io.github.dryearth.Nanaya.core.bytes
 import io.github.dryearth.Nanaya.service.BatteryGuardService
 import io.github.dryearth.Nanaya.core.safePct
+import io.github.dryearth.Nanaya.data.PerformanceRepository
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.BigNumber
 import io.github.dryearth.Nanaya.ui.components.EmptyHint
@@ -66,6 +68,9 @@ import io.github.dryearth.Nanaya.ui.components.ToastEffect
 import io.github.dryearth.Nanaya.ui.components.formatDuration
 import io.github.dryearth.Nanaya.ui.components.humanRate
 import io.github.dryearth.Nanaya.ui.theme.Glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenMemory: () -> Unit = {}) {
@@ -78,21 +83,35 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
     }
 
     val topInset = statusBarInset()
+    val context = LocalContext.current
+    val directRepo = remember { PerformanceRepository(context) }
+    val directSnapshot by produceState(initialValue = perf.snapshot) {
+        while (true) {
+            val next = withContext(Dispatchers.IO) {
+                runCatching { directRepo.snapshot(includeProcesses = false) }.getOrNull()
+            }
+            if (next != null) value = next
+            delay(1000)
+        }
+    }
+    val shown = perf.copy(
+        snapshot = directSnapshot.copy(processes = perf.snapshot.processes),
+    )
 
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = topInset + 16.dp, end = 16.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { LivePanel(perf, vm) }
-        item { CoresPanel(perf) }
-        item { GpuPanel(perf) }
-        item { NpuPanel(perf) }
-        item { TemperaturePanel(perf) }
+        item { LivePanel(shown, vm) }
+        item { CoresPanel(shown) }
+        item { GpuPanel(shown) }
+        item { NpuPanel(shown) }
+        item { TemperaturePanel(shown) }
         if (perf.charging.supported) {
             item { ChargingPanel(vm, perf) }
         }
-        item { BatteryPanel(perf) }
+        item { BatteryPanel(shown) }
         item { BatteryRulesCard(perf.charging.supported) }
         item {
             GlassPanel(corner = 14.dp, padding = PaddingValues(12.dp), onClick = onOpenRules) {
@@ -109,8 +128,8 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
                 }
             }
         }
-        item { MemoryPanel(perf, onTrim = { vm.killBackground() }, onOpenMemory = onOpenMemory) }
-        item { ZramCard(perf) }
+        item { MemoryPanel(shown, onTrim = { vm.killBackground() }, onOpenMemory = onOpenMemory) }
+        item { ZramCard(shown) }
         item {
             SectionHeader(
                 "24 小时耗电",
