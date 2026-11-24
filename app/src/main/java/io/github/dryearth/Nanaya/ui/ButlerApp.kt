@@ -867,7 +867,8 @@ private fun BottomBar(
     var dragCenterPx by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     val itemWidthPx = if (allItems.isEmpty()) 0f else widthPx / allItems.size
-    val barHeightPx = with(density) { 54.dp.toPx() }
+    val barHeightDp = 54.dp
+    val barHeightPx = with(density) { barHeightDp.toPx() }
     val press = pressAnim.value
     val barShape = CircleShape
 
@@ -899,99 +900,121 @@ private fun BottomBar(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .onSizeChanged { widthPx = it.width.toFloat() }
-                .graphicsLayer {
-                    val scale = 1f + 0.045f * press
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { barShape },
-                    effects = {
-                        vibrancy()
-                        blur(5.dp.toPx(), 5.dp.toPx())
-                        lens(
-                            refractionHeight = 18.dp.toPx() * (1f + 0.8f * press),
-                            refractionAmount = 22.dp.toPx() * (1f + 0.8f * press),
-                        )
-                    },
-                    onDrawSurface = {
-                        drawRect(Color(0x5C10151B))
-                        if (press > 0f) {
-                            drawRect(Color.White.copy(alpha = 0.06f * press))
-                        }
-                    },
-                )
-                .pointerInput(allItems.size) {
-                    detectTapGestures { offset ->
-                        commit(indexAt(offset.x))
-                    }
-                }
-                .pointerInput(allItems.size) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            if (itemWidthPx > 0f) {
-                                dragging = true
-                                dragCenterPx = offset.x.coerceIn(
-                                    itemWidthPx / 2f,
-                                    widthPx - itemWidthPx / 2f,
-                                )
-                                scope.launch {
-                                    pressAnim.animateTo(1f, spring(0.55f, 260f, 0.001f))
-                                }
-                            }
+                .height(barHeightDp)
+                .onSizeChanged { widthPx = it.width.toFloat() },
+        ) {
+            // 1. Background glass only. The indicator and the tab content are
+            // siblings, so a pressed indicator can grow past this surface.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { barShape },
+                        effects = {
+                            vibrancy()
+                            blur(6.dp.toPx(), 6.dp.toPx())
+                            lens(
+                                refractionHeight = 18.dp.toPx() * (1f + 0.8f * press),
+                                refractionAmount = 24.dp.toPx() * (1f + 0.8f * press),
+                            )
                         },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            if (itemWidthPx > 0f) {
-                                dragCenterPx = change.position.x.coerceIn(
-                                    itemWidthPx / 2f,
-                                    widthPx - itemWidthPx / 2f,
-                                )
-                            }
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            if (itemWidthPx > 0f) {
-                                val index = ((dragCenterPx - itemWidthPx / 2f) / itemWidthPx)
-                                    .roundToInt()
-                                    .coerceIn(0, allItems.lastIndex)
-                                scope.launch {
-                                    indicatorLeft.snapTo(dragCenterPx - itemWidthPx / 2f)
-                                    indicatorLeft.animateTo(
-                                        index * itemWidthPx,
-                                        spring(0.9f, 260f, 0.001f),
-                                    )
-                                    pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
-                                }
-                                commit(index)
-                            } else {
-                                scope.launch {
-                                    pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
-                                }
-                            }
-                        },
-                        onDragCancel = {
-                            dragging = false
-                            scope.launch {
-                                pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
-                            }
+                        onDrawSurface = {
+                            drawRect(Color(0x3510151B))
+                            drawRect(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.White.copy(alpha = 0.13f),
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.03f),
+                                    ),
+                                ),
+                            )
                         },
                     )
-                },
-        ) {
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.38f),
+                                Color.White.copy(alpha = 0.06f),
+                                Color.White.copy(alpha = 0.20f),
+                            ),
+                        ),
+                        shape = barShape,
+                    )
+                    .pointerInput(allItems.size) {
+                        detectTapGestures { offset ->
+                            commit(indexAt(offset.x))
+                        }
+                    }
+                    .pointerInput(allItems.size) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                if (itemWidthPx > 0f) {
+                                    dragging = true
+                                    dragCenterPx = offset.x.coerceIn(
+                                        itemWidthPx / 2f,
+                                        widthPx - itemWidthPx / 2f,
+                                    )
+                                    scope.launch {
+                                        pressAnim.animateTo(1f, spring(0.55f, 260f, 0.001f))
+                                    }
+                                }
+                            },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                if (itemWidthPx > 0f) {
+                                    dragCenterPx = change.position.x.coerceIn(
+                                        itemWidthPx / 2f,
+                                        widthPx - itemWidthPx / 2f,
+                                    )
+                                }
+                            },
+                            onDragEnd = {
+                                dragging = false
+                                if (itemWidthPx > 0f) {
+                                    val index = ((dragCenterPx - itemWidthPx / 2f) / itemWidthPx)
+                                        .roundToInt()
+                                        .coerceIn(0, allItems.lastIndex)
+                                    scope.launch {
+                                        indicatorLeft.snapTo(dragCenterPx - itemWidthPx / 2f)
+                                        indicatorLeft.animateTo(
+                                            index * itemWidthPx,
+                                            spring(0.9f, 260f, 0.001f),
+                                        )
+                                        pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
+                                    }
+                                    commit(index)
+                                } else {
+                                    scope.launch {
+                                        pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
+                                    }
+                                }
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                scope.launch {
+                                    pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
+                                }
+                            },
+                        )
+                    },
+            )
+
+            // 2. The moving liquid-glass indicator, above the bar surface but
+            // below the icons so it never hides the labels.
             if (itemWidthPx > 0f) {
-                val gapPx = with(density) { 5.dp.toPx() }
+                val gapPx = with(density) { 4.dp.toPx() }
                 val baseW = (itemWidthPx - gapPx * 2f).coerceAtLeast(1f)
-                val growW = with(density) { 26.dp.toPx() } * press
-                val growH = with(density) { 20.dp.toPx() } * press
-                val indicatorW = baseW + growW
-                val indicatorH = (barHeightPx - with(density) { 10.dp.toPx() }) + growH
+                val indicatorW = baseW * (1f + 0.9f * press)
+                val indicatorH = (barHeightPx - with(density) { 8.dp.toPx() }) *
+                    (1f + 0.55f * press)
                 val center = if (dragging) dragCenterPx else indicatorLeft.value + itemWidthPx / 2f
-                val left = (center - indicatorW / 2f).coerceIn(0f, (widthPx - indicatorW).coerceAtLeast(0f))
+                val left = (center - indicatorW / 2f)
+                    .coerceIn(0f, (widthPx - indicatorW).coerceAtLeast(0f))
                 val top = (barHeightPx - indicatorH) / 2f
+                val indicatorShape = RoundedCornerShape(28.dp)
                 Box(
                     Modifier
                         .offset(
@@ -1004,28 +1027,37 @@ private fun BottomBar(
                         )
                         .drawBackdrop(
                             backdrop = backdrop,
-                            shape = { RoundedCornerShape(percent = 50) },
+                            shape = { indicatorShape },
                             effects = {
                                 vibrancy()
-                                blur(2.5.dp.toPx(), 2.5.dp.toPx())
+                                blur(4.dp.toPx(), 4.dp.toPx())
                                 lens(
-                                    refractionHeight = 12.dp.toPx() * (1f + 0.9f * press),
-                                    refractionAmount = 16.dp.toPx() * (1f + 0.9f * press),
+                                    refractionHeight = 14.dp.toPx() * (1f + 0.9f * press),
+                                    refractionAmount = 20.dp.toPx() * (1f + 0.9f * press),
                                 )
                             },
                             onDrawSurface = {
-                                drawRect(Color.White.copy(alpha = 0.07f + 0.09f * press))
+                                drawRect(Color.White.copy(alpha = 0.12f + 0.10f * press))
+                                drawRect(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = 0.18f + 0.12f * press),
+                                            Color.Transparent,
+                                        ),
+                                    ),
+                                )
                             },
                         )
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Glass.Accent.copy(alpha = 0.03f + 0.06f * press))
+                        .clip(indicatorShape)
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.10f + 0.12f * press),
-                            shape = RoundedCornerShape(percent = 50),
+                            color = Color.White.copy(alpha = 0.24f + 0.18f * press),
+                            shape = indicatorShape,
                         ),
                 )
             }
+
+            // 3. Tab content on top.
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 allItems.forEach { item ->
                     val selected = item.id == current && item.id != settingsItem.id
@@ -1040,9 +1072,9 @@ private fun BottomBar(
                             item.icon,
                             contentDescription = item.label,
                             tint = if (selected) Glass.Accent else Glass.Faint,
-                            modifier = Modifier.size(19.dp),
+                            modifier = Modifier.size(18.dp),
                         )
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(3.dp))
                         Text(
                             item.label,
                             fontSize = 9.sp,
