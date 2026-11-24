@@ -1000,16 +1000,15 @@ private fun BottomBar(
 
             // Transparent refractive indicator.
             if (itemWidthPx > 0f) {
-                val gapPx = with(density) { 4.dp.toPx() }
-                val baseW = (itemWidthPx - gapPx * 2f).coerceAtLeast(1f)
-                val indicatorW = baseW * (1f + 1.05f * press)
-                val indicatorH = with(density) { 45.dp.toPx() } +
-                    with(density) { 6.dp.toPx() } * press
+                // 54dp bar, 1dp top and bottom margin => 52dp circle at rest.
+                val restSizePx = with(density) { 52.dp.toPx() }
+                val indicatorW = restSizePx * (1f + 0.55f * press)
+                val indicatorH = restSizePx
                 val center = if (dragging || press > 0.02f) dragCenterPx else centerAnim.value
                 val left = (center - indicatorW / 2f)
                     .coerceIn(0f, (widthPx - indicatorW).coerceAtLeast(0f))
                 val top = (barHeightPx - indicatorH) / 2f
-                val indicatorShape = RoundedCornerShape(28.dp)
+                val indicatorShape = RoundedCornerShape(26.dp)
                 Box(
                     Modifier
                         .offset(
