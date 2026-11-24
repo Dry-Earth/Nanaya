@@ -4,9 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color as AndroidColor
+import android.graphics.Outline
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -90,10 +93,11 @@ private fun Context.findActivity(): Activity? {
 
 private fun showKeyboard(context: Context, view: TerminalView) {
     view.requestFocus()
-    view.post {
+    // Some IMEs ignore showSoftInput in the same frame as the tap.
+    view.postDelayed({
         val imm = context.getSystemService(InputMethodManager::class.java)
-        imm?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
-    }
+        imm?.showSoftInput(view, 0)
+    }, 120)
 }
 
 /**
@@ -106,6 +110,7 @@ fun DroidspacesTerminalScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val activity = remember(context) { context.findActivity() }
     val keyboard = LocalSoftwareKeyboardController.current
     val viewRef = remember { mutableStateOf<TerminalView?>(null) }
@@ -166,6 +171,7 @@ fun DroidspacesTerminalScreen(
                     TerminalHost(
                         session = session,
                         background = terminalBackground,
+                        cornerPx = 0f,
                         viewRef = viewRef,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -251,6 +257,7 @@ fun DroidspacesTerminalScreen(
                         TerminalHost(
                             session = session,
                             background = terminalBackground,
+                            cornerPx = with(density) { 12.dp.toPx() },
                             viewRef = viewRef,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -283,6 +290,7 @@ fun DroidspacesTerminalScreen(
 private fun TerminalHost(
     session: DroidspacesTerminals.Session,
     background: Int,
+    cornerPx: Float,
     viewRef: MutableState<TerminalView?>,
     modifier: Modifier,
 ) {
@@ -371,12 +379,24 @@ private fun TerminalHost(
         }
     }
 
-    DisposableEffect(view) {
+    DisposableEffect(view, cornerPx) {
         viewRef.value = view
         view.setTerminalViewClient(viewClient)
         view.setTextSize(textSize[0])
         view.setBackgroundColor(background)
         view.setKeepScreenOn(true)
+        // TerminalView has no XML attributes here; the Termux layout normally
+        // sets focusableInTouchMode, which is what lets requestFocus() open
+        // the IME and lets selection start.
+        view.isFocusableInTouchMode = true
+        view.defaultFocusHighlightEnabled = false
+        view.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(v: View, outline: Outline) {
+                outline.setRoundRect(0, 0, v.width, v.height, cornerPx)
+            }
+        }
+        view.clipToOutline = cornerPx > 0f
+        view.invalidateOutline()
         onDispose {
             if (viewRef.value === view) viewRef.value = null
             runCatching { view.attachSession(null) }
@@ -391,6 +411,8 @@ private fun TerminalHost(
                 setTerminalViewClient(viewClient)
                 setTextSize(textSize[0])
                 setBackgroundColor(background)
+                isFocusableInTouchMode = true
+                defaultFocusHighlightEnabled = false
                 post { attachSession(session.terminalSession) }
             }
         },
