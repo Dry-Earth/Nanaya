@@ -55,7 +55,6 @@ import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import io.github.dryearth.Nanaya.core.DroidspacesTerminals
-import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
 import io.github.dryearth.Nanaya.ui.theme.Glass
@@ -202,7 +201,10 @@ fun DroidspacesTerminalScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                GlassBackButton(onClick = onBack)
+                // A static back control: the animated GlassBackButton keeps an
+                // infinite transition running, which invalidates the header on
+                // every frame while the terminal is also redrawing.
+                Pill("返回", color = Glass.Muted) { onBack() }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(

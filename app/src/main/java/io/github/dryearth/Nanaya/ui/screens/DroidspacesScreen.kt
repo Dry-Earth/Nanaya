@@ -57,6 +57,7 @@ import io.github.dryearth.Nanaya.core.Shell
 import io.github.dryearth.Nanaya.core.mergeLive
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.FlowingRefreshButton
+import io.github.dryearth.Nanaya.TerminalActivity
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
 import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.Pill
@@ -92,7 +93,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var expandedPids by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
-    var terminalFor by remember { mutableStateOf<DsContainer?>(null) }
     var commandFor by remember { mutableStateOf<String?>(null) }
     val activeTerminals by DroidspacesTerminals.active.collectAsState()
 
@@ -201,17 +201,6 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                 },
             )
         }
-    }
-
-    BackHandler(enabled = terminalFor != null) { terminalFor = null }
-    terminalFor?.let { container ->
-        DroidspacesTerminalScreen(
-            containerName = container.name,
-            containerPid = container.pid,
-            rootfs = container.rootfs,
-            onBack = { terminalFor = null },
-        )
-        return
     }
 
     BackHandler(enabled = commandFor != null) { commandFor = null }
@@ -408,7 +397,16 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     onTogglePid = { pid ->
                         expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
                     },
-                    onOpenTerminal = { terminalFor = container },
+                    onOpenTerminal = {
+                        context.startActivity(
+                            TerminalActivity.intent(
+                                context,
+                                container.name,
+                                container.pid,
+                                container.rootfs,
+                            ),
+                        )
+                    },
                     onOpenCommand = { commandFor = container.name },
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
