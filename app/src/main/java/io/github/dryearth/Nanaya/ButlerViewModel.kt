@@ -429,8 +429,16 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // One transient sysfs/binder failure must not kill the whole
                 // sampler; otherwise every metric stays frozen at its default.
-                runCatching {
+                val sampleError = runCatching {
                     refreshPerf(includeProcesses = slow, includeHistory = slow)
+                }.exceptionOrNull()
+                if (sampleError != null) {
+                    _perf.update {
+                        it.copy(
+                            lastSampleAt = System.currentTimeMillis(),
+                            sampleError = sampleError.toString(),
+                        )
+                    }
                 }
                 tick++
                 delay(interval)
@@ -481,8 +489,18 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         // Publish the fast metrics first. Process listing, LineageHealth binder
         // calls and battery history can be slow or block; they must never hold
         // back CPU/GPU/RAM from the UI.
-        val snap = withContext(Dispatchers.IO) {
-            perfRepo.snapshot(includeProcesses = false)
+        val snapResult = runCatching {
+            withContext(Dispatchers.IO) { perfRepo.snapshot(includeProcesses = false) }
+        }
+        val snap = snapResult.getOrNull()
+        if (snap == null) {
+            _perf.update {
+                it.copy(
+                    lastSampleAt = System.currentTimeMillis(),
+                    sampleError = snapResult.exceptionOrNull()?.toString() ?: "snapshot 返回空",
+                )
+            }
+            return
         }
         _perf.update {
             val cpuHist = (it.cpuHistory + snap.cpu.loadPct).takeLast(90)
@@ -491,6 +509,8 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 snapshot = snap.copy(processes = it.snapshot.processes),
                 cpuHistory = cpuHist,
                 ramHistory = ramHist,
+                lastSampleAt = System.currentTimeMillis(),
+                sampleError = null,
             )
         }
         val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
@@ -510,6 +530,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             val batteryHistory = withContext(Dispatchers.IO) { perfRepo.batteryHistory() }
             _perf.update { it.copy(history = batteryHistory ?: it.history) }
             withContext(Dispatchers.IO) { perfRepo.recordBattery(snap.battery) }
+        }
+    }
+
+    fun sampleNow() {
+        viewModelScope.launch {
+            refreshPerf(includeProcesses = true, includeHistory = true)
         }
     }
 

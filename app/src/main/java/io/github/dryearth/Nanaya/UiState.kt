@@ -46,6 +46,8 @@ data class PerfUiState(
     val toast: String? = null,
     val monitoring: Boolean = false,
     val intervalMs: Int = 1000,
+    val lastSampleAt: Long = 0L,
+    val sampleError: String? = null,
 )
 
 data class SecurityUiState(

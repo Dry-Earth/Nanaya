@@ -169,6 +169,27 @@ private fun LivePanel(perf: PerfUiState, vm: ButlerViewModel) {
                 Pill(if (perf.monitoring) "采集中" else "已暂停", selected = perf.monitoring, color = Glass.Mint)
             },
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Pill("立即采样", color = Glass.Accent, onClick = { vm.sampleNow() })
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (perf.lastSampleAt > 0L) {
+                    "最后 ${java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(perf.lastSampleAt))}"
+                } else {
+                    "尚未采样"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+        }
+        if (!perf.sampleError.isNullOrBlank()) {
+            Text(
+                perf.sampleError!!,
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Rose,
+                maxLines = 4,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(1000 to "1 秒", 2000 to "2 秒", 3000 to "3 秒", 5000 to "5 秒").forEach { (ms, label) ->
