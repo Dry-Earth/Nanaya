@@ -206,7 +206,7 @@ object DroidspacesRepository {
      */
     fun fallbackShellCommand(name: String): String? {
         if (!validContainer(name)) return null
-        val login = "export TERM=xterm-256color; exec su -l root"
+        val login = "export HOME=/root TERM=xterm-256color; exec /bin/bash -l"
         return "export DS_NO_PROXY=1 TERM=xterm-256color; " +
             "exec $BINARY --name=${quote(name)} --stdin run " +
             "script -qfc ${quote(login)} /dev/null"
@@ -222,31 +222,11 @@ object DroidspacesRepository {
     fun terminalCommand(name: String, pid: Int, rootfs: String?): TerminalCommand? {
         if (!validContainer(name)) return null
         val fallback = fallbackShellCommand(name) ?: return null
-        if (pid <= 0 || rootfs.isNullOrBlank()) {
-            return TerminalCommand(fallback, direct = false)
-        }
-        val root = quote(rootfs)
-        val direct = buildString {
-            appendLine("export DS_NO_PROXY=1 TERM=xterm-256color HOME=/root")
-            appendLine("ROOT=$root")
-            appendLine("PID=$pid")
-            appendLine("LD=")
-            appendLine("for c in \"\$ROOT/lib64/ld-linux-aarch64.so.1\" \"\$ROOT/lib/ld-linux-aarch64.so.1\"; do [ -x \"\$c\" ] && LD=\"\$c\" && break; done")
-            appendLine("NSE=")
-            appendLine("for c in \"\$ROOT/usr/bin/nsenter\" \"\$ROOT/bin/nsenter\"; do [ -x \"\$c\" ] && NSE=\"\$c\" && break; done")
-            appendLine("if [ -z \"\$LD\" ] || [ -z \"\$NSE\" ]; then")
-            appendLine("  echo \"直连模式不可用：缺少容器 loader 或 nsenter，回退到 run + script\"")
-            appendLine("  $fallback")
-            appendLine("  exit 1")
-            appendLine("fi")
-            appendLine("LIBS=\"\$ROOT/lib/aarch64-linux-gnu:\$ROOT/usr/lib/aarch64-linux-gnu:\$ROOT/lib64:\$ROOT/usr/lib64:\$ROOT/lib:\$ROOT/usr/lib\"")
-            appendLine("\"\$LD\" --library-path \"\$LIBS\" \"\$NSE\" -t \"\$PID\" -m -u -i -p -n -w /root -- /bin/sh -c 'if [ -x /bin/bash ]; then exec /bin/bash -l; else exec /bin/sh -l; fi'")
-            appendLine("RC=\$?")
-            appendLine("if [ \"\$RC\" -eq 0 ]; then exit 0; fi")
-            appendLine("echo \"直连失败（exit \$RC），回退到 run + script\"")
-            append(fallback)
-        }
-        return TerminalCommand(direct, direct = true)
+        // Host-side PTY + nsenter leaves /dev/tty pointing at the container's
+        // devpts, so bash/readline cannot manage the real terminal and the host
+        // PTY is left raw/no-echo. The container-side `script` PTY keeps the
+        // shell, its controlling tty and /dev/tty in the same namespace.
+        return TerminalCommand(fallback, direct = false)
     }
 
     /**
