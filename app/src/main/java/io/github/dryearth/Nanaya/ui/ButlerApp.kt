@@ -3,6 +3,9 @@ package io.github.dryearth.Nanaya.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +44,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.getValue
@@ -53,6 +58,7 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -78,6 +84,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -128,6 +136,7 @@ import io.github.dryearth.Nanaya.ui.screens.SecurityScreen
 import io.github.dryearth.Nanaya.ui.screens.SettingsScreen
 import io.github.dryearth.Nanaya.ui.screens.StorageScreen
 import io.github.dryearth.Nanaya.ui.theme.Glass
+import kotlin.math.roundToInt
 
 private data class NavItem(val id: String, val label: String, val icon: ImageVector)
 
@@ -169,6 +178,28 @@ fun ButlerApp(
     val contentBackdrop = rememberLayerBackdrop {
         drawRect(Glass.Ink)
         drawContent()
+    }
+    val pagerState = rememberPagerState(
+        initialPage = navItems.indexOfFirst { it.id == tab }.coerceAtLeast(0),
+        pageCount = { navItems.size },
+    )
+
+    LaunchedEffect(tab) {
+        val index = navItems.indexOfFirst { it.id == tab }
+        if (index >= 0 && pagerState.currentPage != index && !pagerState.isScrollInProgress) {
+            pagerState.animateScrollToPage(
+                index,
+                animationSpec = spring(1f, 900f, 0.001f),
+            )
+        }
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage to pagerState.isScrollInProgress }
+            .collect { (page, scrolling) ->
+                if (scrolling) return@collect
+                val id = navItems.getOrNull(page)?.id ?: return@collect
+                if (tab != id) tab = id
+            }
     }
 
     LaunchedEffect(nav) {
@@ -322,40 +353,46 @@ fun ButlerApp(
                 } else if (sub == "droidspaces") {
                     DroidspacesScreen(onBack = { closeSub() })
                 } else {
-                    when (tab) {
-                        "home" -> HomeScreen(
-                            vm,
-                            onOpenTab = { tab = it },
-                            onChat = { chat = true },
-                            onOpenAutostart = { sub = "autostart" },
-                            onOpenMemory = { sub = "memory" },
-                            onOpenAutomation = { sub = "automation" },
-                            onScrollProgress = { homeScroll = it },
-                        )
-                        "storage" -> StorageScreen(vm)
-                        "apps" -> AppsScreen(
-                            vm,
-                            onOpenAutostart = { sub = "autostart" },
-                            onOpenDiagnostics = { sub = "diagnostics" },
-                        )
-                        "perf" -> PerformanceScreen(
-                            vm,
-                            onOpenRules = { sub = "rules" },
-                            onOpenMemory = { sub = "memory" },
-                        )
-                        "security" -> SecurityScreen(
-                            vm,
-                            onOpenSpecial = { sub = "special" },
-                            onOpenDomain = { sub = "domain" },
-                        )
-                        "tools" -> ToolsScreen(
-                            onBack = { tab = "home" },
-                            onOpenRemote = { sub = "remoteadb" },
-                            onOpenLocal = { sub = "adbconsole" },
-                            onOpenUsb = { sub = "usbotg" },
-                            onOpenMusic = { sub = "music" },
-                            onOpenDroidspaces = { sub = "droidspaces" },
-                        )
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = 1,
+                    ) { page ->
+                        when (navItems[page].id) {
+                            "home" -> HomeScreen(
+                                vm,
+                                onOpenTab = { tab = it },
+                                onChat = { chat = true },
+                                onOpenAutostart = { sub = "autostart" },
+                                onOpenMemory = { sub = "memory" },
+                                onOpenAutomation = { sub = "automation" },
+                                onScrollProgress = { homeScroll = it },
+                            )
+                            "storage" -> StorageScreen(vm)
+                            "apps" -> AppsScreen(
+                                vm,
+                                onOpenAutostart = { sub = "autostart" },
+                                onOpenDiagnostics = { sub = "diagnostics" },
+                            )
+                            "perf" -> PerformanceScreen(
+                                vm,
+                                onOpenRules = { sub = "rules" },
+                                onOpenMemory = { sub = "memory" },
+                            )
+                            "security" -> SecurityScreen(
+                                vm,
+                                onOpenSpecial = { sub = "special" },
+                                onOpenDomain = { sub = "domain" },
+                            )
+                            "tools" -> ToolsScreen(
+                                onBack = { tab = "home" },
+                                onOpenRemote = { sub = "remoteadb" },
+                                onOpenLocal = { sub = "adbconsole" },
+                                onOpenUsb = { sub = "usbotg" },
+                                onOpenMusic = { sub = "music" },
+                                onOpenDroidspaces = { sub = "droidspaces" },
+                            )
+                        }
                     }
                 }
             }
@@ -816,26 +853,134 @@ private fun BottomBar(
     backdrop: LayerBackdrop,
     modifier: Modifier = Modifier,
 ) {
+    val allItems = remember { navItems + settingsItem }
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val selectedIndex = allItems.indexOfFirst { it.id == current }.coerceAtLeast(0)
+    val indexAnim = remember { Animatable(selectedIndex.toFloat()) }
+    val pressAnim = remember { Animatable(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragIndex by remember { mutableFloatStateOf(selectedIndex.toFloat()) }
+    var widthPx by remember { mutableFloatStateOf(0f) }
+    val itemWidthPx = if (allItems.isEmpty()) 0f else widthPx / allItems.size
+    val press = pressAnim.value
+    val shape = CircleShape
+
+    LaunchedEffect(selectedIndex) {
+        if (!dragging) indexAnim.animateTo(selectedIndex.toFloat(), spring(1f, 700f, 0.001f))
+    }
+
+    fun indexAt(x: Float): Int {
+        if (itemWidthPx <= 0f) return selectedIndex
+        return (x / itemWidthPx).toInt().coerceIn(0, allItems.lastIndex)
+    }
+
     Box(
-        modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier.navigationBarsPadding().padding(horizontal = 18.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        GlassPanel(
-            modifier = Modifier.height(56.dp),
-            corner = 28.dp,
-            padding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
-            strongGlass = true,
-            backdropOverride = backdrop,
-        ) {
-            Row(
-                Modifier.fillMaxHeight(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                navItems.forEach { item ->
-                    BarItem(item, selected = current == item.id) { onSelect(item.id) }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(66.dp)
+                .onSizeChanged { widthPx = it.width.toFloat() }
+                .graphicsLayer {
+                    val scale = 1f + 0.06f * press
+                    scaleX = scale
+                    scaleY = scale
                 }
-                BarItem(settingsItem, selected = false, onClick = onOpenSettings)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { shape },
+                    effects = {
+                        vibrancy()
+                        blur(5.dp.toPx(), 5.dp.toPx())
+                        lens(
+                            refractionHeight = 18.dp.toPx() * (1f + 0.7f * press),
+                            refractionAmount = 22.dp.toPx() * (1f + 0.7f * press),
+                        )
+                    },
+                    onDrawSurface = {
+                        drawRect(Color(0x5C10151B))
+                        if (press > 0f) {
+                            drawRect(Color.White.copy(alpha = 0.06f * press))
+                        }
+                    },
+                )
+                .clip(shape)
+                .pointerInput(allItems.size) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            dragging = true
+                            dragIndex = indexAt(offset.x).toFloat()
+                            scope.launch {
+                                pressAnim.animateTo(1f, spring(0.7f, 500f, 0.001f))
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            dragIndex = indexAt(change.position.x).toFloat()
+                        },
+                        onDragEnd = {
+                            dragging = false
+                            val index = dragIndex.roundToInt().coerceIn(0, allItems.lastIndex)
+                            scope.launch {
+                                indexAnim.snapTo(index.toFloat())
+                                pressAnim.animateTo(0f, spring(0.7f, 500f, 0.001f))
+                            }
+                            val item = allItems[index]
+                            if (item.id == settingsItem.id) onOpenSettings() else onSelect(item.id)
+                        },
+                        onDragCancel = {
+                            dragging = false
+                            dragIndex = selectedIndex.toFloat()
+                            scope.launch {
+                                pressAnim.animateTo(0f, spring(0.7f, 500f, 0.001f))
+                            }
+                        },
+                    )
+                },
+        ) {
+            val indicator = if (dragging) dragIndex else indexAnim.value
+            if (itemWidthPx > 0f) {
+                Box(
+                    Modifier
+                        .offset(x = with(density) { (indicator * itemWidthPx).toDp() })
+                        .width(with(density) { itemWidthPx.toDp() })
+                        .fillMaxHeight()
+                        .padding(5.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Glass.Accent.copy(alpha = 0.10f + 0.12f * press)),
+                )
+            }
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                allItems.forEach { item ->
+                    val selected = item.id == current && item.id != settingsItem.id
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                if (item.id == settingsItem.id) onOpenSettings() else onSelect(item.id)
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            item.icon,
+                            contentDescription = item.label,
+                            tint = if (selected) Glass.Accent else Glass.Faint,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            item.label,
+                            fontSize = 9.sp,
+                            color = if (selected) Glass.Text else Glass.Faint,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
     }
