@@ -133,12 +133,19 @@ class PerformanceRepository(private val context: Context) {
             load = sysInt("/sys/class/misc/mali0/device/utilisation", -1)
             if (load < 0) load = sysInt("/sys/class/misc/mali0/device/gpu_busy", -1)
         }
+        // OnePlus/SM8750 exposes the GPU through devfreq even when the kgsl
+        // busy counter is missing.
+        val gpuDevfreq = "/sys/class/devfreq/3d00000.qcom,kgsl-3d0"
+        if (load < 0) load = sysInt("$gpuDevfreq/gpu_load", -1)
+        if (load < 0) load = sysInt("$gpuDevfreq/load", -1)
         if (freq <= 0) {
             freq = (sysLong("/sys/class/misc/mali0/device/clock") / 1_000_000L).toInt()
             if (freq <= 0) freq = (sysLong("/sys/class/misc/mali0/device/cur_freq") / 1_000_000L).toInt()
+            if (freq <= 0) freq = (sysLong("$gpuDevfreq/cur_freq") / 1_000_000L).toInt()
         }
         if (max <= 0) {
             max = (sysLong("/sys/class/misc/mali0/device/max_freq") / 1_000_000L).toInt()
+            if (max <= 0) max = (sysLong("$gpuDevfreq/max_freq") / 1_000_000L).toInt()
         }
         val name = readText("$kgsl/gpu_model")
             ?: readText("$kgsl/devfreq/name")
@@ -346,16 +353,20 @@ class PerformanceRepository(private val context: Context) {
     private fun friendlyTemp(type: String): String {
         val t = type.lowercase(Locale.US)
         return when {
-            t.contains("battery") || t.contains("batt") || t.contains("bms") -> "电池"
+            t.contains("battery") || t.contains("batt") || t.contains("bms") ||
+                t.contains("vbat") || t.contains("ibat") -> "电池"
             t.contains("gpu") || t.contains("kgsl") || t.contains("mali") || t.contains("adreno") -> "GPU"
             t.contains("cpu") || t.contains("ap") || t.contains("soc") || t.contains("cluster") ||
                 t.contains("core") || t.contains("little") || t.contains("big") ||
                 t.contains("mid") || t.contains("gold") || t.contains("silver") -> "CPU"
             t.contains("skin") || t.contains("shell") || t.contains("frame") -> "机身"
             t.contains("charger") || t.contains("usb") || t.contains("vbus") ||
-                t.contains("pmic") || t.contains("power") -> "电源"
+                t.contains("pmic") || t.contains("power") || t.contains("pm8") ||
+                t.contains("pmih") || t.contains("bcl") -> "电源"
             t.contains("wifi") || t.contains("wlan") || t.contains("wcn") -> "WiFi"
-            t.contains("modem") || t.contains("pa") || t.contains("rf") -> "基带"
+            t.contains("modem") || t.contains("mdm") || t.contains("pa") || t.contains("rf") -> "基带"
+            t.contains("ddr") || t.contains("mem") -> "内存"
+            t.contains("video") -> "视频"
             t.contains("display") || t.contains("panel") || t.contains("lcd") -> "屏幕"
             t.contains("camera") || t.contains("cam") -> "相机"
             t.contains("npu") || t.contains("cdsp") || t.contains("nsp") || t.contains("apu") -> "NPU"
@@ -416,6 +427,11 @@ class PerformanceRepository(private val context: Context) {
         }.getOrDefault(0L)
         if (current == 0L) {
             current = readText("/sys/class/power_supply/battery/current_now")
+                ?.filter { it.isDigit() || it == '-' }
+                ?.toLongOrNull() ?: 0L
+        }
+        if (current == 0L) {
+            current = readText("/sys/class/power_supply/usb/current_now")
                 ?.filter { it.isDigit() || it == '-' }
                 ?.toLongOrNull() ?: 0L
         }
