@@ -2,6 +2,7 @@ package com.termux.terminal;
 
 import android.annotation.SuppressLint;
 import android.os.Handler;
+import android.os.ParcelFileDescriptor;
 import android.os.Message;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -13,7 +14,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -64,6 +64,9 @@ public final class TerminalSession extends TerminalOutput {
      * {@link JNI#createSubprocess(String, String, String[], String[], int[], int, int, int, int)}.
      */
     private int mTerminalFileDescriptor;
+
+    /** Owns mTerminalFileDescriptor so the fd is not closed by GC. */
+    private ParcelFileDescriptor mTerminalPfd;
 
     /** Set by the application for user identification of session, not by terminal. */
     public String mSessionName;
@@ -128,7 +131,11 @@ public final class TerminalSession extends TerminalOutput {
         mShellPid = processId[0];
         mClient.setTerminalShellPid(this, mShellPid);
 
-        final FileDescriptor terminalFileDescriptorWrapped = wrapFileDescriptor(mTerminalFileDescriptor, mClient);
+        // Avoid the hidden FileDescriptor#descriptor field (blocked for apps
+        // targeting modern SDKs). ParcelFileDescriptor owns the same fd and
+        // stays referenced for the session lifetime.
+        mTerminalPfd = ParcelFileDescriptor.adoptFd(mTerminalFileDescriptor);
+        final FileDescriptor terminalFileDescriptorWrapped = mTerminalPfd.getFileDescriptor();
 
         new Thread("TermSessionInputReader[pid=" + mShellPid + "]") {
             @Override
@@ -233,7 +240,7 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Finish this terminal session by sending SIGKILL to the shell. */
     public void finishIfRunning() {
-        if (isRunning()) {
+        if (mShellPid > 0) {
             try {
                 Os.kill(mShellPid, OsConstants.SIGKILL);
             } catch (ErrnoException e) {
@@ -252,7 +259,16 @@ public final class TerminalSession extends TerminalOutput {
         // Stop the reader and writer threads, and close the I/O streams
         mTerminalToProcessIOQueue.close();
         mProcessToTerminalIOQueue.close();
-        JNI.close(mTerminalFileDescriptor);
+        if (mTerminalPfd != null) {
+            try {
+                mTerminalPfd.close();
+            } catch (java.io.IOException e) {
+                Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Failed closing terminal fd", e);
+            }
+            mTerminalPfd = null;
+        } else if (mTerminalFileDescriptor > 0) {
+            JNI.close(mTerminalFileDescriptor);
+        }
     }
 
     @Override
@@ -312,25 +328,6 @@ public final class TerminalSession extends TerminalOutput {
             Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Error getting current directory", e);
         }
         return null;
-    }
-
-    private static FileDescriptor wrapFileDescriptor(int fileDescriptor, TerminalSessionClient client) {
-        FileDescriptor result = new FileDescriptor();
-        try {
-            Field descriptorField;
-            try {
-                descriptorField = FileDescriptor.class.getDeclaredField("descriptor");
-            } catch (NoSuchFieldException e) {
-                // For desktop java:
-                descriptorField = FileDescriptor.class.getDeclaredField("fd");
-            }
-            descriptorField.setAccessible(true);
-            descriptorField.set(result, fileDescriptor);
-        } catch (NoSuchFieldException | IllegalAccessException | IllegalArgumentException e) {
-            Logger.logStackTraceWithMessage(client, LOG_TAG, "Error accessing FileDescriptor#descriptor private field", e);
-            System.exit(1);
-        }
-        return result;
     }
 
     @SuppressLint("HandlerLeak")
