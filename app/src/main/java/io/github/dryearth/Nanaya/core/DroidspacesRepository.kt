@@ -195,22 +195,59 @@ object DroidspacesRepository {
         }.getOrDefault(emptyMap<String, JSONObject>() to 0L)
     }
 
-    private fun terminalCommand(name: String): String? {
+    data class TerminalCommand(
+        val command: String,
+        val direct: Boolean,
+    )
+
+    /**
+     * Plan A fallback: `run --stdin` + a container-side `script` PTY.
+     * Kept for containers without util-linux/nsenter.
+     */
+    fun fallbackShellCommand(name: String): String? {
         if (!validContainer(name)) return null
-        // Do not use `droidspaces enter`: its session/PTY teardown is what
-        // crashes on some devices when the terminal closes. Instead `run
-        // --stdin` executes one command inside the container, and `script`
-        // allocates the PTY *inside* the container for the login shell. The
-        // host PTY only relays bytes, so closing it cannot tear down an enter
-        // session.
-        val loginShell = "export TERM=xterm-256color; exec su -l root"
+        val login = "export TERM=xterm-256color; exec su -l root"
         return "export DS_NO_PROXY=1 TERM=xterm-256color; " +
             "exec $BINARY --name=${quote(name)} --stdin run " +
-            "script -qfc ${quote(loginShell)} /dev/null"
+            "script -qfc ${quote(login)} /dev/null"
     }
 
-    /** Command passed to su -c by the Termux TerminalSession. */
-    fun terminalShellCommand(name: String): String? = terminalCommand(name)
+    /**
+     * Single-PTY direct entry. The host PTY belongs to Termux TerminalSession;
+     * this command only uses the container's own glibc loader + nsenter to
+     * step into its namespaces and exec the login shell. No droidspaces
+     * session, no second PTY and no byte relay, so terminal echo behaves like
+     * a local shell.
+     */
+    fun terminalCommand(name: String, pid: Int, rootfs: String?): TerminalCommand? {
+        if (!validContainer(name)) return null
+        val fallback = fallbackShellCommand(name) ?: return null
+        if (pid <= 0 || rootfs.isNullOrBlank()) {
+            return TerminalCommand(fallback, direct = false)
+        }
+        val root = quote(rootfs)
+        val direct = buildString {
+            appendLine("export DS_NO_PROXY=1 TERM=xterm-256color")
+            appendLine("ROOT=$root")
+            appendLine("PID=$pid")
+            appendLine("LD=")
+            appendLine("for c in \"\$ROOT/lib64/ld-linux-aarch64.so.1\" \"\$ROOT/lib/ld-linux-aarch64.so.1\"; do [ -x \"\$c\" ] && LD=\"\$c\" && break; done")
+            appendLine("NSE=")
+            appendLine("for c in \"\$ROOT/usr/bin/nsenter\" \"\$ROOT/bin/nsenter\"; do [ -x \"\$c\" ] && NSE=\"\$c\" && break; done")
+            appendLine("if [ -z \"\$LD\" ] || [ -z \"\$NSE\" ]; then")
+            appendLine("  echo \"直连模式不可用：缺少容器 loader 或 nsenter，回退到 run + script\"")
+            appendLine("  $fallback")
+            appendLine("  exit 1")
+            appendLine("fi")
+            appendLine("LIBS=\"\$ROOT/lib/aarch64-linux-gnu:\$ROOT/usr/lib/aarch64-linux-gnu:\$ROOT/lib64:\$ROOT/usr/lib64:\$ROOT/lib:\$ROOT/usr/lib\"")
+            appendLine("\"\$LD\" --library-path \"\$LIBS\" \"\$NSE\" -t \"\$PID\" -m -u -i -p -n -w / -- /bin/su -l root")
+            appendLine("RC=\$?")
+            appendLine("if [ \"\$RC\" -eq 0 ]; then exit 0; fi")
+            appendLine("echo \"直连失败（exit \$RC），回退到 run + script\"")
+            append(fallback)
+        }
+        return TerminalCommand(direct, direct = true)
+    }
 
     /**
      * One-off command through `droidspaces --name=<name> run '<command>'`.

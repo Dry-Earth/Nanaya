@@ -107,6 +107,8 @@ private fun showKeyboard(context: Context, view: TerminalView) {
 @Composable
 fun DroidspacesTerminalScreen(
     containerName: String,
+    containerPid: Int,
+    rootfs: String,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -116,7 +118,7 @@ fun DroidspacesTerminalScreen(
     val viewRef = remember { mutableStateOf<TerminalView?>(null) }
     var generation by remember { mutableIntStateOf(0) }
     val session = remember(containerName, generation) {
-        DroidspacesTerminals.getOrOpen(context, containerName)
+        DroidspacesTerminals.getOrOpen(context, containerName, containerPid, rootfs)
     }
     val alive by session.alive.collectAsState()
     var fullscreen by remember { mutableStateOf(false) }

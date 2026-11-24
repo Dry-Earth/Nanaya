@@ -29,13 +29,18 @@ object DroidspacesTerminals {
 
     fun get(name: String): Session? = sessions[name]?.takeIf { it.alive.value }
 
-    fun getOrOpen(context: Context, name: String): Session {
+    fun getOrOpen(
+        context: Context,
+        name: String,
+        pid: Int = 0,
+        rootfs: String? = null,
+    ): Session {
         appContext = context.applicationContext
         sessions[name]?.takeIf { it.alive.value }?.let {
             DroidspacesTerminalService.start(appContext)
             return it
         }
-        val session = Session(name)
+        val session = Session(name, pid, rootfs)
         session.onFinished = {
             if (sessions[name] === session) sessions.remove(name)
             refreshActive()
@@ -86,7 +91,14 @@ object DroidspacesTerminals {
         }.getOrNull()
     }
 
-    class Session internal constructor(val name: String) {
+    class Session internal constructor(
+        val name: String,
+        pid: Int,
+        rootfs: String?,
+    ) {
+        private val terminalCommand = DroidspacesRepository.terminalCommand(name, pid, rootfs)
+        private val needsScriptSize = terminalCommand?.direct == false
+
         private val _alive = MutableStateFlow(true)
         val alive: StateFlow<Boolean> = _alive.asStateFlow()
 
@@ -164,6 +176,7 @@ object DroidspacesTerminals {
          * pin the inner PTY to the real size once the emulator exists.
          */
         fun syncContainerTty() {
+            if (!needsScriptSize) return
             if (scriptSized) return
             val emulator = terminalSession.emulator ?: return
             val rows = emulator.mRows
@@ -178,7 +191,7 @@ object DroidspacesTerminals {
         val terminalSession: TerminalSession = TerminalSession(
             "su",
             "/",
-            arrayOf("su", "-c", DroidspacesRepository.terminalShellCommand(name) ?: "exit 1"),
+            arrayOf("su", "-c", terminalCommand?.command ?: "exit 1"),
             DroidspacesTerminals.buildEnvironment(),
             5000,
             client,

@@ -92,7 +92,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     var expandedPids by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val disks = remember { mutableStateMapOf<String, String>() }
-    var terminalFor by remember { mutableStateOf<String?>(null) }
+    var terminalFor by remember { mutableStateOf<DsContainer?>(null) }
     var commandFor by remember { mutableStateOf<String?>(null) }
     val activeTerminals by DroidspacesTerminals.active.collectAsState()
 
@@ -204,8 +204,13 @@ fun DroidspacesScreen(onBack: () -> Unit) {
     }
 
     BackHandler(enabled = terminalFor != null) { terminalFor = null }
-    terminalFor?.let { name ->
-        DroidspacesTerminalScreen(containerName = name, onBack = { terminalFor = null })
+    terminalFor?.let { container ->
+        DroidspacesTerminalScreen(
+            containerName = container.name,
+            containerPid = container.pid,
+            rootfs = container.rootfs,
+            onBack = { terminalFor = null },
+        )
         return
     }
 
@@ -403,7 +408,7 @@ fun DroidspacesScreen(onBack: () -> Unit) {
                     onTogglePid = { pid ->
                         expandedPids = if (pid in expandedPids) expandedPids - pid else expandedPids + pid
                     },
-                    onOpenTerminal = { terminalFor = container.name },
+                    onOpenTerminal = { terminalFor = container },
                     onOpenCommand = { commandFor = container.name },
                     onOpenDesktop = {
                         message = DroidspacesDesktop.open(context, container) ?: "已打开桌面"
