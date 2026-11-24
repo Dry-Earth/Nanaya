@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -187,6 +188,9 @@ fun ButlerApp(
         initialPage = navItems.indexOfFirst { it.id == tab }.coerceAtLeast(0),
         pageCount = { navItems.size },
     )
+    val bottomBarReserve = with(density) {
+        (WindowInsets.navigationBars.getBottom(this) + 70.dp.toPx()).toDp()
+    }
 
     LaunchedEffect(tab) {
         val index = navItems.indexOfFirst { it.id == tab }
@@ -359,7 +363,7 @@ fun ButlerApp(
                 } else {
                     HorizontalPager(
                         state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().padding(bottom = bottomBarReserve),
                         beyondViewportPageCount = 1,
                     ) { page ->
                         when (navItems[page].id) {
@@ -861,24 +865,30 @@ private fun BottomBar(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val selectedIndex = allItems.indexOfFirst { it.id == current }.coerceAtLeast(0)
-    val indicatorLeft = remember { Animatable(0f) }
+    val centerAnim = remember { Animatable(0f) }
     val pressAnim = remember { Animatable(0f) }
     var dragging by remember { mutableStateOf(false) }
     var dragCenterPx by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     val itemWidthPx = if (allItems.isEmpty()) 0f else widthPx / allItems.size
-    val barHeightDp = 54.dp
+    val barHeightDp = 46.dp
     val barHeightPx = with(density) { barHeightDp.toPx() }
     val press = pressAnim.value
     val barShape = CircleShape
 
     LaunchedEffect(itemWidthPx, selectedIndex) {
         if (!dragging && itemWidthPx > 0f) {
-            indicatorLeft.animateTo(
-                selectedIndex * itemWidthPx,
+            centerAnim.animateTo(
+                selectedIndex * itemWidthPx + itemWidthPx / 2f,
                 spring(0.9f, 260f, 0.001f),
             )
         }
+    }
+    LaunchedEffect(dragging) {
+        pressAnim.animateTo(
+            if (dragging) 1f else 0f,
+            spring(0.6f, 280f, 0.001f),
+        )
     }
 
     fun indexAt(x: Float): Int {
@@ -903,8 +913,7 @@ private fun BottomBar(
                 .height(barHeightDp)
                 .onSizeChanged { widthPx = it.width.toFloat() },
         ) {
-            // 1. Background glass only. The indicator and the tab content are
-            // siblings, so a pressed indicator can grow past this surface.
+            // Background glass.
             Box(
                 Modifier
                     .fillMaxSize()
@@ -915,16 +924,18 @@ private fun BottomBar(
                             vibrancy()
                             blur(6.dp.toPx(), 6.dp.toPx())
                             lens(
-                                refractionHeight = 18.dp.toPx() * (1f + 0.8f * press),
-                                refractionAmount = 24.dp.toPx() * (1f + 0.8f * press),
+                                refractionHeight = 20.dp.toPx() * (1f + 0.9f * press),
+                                refractionAmount = 26.dp.toPx() * (1f + 0.9f * press),
+                                depthEffect = true,
+                                chromaticAberration = 0.35f,
                             )
                         },
                         onDrawSurface = {
-                            drawRect(Color(0x3510151B))
+                            drawRect(Color(0x2410151B))
                             drawRect(
                                 Brush.verticalGradient(
                                     listOf(
-                                        Color.White.copy(alpha = 0.13f),
+                                        Color.White.copy(alpha = 0.16f),
                                         Color.Transparent,
                                         Color.White.copy(alpha = 0.03f),
                                     ),
@@ -936,9 +947,9 @@ private fun BottomBar(
                         width = 1.dp,
                         brush = Brush.linearGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.38f),
-                                Color.White.copy(alpha = 0.06f),
-                                Color.White.copy(alpha = 0.20f),
+                                Color.White.copy(alpha = 0.46f),
+                                Color.White.copy(alpha = 0.05f),
+                                Color.White.copy(alpha = 0.24f),
                             ),
                         ),
                         shape = barShape,
@@ -957,9 +968,6 @@ private fun BottomBar(
                                         itemWidthPx / 2f,
                                         widthPx - itemWidthPx / 2f,
                                     )
-                                    scope.launch {
-                                        pressAnim.animateTo(1f, spring(0.55f, 260f, 0.001f))
-                                    }
                                 }
                             },
                             onDrag = { change, _ ->
@@ -978,39 +986,30 @@ private fun BottomBar(
                                         .roundToInt()
                                         .coerceIn(0, allItems.lastIndex)
                                     scope.launch {
-                                        indicatorLeft.snapTo(dragCenterPx - itemWidthPx / 2f)
-                                        indicatorLeft.animateTo(
-                                            index * itemWidthPx,
+                                        centerAnim.snapTo(dragCenterPx)
+                                        centerAnim.animateTo(
+                                            index * itemWidthPx + itemWidthPx / 2f,
                                             spring(0.9f, 260f, 0.001f),
                                         )
-                                        pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
                                     }
                                     commit(index)
-                                } else {
-                                    scope.launch {
-                                        pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
-                                    }
                                 }
                             },
                             onDragCancel = {
                                 dragging = false
-                                scope.launch {
-                                    pressAnim.animateTo(0f, spring(0.7f, 300f, 0.001f))
-                                }
                             },
                         )
                     },
             )
 
-            // 2. The moving liquid-glass indicator, above the bar surface but
-            // below the icons so it never hides the labels.
+            // Transparent refractive indicator.
             if (itemWidthPx > 0f) {
                 val gapPx = with(density) { 4.dp.toPx() }
                 val baseW = (itemWidthPx - gapPx * 2f).coerceAtLeast(1f)
                 val indicatorW = baseW * (1f + 0.9f * press)
-                val indicatorH = (barHeightPx - with(density) { 8.dp.toPx() }) *
-                    (1f + 0.55f * press)
-                val center = if (dragging) dragCenterPx else indicatorLeft.value + itemWidthPx / 2f
+                val indicatorH = (barHeightPx - with(density) { 6.dp.toPx() }) *
+                    (1f + 0.6f * press)
+                val center = if (dragging || press > 0.02f) dragCenterPx else centerAnim.value
                 val left = (center - indicatorW / 2f)
                     .coerceIn(0f, (widthPx - indicatorW).coerceAtLeast(0f))
                 val top = (barHeightPx - indicatorH) / 2f
@@ -1030,34 +1029,33 @@ private fun BottomBar(
                             shape = { indicatorShape },
                             effects = {
                                 vibrancy()
-                                blur(4.dp.toPx(), 4.dp.toPx())
+                                blur(5.dp.toPx(), 5.dp.toPx())
                                 lens(
-                                    refractionHeight = 14.dp.toPx() * (1f + 0.9f * press),
-                                    refractionAmount = 20.dp.toPx() * (1f + 0.9f * press),
+                                    refractionHeight = 30.dp.toPx() * (1f + 0.9f * press),
+                                    refractionAmount = 38.dp.toPx() * (1f + 0.9f * press),
+                                    depthEffect = true,
+                                    chromaticAberration = 0.65f,
                                 )
                             },
                             onDrawSurface = {
-                                drawRect(Color.White.copy(alpha = 0.12f + 0.10f * press))
-                                drawRect(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.18f + 0.12f * press),
-                                            Color.Transparent,
-                                        ),
-                                    ),
-                                )
+                                drawRect(Color.White.copy(alpha = 0.02f + 0.03f * press))
                             },
                         )
                         .clip(indicatorShape)
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.24f + 0.18f * press),
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.30f + 0.20f * press),
+                                    Color.White.copy(alpha = 0.03f),
+                                    Color.White.copy(alpha = 0.20f),
+                                ),
+                            ),
                             shape = indicatorShape,
                         ),
                 )
             }
 
-            // 3. Tab content on top.
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 allItems.forEach { item ->
                     val selected = item.id == current && item.id != settingsItem.id
@@ -1072,9 +1070,9 @@ private fun BottomBar(
                             item.icon,
                             contentDescription = item.label,
                             tint = if (selected) Glass.Accent else Glass.Faint,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(22.dp),
                         )
-                        Spacer(Modifier.height(3.dp))
+                        Spacer(Modifier.height(1.dp))
                         Text(
                             item.label,
                             fontSize = 9.sp,
