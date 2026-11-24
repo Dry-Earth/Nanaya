@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -188,9 +187,6 @@ fun ButlerApp(
         initialPage = navItems.indexOfFirst { it.id == tab }.coerceAtLeast(0),
         pageCount = { navItems.size },
     )
-    val bottomBarReserve = with(density) {
-        (WindowInsets.navigationBars.getBottom(this) + 79.dp.toPx()).toDp()
-    }
 
     LaunchedEffect(tab) {
         val index = navItems.indexOfFirst { it.id == tab }
@@ -363,7 +359,7 @@ fun ButlerApp(
                 } else {
                     HorizontalPager(
                         state = pagerState,
-                        modifier = Modifier.fillMaxSize().padding(bottom = bottomBarReserve),
+                        modifier = Modifier.fillMaxSize(),
                         beyondViewportPageCount = 1,
                     ) { page ->
                         when (navItems[page].id) {
@@ -904,7 +900,7 @@ private fun BottomBar(
     Box(
         modifier
             .navigationBarsPadding()
-            .padding(start = 32.dp, end = 32.dp, top = 6.dp, bottom = 24.dp),
+            .padding(start = 32.dp, end = 32.dp, top = 6.dp, bottom = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
