@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,28 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
     val state by vm.apps.collectAsStateWithLifecycle()
     val caps by vm.caps.collectAsStateWithLifecycle()
     ToastEffect(state.toast) { vm.clearAppsToast() }
+    val bootState by vm.autostart.collectAsStateWithLifecycle()
+    ToastEffect(bootState.toast) { vm.clearAutostartToast() }
+    var mode by remember { mutableStateOf(0) }
+    LaunchedEffect(mode) {
+        if (mode == 1) vm.loadAutostart()
+    }
+    val bootFiltered = remember(
+        bootState.items,
+        bootState.query,
+        bootState.onlyUser,
+        bootState.onlyEnabled,
+    ) {
+        bootState.items.filter { item ->
+            val q = bootState.query.trim().lowercase(Locale.getDefault())
+            val match = q.isBlank() ||
+                item.app.label.lowercase(Locale.getDefault()).contains(q) ||
+                item.app.pkg.lowercase(Locale.getDefault()).contains(q)
+            val user = !bootState.onlyUser || !item.app.system
+            val enabled = !bootState.onlyEnabled || item.components.any { it.enabled }
+            match && user && enabled
+        }
+    }
 
     val filtered = remember(state.apps, state.query, state.filter) {
         state.apps.filter { app ->
@@ -105,6 +128,10 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
         contentPadding = PaddingValues(start = 16.dp, top = topInset + 16.dp, end = 16.dp, bottom = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        item {
+            AppsModePills(mode) { mode = it }
+        }
+        if (mode == 0) {
         item {
             GlassPanel(padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -210,6 +237,63 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+        } else {
+            item {
+                GlassPanel(padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = Glass.Faint, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f)) {
+                            if (bootState.query.isEmpty()) {
+                                Text("搜索自启应用或包名", style = MaterialTheme.typography.bodyMedium, color = Glass.Faint)
+                            }
+                            BasicTextField(
+                                value = bootState.query,
+                                onValueChange = vm::setAutostartQuery,
+                                textStyle = TextStyle(color = Glass.Text, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
+                                cursorBrush = SolidColor(Glass.Accent),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        if (bootState.query.isNotEmpty()) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = "清除",
+                                tint = Glass.Faint,
+                                modifier = Modifier.size(18.dp).clickable { vm.setAutostartQuery("") },
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill(
+                        "仅用户应用",
+                        selected = bootState.onlyUser,
+                        color = Glass.Accent,
+                        onClick = { vm.setAutostartOnlyUser(!bootState.onlyUser) },
+                    )
+                    Pill(
+                        "仅看已启用",
+                        selected = bootState.onlyEnabled,
+                        color = Glass.Amber,
+                        onClick = { vm.setAutostartOnlyEnabled(!bootState.onlyEnabled) },
+                    )
+                }
+            }
+            if (bootState.loading) {
+                item { EmptyHint("正在读取自启组件…") }
+            } else if (bootFiltered.isEmpty()) {
+                item { EmptyHint("没有匹配的自启项") }
+            } else {
+                items(bootFiltered, key = { it.app.pkg }) { item ->
+                    AutostartCard(vm, item, bootState.busy)
+                }
+            }
+            item { Spacer(Modifier.height(90.dp)) }
+        }
     }
     }
 
@@ -241,6 +325,14 @@ fun AppsScreen(vm: ButlerViewModel, onOpenAutostart: () -> Unit, onOpenDiagnosti
             }
         }
     }
+    }
+}
+
+@Composable
+private fun AppsModePills(mode: Int, onChange: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Pill("应用", selected = mode == 0, color = Glass.Accent) { onChange(0) }
+        Pill("开机自启", selected = mode == 1, color = Glass.Amber) { onChange(1) }
     }
 }
 

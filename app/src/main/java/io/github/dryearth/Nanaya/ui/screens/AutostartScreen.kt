@@ -169,7 +169,7 @@ fun AutostartScreen(vm: ButlerViewModel, onBack: () -> Unit, onOpenWakeup: () ->
 }
 
 @Composable
-private fun AutostartCard(vm: ButlerViewModel, item: AutostartApp, busy: String?) {
+internal fun AutostartCard(vm: ButlerViewModel, item: AutostartApp, busy: String?) {
     var expanded by remember(item.app.pkg) { mutableStateOf(false) }
     val enabledCount = item.components.count { it.enabled }
     val isBusy = busy == item.app.pkg || item.components.any { busy == it.component }
@@ -239,7 +239,7 @@ private fun AutostartCard(vm: ButlerViewModel, item: AutostartApp, busy: String?
 }
 
 @Composable
-private fun ComponentRow(comp: BootComponent, busy: Boolean, onToggle: (Boolean) -> Unit) {
+internal fun ComponentRow(comp: BootComponent, busy: Boolean, onToggle: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
