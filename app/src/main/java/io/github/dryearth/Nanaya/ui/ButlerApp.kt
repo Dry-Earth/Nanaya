@@ -867,7 +867,7 @@ private fun BottomBar(
     var dragCenterPx by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     val itemWidthPx = if (allItems.isEmpty()) 0f else widthPx / allItems.size
-    val barHeightDp = 55.dp
+    val barHeightDp = 54.dp
     val barHeightPx = with(density) { barHeightDp.toPx() }
     val press = pressAnim.value
     val barShape = CircleShape
@@ -900,7 +900,7 @@ private fun BottomBar(
     Box(
         modifier
             .navigationBarsPadding()
-            .padding(start = 32.dp, end = 32.dp, top = 6.dp, bottom = 2.dp),
+            .padding(start = 32.dp, end = 32.dp, top = 6.dp, bottom = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
