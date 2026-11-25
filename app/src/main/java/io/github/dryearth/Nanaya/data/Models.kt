@@ -250,6 +250,7 @@ data class ButlerAction(
     val args: Map<String, String> = emptyMap(),
     val title: String = "",
     val detail: String = "",
+    val dangerous: Boolean = false,
 )
 
 enum class ChatRole { USER, ASSISTANT, SYSTEM }

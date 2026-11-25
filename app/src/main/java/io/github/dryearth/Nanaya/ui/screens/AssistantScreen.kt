@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -429,6 +431,7 @@ private fun decodeFile(path: String): ImageBitmap? = runCatching {
 @Composable
 private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
     val isUser = msg.role == ChatRole.USER
+    var dangerDialog by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -503,7 +506,14 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
                                             "执行",
                                             accent = true,
                                             modifier = Modifier.weight(1f),
-                                            onClick = { vm.confirmAction(msg.id) },
+                                            onClick = {
+                                                val action = msg.action
+                                                if (action != null && action.dangerous) {
+                                                    dangerDialog = true
+                                                } else {
+                                                    vm.confirmAction(msg.id)
+                                                }
+                                            },
                                         )
                                     }
                                 }
@@ -538,6 +548,48 @@ private fun MessageBubble(vm: ButlerViewModel, msg: ChatMessage) {
                 }
             }
         }
+    }
+
+    val pendingAction = msg.action
+    if (dangerDialog && pendingAction != null) {
+        AlertDialog(
+            onDismissRequest = { dangerDialog = false },
+            title = { Text("危险命令确认", color = Glass.Text) },
+            text = {
+                Column {
+                    Text(
+                        "这条命令可能修改系统或删除数据：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Glass.Rose,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        pendingAction.args["command"] ?: pendingAction.detail,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = Glass.Text,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "确认后会立即执行。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                    )
+                }
+            },
+            confirmButton = {
+                ActionButton(
+                    "仍然执行",
+                    accent = true,
+                    onClick = {
+                        dangerDialog = false
+                        vm.confirmAction(msg.id, dangerConfirmed = true)
+                    },
+                )
+            },
+            dismissButton = {
+                ActionButton("取消", onClick = { dangerDialog = false })
+            },
+        )
     }
 }
 

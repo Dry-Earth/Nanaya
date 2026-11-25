@@ -48,6 +48,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ai_speak", true)
         set(value) = sp.edit().putBoolean("ai_speak", value).apply()
 
+    var aiAdbEnabled: Boolean
+        get() = sp.getBoolean("ai_adb_enabled", false)
+        set(value) = sp.edit().putBoolean("ai_adb_enabled", value).apply()
+
     var sttPackage: String
         get() = sp.getString("stt_package", "") ?: ""
         set(value) = sp.edit().putString("stt_package", value).apply()

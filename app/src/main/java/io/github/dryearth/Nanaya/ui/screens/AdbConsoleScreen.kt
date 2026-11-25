@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.dryearth.Nanaya.core.AdbSafety
 import io.github.dryearth.Nanaya.core.Shell
 import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
@@ -94,7 +95,7 @@ fun AdbConsoleScreen(onBack: () -> Unit) {
     fun dispatch(cmd: String) {
         val text = cmd.trim()
         if (text.isBlank() || busy) return
-        if (dangerousCommand(text)) {
+        if (AdbSafety.isDangerous(text)) {
             pendingDangerous = text
             return
         }
@@ -322,13 +323,4 @@ fun AdbConsoleScreen(onBack: () -> Unit) {
             }
         }
     }
-}
-
-private fun dangerousCommand(cmd: String): Boolean {
-    val lower = cmd.lowercase()
-    val patterns = listOf(
-        "rm ", "rm -", "dd ", "mkfs", "reboot", "shutdown", "pm uninstall", "pm clear",
-        "settings put", "appops set", "mount ", "chmod ", "chown ", "flash ",
-    )
-    return patterns.any { lower.contains(it) }
 }

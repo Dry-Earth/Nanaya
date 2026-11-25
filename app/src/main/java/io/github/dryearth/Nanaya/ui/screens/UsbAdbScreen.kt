@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.dryearth.Nanaya.core.UsbAdbClient
+import io.github.dryearth.Nanaya.core.UsbAdbHub
 import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -70,8 +71,8 @@ fun UsbAdbScreen(onBack: () -> Unit) {
             usbManager.deviceList.values.filter { UsbAdbClient.isAdbDevice(it) },
         )
     }
-    var client by remember { mutableStateOf<UsbAdbClient?>(null) }
-    var connectedDevice by remember { mutableStateOf<UsbDevice?>(null) }
+    var client by remember { mutableStateOf(UsbAdbHub.current()) }
+    var connectedDevice by remember { mutableStateOf(UsbAdbHub.currentDevice()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var command by remember { mutableStateOf("") }
@@ -101,7 +102,7 @@ fun UsbAdbScreen(onBack: () -> Unit) {
             }
             busy = false
             if (error == null) {
-                client?.close()
+                UsbAdbHub.adopt(created, device)
                 client = created
                 connectedDevice = device
                 message = "USB ADB 已连接"
@@ -160,7 +161,7 @@ fun UsbAdbScreen(onBack: () -> Unit) {
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose {
             runCatching { context.unregisterReceiver(receiver) }
-            client?.close()
+            // Keep the connection in UsbAdbHub so the AI can reuse it.
         }
     }
 
@@ -175,7 +176,21 @@ fun UsbAdbScreen(onBack: () -> Unit) {
                 Text("USB OTG ADB", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
                 Text("用 USB 线直接控制另一台设备", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
             }
-            Pill(if (client != null) "已连接" else "未连接", selected = client != null, color = if (client != null) Glass.Mint else Glass.Faint)
+            Pill(
+                if (client != null) "已连接 · 断开" else "未连接",
+                selected = client != null,
+                color = if (client != null) Glass.Mint else Glass.Faint,
+                onClick = if (client != null) {
+                    {
+                        UsbAdbHub.close()
+                        client = null
+                        connectedDevice = null
+                        message = "已断开 USB ADB"
+                    }
+                } else {
+                    null
+                },
+            )
         }
 
         if (devices.isEmpty()) {

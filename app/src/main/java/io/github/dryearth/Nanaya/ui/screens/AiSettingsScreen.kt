@@ -59,6 +59,8 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.dryearth.Nanaya.ButlerViewModel
+import io.github.dryearth.Nanaya.core.AdbAuditEntry
+import io.github.dryearth.Nanaya.core.AdbAuditLog
 import io.github.dryearth.Nanaya.ai.AiClient
 import io.github.dryearth.Nanaya.ui.components.ActionButton
 import io.github.dryearth.Nanaya.ui.components.GlassBackButton
@@ -142,6 +144,9 @@ fun AiSettingsScreen(
     var loadingModels by remember { mutableStateOf(false) }
     var thinking by remember { mutableStateOf(vm.prefs.aiThinking) }
     var effort by remember { mutableStateOf(vm.prefs.aiEffort) }
+    var aiAdb by remember { mutableStateOf(vm.prefs.aiAdbEnabled) }
+    var showAdbLog by remember { mutableStateOf(false) }
+    var adbLog by remember { mutableStateOf<List<AdbAuditEntry>>(emptyList()) }
 
     fun openAssistantSettings() {
         val intents = listOf(
@@ -360,9 +365,94 @@ fun AiSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = Glass.Muted,
             )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "允许 AI 执行 ADB / Shell 命令",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Glass.Text,
+                    )
+                    Text(
+                        "使用本机当前后端（Root / 无线 ADB / 普通权限）、已连接的远程 ADB 设备，以及 USB OTG ADB（需先在工具页连接一次）。危险命令会二次确认。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Muted,
+                    )
+                }
+                Pill(
+                    if (aiAdb) "已开启" else "已关闭",
+                    selected = aiAdb,
+                    color = if (aiAdb) Glass.Rose else Glass.Faint,
+                    onClick = {
+                        aiAdb = !aiAdb
+                        vm.prefs.aiAdbEnabled = aiAdb
+                        if (!aiAdb) showAdbLog = false
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(
+                    if (showAdbLog) "收起命令日志" else "查看命令日志",
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        adbLog = AdbAuditLog.read(context)
+                        showAdbLog = !showAdbLog
+                    },
+                )
+                if (showAdbLog) {
+                    ActionButton(
+                        "清空",
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            AdbAuditLog.clear(context)
+                            adbLog = emptyList()
+                        },
+                    )
+                }
+            }
+            if (showAdbLog) {
+                Spacer(Modifier.height(8.dp))
+                if (adbLog.isEmpty()) {
+                    Text(
+                        "还没有 AI 执行过的 ADB 命令。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Glass.Faint,
+                    )
+                } else {
+                    adbLog.take(20).forEach { entry ->
+                        val time = java.text.SimpleDateFormat(
+                            "MM-dd HH:mm:ss",
+                            java.util.Locale.US,
+                        ).format(java.util.Date(entry.time))
+                        Text(
+                            "$time · ${entry.backend} · exit ${entry.code}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Glass.Faint,
+                        )
+                        Text(
+                            entry.command,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            ),
+                            color = Glass.Text,
+                            maxLines = 3,
+                        )
+                        if (entry.output.isNotBlank()) {
+                            Text(
+                                entry.output.take(240),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Glass.Muted,
+                                maxLines = 2,
+                            )
+                        }
+                        Spacer(Modifier.height(5.dp))
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "涉及删除、冻结、断网的动作仍会先弹出确认卡片。",
+                "涉及删除、冻结、断网、修改系统设置的命令或动作仍会先弹出确认卡片；ADB 危险命令还会再确认一次。",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )

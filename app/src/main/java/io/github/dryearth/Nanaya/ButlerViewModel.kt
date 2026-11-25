@@ -13,6 +13,9 @@ import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.dryearth.Nanaya.ai.AiClient
+import io.github.dryearth.Nanaya.core.AdbAuditLog
+import io.github.dryearth.Nanaya.core.AdbManager
+import io.github.dryearth.Nanaya.core.AdbSafety
 import io.github.dryearth.Nanaya.core.Capabilities
 import io.github.dryearth.Nanaya.core.CapabilityProbe
 import io.github.dryearth.Nanaya.core.ChargingState
@@ -21,6 +24,7 @@ import io.github.dryearth.Nanaya.core.LineageHealth
 import io.github.dryearth.Nanaya.core.Prefs
 import io.github.dryearth.Nanaya.core.PrivilegedShell
 import io.github.dryearth.Nanaya.core.Shell
+import io.github.dryearth.Nanaya.core.UsbAdbHub
 import io.github.dryearth.Nanaya.core.bytes
 import io.github.dryearth.Nanaya.core.safePct
 import io.github.dryearth.Nanaya.data.AppDrain
@@ -918,9 +922,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun confirmAction(id: Long) {
+    fun confirmAction(id: Long, dangerConfirmed: Boolean = false) {
         val msg = _chat.value.messages.firstOrNull { it.id == id } ?: return
         val action = msg.action ?: return
+        if (action.dangerous && !dangerConfirmed) return
         updateMessage(id) { it.copy(actionState = ActionState.RUNNING) }
         viewModelScope.launch {
             val result = runCatching { execute(action) }
@@ -1040,6 +1045,40 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             )
             "open_screen" -> action.copy(title = "打开页面", detail = args["screen"] ?: "首页")
             "list_drain" -> action.copy(title = "查看耗电排行", detail = "读取 UsageStats 与 cpuinfo")
+            "adb_local_run" -> {
+                val cmd = args["command"].orEmpty()
+                val backend = when (args["backend"]?.lowercase()) {
+                    "adb" -> "无线 ADB"
+                    "root" -> "Root"
+                    else -> Shell.backendLabel()
+                }
+                action.copy(
+                    title = "执行本机命令",
+                    detail = if (cmd.isBlank()) "未指定命令" else
+                        "后端 $backend · ${cmd.take(180)}",
+                    dangerous = AdbSafety.isDangerous(cmd),
+                )
+            }
+            "adb_remote_run" -> {
+                val cmd = args["command"].orEmpty()
+                action.copy(
+                    title = "远程 ADB 执行命令",
+                    detail = if (cmd.isBlank()) "未指定命令" else cmd.take(180),
+                    dangerous = AdbSafety.isDangerous(cmd),
+                )
+            }
+            "adb_status" -> action.copy(
+                title = "查看 ADB 状态",
+                detail = "本机后端、无线 ADB、远程 ADB 与 USB 连接状态",
+            )
+            "adb_usb_run" -> {
+                val cmd = args["command"].orEmpty()
+                action.copy(
+                    title = "USB ADB 执行命令",
+                    detail = if (cmd.isBlank()) "未指定命令" else cmd.take(180),
+                    dangerous = AdbSafety.isDangerous(cmd),
+                )
+            }
             else -> action.copy(title = action.type, detail = args.entries.joinToString { "${it.key}=${it.value}" })
         }
     }
@@ -1199,6 +1238,67 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 _navigate.value = args["screen"] ?: "home"
                 "已为你打开。"
             }
+            "adb_status" -> buildString {
+                append("本机后端：${Shell.backendLabel()}")
+                append("（Root=${Shell.rootReady}，无线 ADB=${AdbManager.connected()}）")
+                append("；远程 ADB：${if (AdbManager.remoteConnected()) "已连接" else "未连接"}")
+                append("；USB ADB：${UsbAdbHub.status(getApplication())}")
+            }
+            "adb_local_run" -> {
+                if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
+                val command = args["command"].orEmpty().trim()
+                if (command.isBlank()) return "没有提供命令"
+                val requested = args["backend"]?.lowercase()
+                val backend = when (requested) {
+                    "adb" -> Shell.Backend.ADB
+                    "root" -> Shell.Backend.ROOT
+                    else -> Shell.backend()
+                }
+                val backendLabel = when (backend) {
+                    Shell.Backend.ADB -> "无线 ADB"
+                    Shell.Backend.ROOT -> "Root"
+                    Shell.Backend.APP -> "普通权限"
+                }
+                val result = withContext(Dispatchers.IO) {
+                    val r = Shell.runAs(backend, command, 20_000)
+                    AdbAuditLog.append(getApplication(), backendLabel, command, r.code, r.text)
+                    r
+                }
+                "后端：$backendLabel · 退出码 ${result.code}\n" +
+                    result.text.ifBlank { "（无输出）" }.take(6000)
+            }
+            "adb_remote_run" -> {
+                if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
+                val command = args["command"].orEmpty().trim()
+                if (command.isBlank()) return "没有提供命令"
+                if (!AdbManager.remoteConnected()) {
+                    return "远程 ADB 未连接，请先在 工具 → 远程 ADB 里连接"
+                }
+                val result = withContext(Dispatchers.IO) {
+                    AdbManager.runRemote(command, 20_000)?.also { r ->
+                        AdbAuditLog.append(
+                            getApplication(),
+                            "远程 ADB",
+                            command,
+                            r.code,
+                            r.output,
+                        )
+                    }
+                } ?: return "远程 ADB 执行失败：${AdbManager.lastRunError()}"
+                "远程 ADB · 退出码 ${result.code}\n" +
+                    result.output.ifBlank { "（无输出）" }.take(6000)
+            }
+            "adb_usb_run" -> {
+                if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
+                val command = args["command"].orEmpty().trim()
+                if (command.isBlank()) return "没有提供命令"
+                val output = withContext(Dispatchers.IO) {
+                    val text = UsbAdbHub.run(getApplication(), command)
+                    AdbAuditLog.append(getApplication(), "USB ADB", command, 0, text)
+                    text
+                }
+                "USB ADB\n" + output.ifBlank { "（无输出）" }.take(6000)
+            }
             else -> "暂不支持这个动作：${action.type}"
         }
     }
@@ -1287,6 +1387,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val s = _storage.value.report
         val appsCount = _apps.value.apps.size
         val sen = _security.value.report
+        val adbSection = if (prefs.aiAdbEnabled) """
+23. {"type":"adb_local_run","args":{"command":"...","backend":"auto|adb|root"}}
+24. {"type":"adb_remote_run","args":{"command":"..."}}
+25. {"type":"adb_usb_run","args":{"command":"..."}}
+26. {"type":"adb_status","args":{}}
+
+ADB 工具已开启：adb_local_run 默认使用当前后端，也可指定 backend=adb/root；adb_remote_run 使用已连接的远程设备；adb_usb_run 使用 USB OTG 设备。
+危险命令会由用户二次确认；一次只给一条命令，不要用分号或 && 拼接多条。
+""" else ""
         return """
 你是「${prefs.personaName}」，住在用户 LineageOS 24（Android 17）手机里的设备管家。
 用户自定义人设：${prefs.personaPrompt.ifBlank { "冷静、简短、可靠，不卖萌" }}
@@ -1327,7 +1436,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 20. {"type":"launch_app","args":{"package":"应用名或包名"}}
 21. {"type":"create_automation","args":{"name":"规则名","trigger":"time|battery_low|battery_full|charging_start|screen_off|wifi_on|wifi_off|boot","trigger_value":"23:00 或 25","action":"speak|notify|charge_limit|restrict_app|standby|freeze|lineage_feature|brightness|ringer","action_value":"内容/百分比/应用名/特征:true"}}
 22. {"type":"list_automations","args":{}}
-
+$adbSection
 输出规则：
 - 只输出一个 JSON 对象，不要 Markdown，不要代码围栏，不要额外文字。
 - 格式：{"reply":"给用户看的中文回答","action":{"type":"...","args":{...}}}

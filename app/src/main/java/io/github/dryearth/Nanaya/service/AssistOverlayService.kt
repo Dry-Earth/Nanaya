@@ -1751,6 +1751,7 @@ private fun OverlayBubble(
     textShift: Float,
 ) {
     val isUser = msg.role == ChatRole.USER
+    var dangerConfirm by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -1795,27 +1796,75 @@ private fun OverlayBubble(
                     color = palette.accent,
                 )
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (dangerConfirm) {
                     Text(
-                        "执行",
+                        "危险命令，可能修改系统或删除数据：",
                         style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFD85B5B),
+                    )
+                    Text(
+                        action.args["command"] ?: action.detail,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        ),
                         color = palette.primaryText,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(palette.inputInk)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                            .clickable { vm.confirmAction(msg.id) },
+                        maxLines = 3,
                     )
-                    Text(
-                        "取消",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.secondaryText,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(palette.ink.copy(alpha = 0.5f))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                            .clickable { vm.rejectAction(msg.id) },
-                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "仍然执行",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFFFD7D7),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x66D85B5B))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .clickable {
+                                    dangerConfirm = false
+                                    vm.confirmAction(msg.id, dangerConfirmed = true)
+                                },
+                        )
+                        Text(
+                            "取消",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.secondaryText,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(palette.ink.copy(alpha = 0.5f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .clickable { dangerConfirm = false },
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "执行",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.primaryText,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(palette.inputInk)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .clickable {
+                                    if (action.dangerous) {
+                                        dangerConfirm = true
+                                    } else {
+                                        vm.confirmAction(msg.id)
+                                    }
+                                },
+                        )
+                        Text(
+                            "取消",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.secondaryText,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(palette.ink.copy(alpha = 0.5f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .clickable { vm.rejectAction(msg.id) },
+                        )
+                    }
                 }
             }
         }
