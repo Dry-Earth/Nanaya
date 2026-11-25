@@ -153,6 +153,15 @@ data class PerfSnapshot(
     val gpuLoad: Int = -1,
     val gpuFreqMhz: Int = -1,
     val gpuMaxMhz: Int = -1,
+    val gpuMinMhz: Int = -1,
+    val gpuGovernor: String = "",
+    val gpuGovernors: List<String> = emptyList(),
+    val gpuAvailableMhz: List<Int> = emptyList(),
+    val swappiness: Int = -1,
+    val vendorChargeSupported: Boolean = false,
+    val vendorChargeEnabled: Boolean = false,
+    val vendorChargeLimitMa: Int = -1,
+    val vendorChargeLimitMaxMa: Int = -1,
     val temps: List<TempReading> = emptyList(),
     val rxBps: Long = 0,
     val txBps: Long = 0,
@@ -177,6 +186,7 @@ data class PerfSnapshot(
     val zramOrig: Long = 0,
     val uptimeMs: Long = 0,
     val timestamp: Long = 0,
+    val refreshRateHz: Float = 0f,
 )
 
 data class AppDrain(

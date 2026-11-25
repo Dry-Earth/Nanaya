@@ -40,7 +40,10 @@ data class PerfUiState(
     val drain: List<AppDrain> = emptyList(),
     val cpuHistory: List<Float> = emptyList(),
     val ramHistory: List<Float> = emptyList(),
+    val tempHistory: List<Float> = emptyList(),
+    val currentHistory: List<Float> = emptyList(),
     val governor: String = "",
+    val cpuGovernors: List<String> = emptyList(),
     val presets: List<PerfPreset> = emptyList(),
     val history: List<Triple<Long, Int, Int>> = emptyList(),
     val toast: String? = null,
@@ -48,6 +51,7 @@ data class PerfUiState(
     val intervalMs: Int = 1000,
     val lastSampleAt: Long = 0L,
     val sampleError: String? = null,
+    val readChannel: String = "",
 )
 
 data class SecurityUiState(

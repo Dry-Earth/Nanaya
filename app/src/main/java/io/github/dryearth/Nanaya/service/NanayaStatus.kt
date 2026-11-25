@@ -39,6 +39,7 @@ object NanayaStatus {
     private var musicTitle: String? = null
     private var commandDepth = 0
     private var channelReady = false
+    private var perfSummary: String? = null
     private var lastRenderedState: State? = null
 
     private val glyphFallbacks = mapOf(
@@ -102,6 +103,13 @@ object NanayaStatus {
     fun setMusic(playing: Boolean, title: String?) {
         musicPlaying = playing
         musicTitle = title
+        render()
+    }
+
+    /** Compact CPU / GPU / RAM / temperature line for the performance screen. */
+    fun setPerfSummary(summary: String?) {
+        if (perfSummary == summary) return
+        perfSummary = summary
         render()
     }
 
@@ -270,6 +278,6 @@ object NanayaStatus {
         State.CLEANING -> "正在清理文件…"
         State.COMMAND -> "正在执行 root / ADB 命令…"
         State.SECURITY -> "安全中心"
-        State.PERFORMANCE -> "性能监控"
+        State.PERFORMANCE -> perfSummary?.takeIf { it.isNotBlank() } ?: "性能监控"
     }
 }
