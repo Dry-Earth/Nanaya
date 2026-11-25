@@ -450,22 +450,36 @@ private fun BatteryTiles(snapshot: PerfSnapshot) {
     val maxTemp = snapshot.temps.maxByOrNull { it.celsius }?.celsius ?: b.tempC
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val currentText = when {
+                b.currentUa == 0 -> ""
+                kotlin.math.abs(b.currentUa) >= 1_000_000 ->
+                    String.format(Locale.US, "%.2f A", b.currentUa / 1_000_000f)
+                else -> "${b.currentUa / 1000} mA"
+            }
+            val powerLabel = when {
+                b.charging -> "充电"
+                b.plugged != "未连接" -> "输入"
+                else -> "放电"
+            }
             Tile(
                 icon = Icons.Rounded.Bolt,
-                value = if (b.powerW > 0f) {
-                    val sign = when {
-                        b.charging -> "+"
-                        b.plugged != "未连接" -> ""
-                        else -> "-"
+                value = when {
+                    b.powerW > 0f -> {
+                        val sign = when {
+                            b.charging -> "+"
+                            b.plugged != "未连接" -> ""
+                            else -> "-"
+                        }
+                        String.format(Locale.US, "%s%.2f W", sign, b.powerW)
                     }
-                    String.format(Locale.US, "%s%.2f W", sign, b.powerW)
-                } else {
-                    "—"
+                    currentText.isNotEmpty() -> currentText
+                    else -> b.status.ifBlank { "—" }
                 },
                 label = when {
-                    b.charging -> "充电功率"
-                    b.plugged != "未连接" -> "输入功率"
-                    else -> "放电功率"
+                    b.powerW > 0f && currentText.isNotEmpty() -> "$powerLabel · $currentText"
+                    b.powerW > 0f -> "$powerLabel功率"
+                    currentText.isNotEmpty() -> "瞬时电流"
+                    else -> "电池状态"
                 },
                 color = if (b.charging) Glass.Mint else Glass.Amber,
                 modifier = Modifier.weight(1f),

@@ -144,6 +144,9 @@ data class BatterySnapshot(
     val chargeCounterUah: Long = -1,
     val technology: String = "",
     val powerW: Float = 0f,
+    val healthPct: Int = -1,
+    val chargeFullUah: Long = -1,
+    val chargeFullDesignUah: Long = -1,
 )
 
 data class PerfSnapshot(

@@ -75,6 +75,11 @@ class PerformanceRepository(private val context: Context) {
         "/sys/class/power_supply/battery/charge_now",
         "/sys/class/power_supply/battery/charge_full",
         "/sys/class/power_supply/battery/charge_full_design",
+        "/sys/class/power_supply/bms/charge_full",
+        "/sys/class/power_supply/bms/charge_full_design",
+        "/sys/class/power_supply/bms/cycle_count",
+        "/sys/class/power_supply/bms/current_now",
+        "/sys/class/power_supply/bms/voltage_now",
     )
 
     private val zramPaths = listOf(
@@ -82,8 +87,9 @@ class PerformanceRepository(private val context: Context) {
         "/sys/block/zram0/mem_used_total",
         "/sys/block/zram0/orig_data_size",
         "/sys/block/zram0/mm_stat",
-        "/proc/zraminfo",
     )
+
+    private val memoryPaths = listOf("/proc/meminfo") + zramPaths
 
     /** Every node one sample needs, so the privileged fallback runs at most once. */
     private fun samplePaths(): List<String> {
@@ -116,6 +122,38 @@ class PerformanceRepository(private val context: Context) {
             }
         }
         return paths.toList()
+    }
+
+    /**
+     * Lightweight snapshot for the memory detail screen. It skips CPU, GPU,
+     * thermal and battery nodes so a 1 s refresh stays cheap.
+     */
+    fun memorySnapshot(): PerfSnapshot {
+        PrivilegedShell.beginSample()
+        runCatching { PrivilegedShell.readAll(memoryPaths) }
+        val memory = runCatching {
+            val am = context.getSystemService(ActivityManager::class.java)
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            mi
+        }.getOrNull()
+        val (swapTotal, swapFree) = runCatching { readSwap() }.getOrDefault(0L to 0L)
+        val (cached, buffers) = runCatching { readMemDetail() }.getOrDefault(0L to 0L)
+        val zram = runCatching { readZram() }.getOrDefault(ZramReading())
+        return PerfSnapshot(
+            ramUsed = ((memory?.totalMem ?: 0L) - (memory?.availMem ?: 0L)).coerceAtLeast(0L),
+            ramTotal = memory?.totalMem ?: 0L,
+            ramAvailable = memory?.availMem ?: 0L,
+            swapTotal = swapTotal,
+            swapFree = swapFree,
+            cachedBytes = cached,
+            buffersBytes = buffers,
+            zramSize = zram.size,
+            zramUsed = zram.used,
+            zramOrig = zram.orig,
+            zramCompr = zram.compr,
+            timestamp = System.currentTimeMillis(),
+        )
     }
 
     fun snapshot(includeProcesses: Boolean = true): PerfSnapshot {
@@ -750,6 +788,7 @@ class PerformanceRepository(private val context: Context) {
         if (voltage <= 0) {
             val vNow = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/voltage_now"])
                 ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/voltage_now"])
+                ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/voltage_now"])
             if (vNow != null && vNow > 0) voltage = (vNow / 1000).toInt()
         }
 
@@ -760,6 +799,7 @@ class PerformanceRepository(private val context: Context) {
             cycles = (
                 PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/cycle_count"])
                     ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/battery_cycle"])
+                    ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/cycle_count"])
                 )?.toInt() ?: -1
         }
         if (cycles !in 0..10_000) cycles = -1
@@ -799,6 +839,11 @@ class PerformanceRepository(private val context: Context) {
             fromSysfs = current != 0L
             if (fromSysfs) currentSource = "main"
         }
+        if (current == 0L) {
+            current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/current_now"]) ?: 0L
+            fromSysfs = current != 0L
+            if (fromSysfs) currentSource = "battery"
+        }
         if (fromSysfs && (current in 1L..9999L || current in -9999L..-1L)) {
             // Standard kernel nodes use µA. A handful of vendor nodes use mA;
             // when `current_max` is also in the thousands, treat the node as mA.
@@ -818,40 +863,87 @@ class PerformanceRepository(private val context: Context) {
                 else -> 0
             }
         }
-        val powerVoltageMv = when {
-            currentSource == "battery" -> voltage
-            usbVoltageMv in 1_000..20_000 -> usbVoltageMv
-            else -> voltage
-        }
+        fun currentPower(voltageMv: Int): Float =
+            if (current != 0L && voltageMv in 1_000..20_000) {
+                kotlin.math.abs(current) / 1_000_000f * (voltageMv / 1000f)
+            } else {
+                0f
+            }
+        val batteryRef = currentPower(voltage)
+        val inputRef = currentPower(usbVoltageMv.takeIf { it in 1_000..20_000 } ?: voltage)
         val batteryPowerUw = PrivilegedShell.firstNumber(
             values["/sys/class/power_supply/battery/power_now"]
         )
         val usbPowerUw = PrivilegedShell.firstNumber(
             values["/sys/class/power_supply/usb/power_now"]
         )
-        fun sanePowerUw(value: Long?): Float {
-            if (value == null || value == Long.MIN_VALUE) return 0f
-            val magnitude = kotlin.math.abs(value)
-            return if (magnitude in 1L..300_000_000L) magnitude / 1_000_000f else 0f
+
+        // power_now is usually µW, but a few vendor kernels expose mW. Compare
+        // both readings with current × voltage and pick the plausible one.
+        fun powerFromNow(raw: Long?, reference: Float): Float {
+            if (raw == null || raw == Long.MIN_VALUE) return 0f
+            val magnitude = kotlin.math.abs(raw).toFloat()
+            val micro = magnitude / 1_000_000f
+            val milli = magnitude / 1_000f
+            fun sane(value: Float) = value in 0.01f..300f
+            return when {
+                sane(micro) && sane(milli) && reference > 0f ->
+                    if (kotlin.math.abs(milli - reference) < kotlin.math.abs(micro - reference)) milli else micro
+                sane(micro) -> micro
+                sane(milli) -> milli
+                else -> 0f
+            }
         }
-        var power = 0f
-        if (current != 0L && powerVoltageMv in 1_000..20_000) {
-            power = kotlin.math.abs(current) / 1_000_000f * (powerVoltageMv / 1000f)
+
+        val batteryNow = powerFromNow(batteryPowerUw, batteryRef)
+        val inputNow = powerFromNow(usbPowerUw, inputRef)
+        var power = when {
+            currentSource == "battery" -> batteryNow.takeIf { it > 0f } ?: batteryRef
+            currentSource == "usb" || currentSource == "main" ->
+                inputNow.takeIf { it > 0f } ?: inputRef.takeIf { it > 0f } ?: batteryNow
+            else -> batteryNow.takeIf { it > 0f } ?: inputNow
         }
-        // Input current (usb/main) times battery voltage is only an estimate.
-        // Prefer the kernel's power_now when the input voltage is unknown.
-        val inputPowerNow = sanePowerUw(usbPowerUw)
-            .takeIf { it > 0f }
-            ?: sanePowerUw(batteryPowerUw)
-        val batteryPowerNow = sanePowerUw(batteryPowerUw)
-            .takeIf { it > 0f }
-            ?: sanePowerUw(usbPowerUw)
-        if (currentSource != "battery" && usbVoltageMv !in 1_000..20_000 && inputPowerNow > 0f) {
-            power = inputPowerNow
-        } else if (power <= 0f || !power.isFinite() || power > 300f) {
-            power = if (currentSource == "battery") batteryPowerNow else inputPowerNow
+        // If the node reported mA, current × voltage is 1000× too small. Use
+        // power_now to recover the unit so the current row is correct too.
+        if (currentSource == "battery" && batteryNow > 0.1f && current != 0L && voltage > 0) {
+            val impliedUa = batteryNow / (voltage / 1000f) * 1_000_000f
+            val ratio = impliedUa / kotlin.math.abs(current).toFloat()
+            when {
+                ratio in 100f..10_000f -> current *= 1000L
+                ratio in 0.0001f..0.01f -> current /= 1000L
+            }
         }
         if (!power.isFinite() || power !in 0f..300f) power = 0f
+        // Some vendor kernels invert the sign. Keep the displayed current
+        // consistent with the charging status.
+        when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING,
+            BatteryManager.BATTERY_STATUS_FULL -> current = kotlin.math.abs(current)
+            BatteryManager.BATTERY_STATUS_DISCHARGING -> current = -kotlin.math.abs(current)
+        }
+
+        fun normalizeChargeUah(value: Long): Long = when {
+            value <= 0 -> -1L
+            // Full/design capacities are always in the millions of µAh on a
+            // phone; a four-digit number is a vendor node in mAh.
+            value < 100_000L -> value * 1000L
+            else -> value
+        }
+        val chargeFull = normalizeChargeUah(
+            PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/charge_full"])
+                ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/charge_full"])
+                ?: -1L
+        )
+        val chargeDesign = normalizeChargeUah(
+            PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/charge_full_design"])
+                ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/charge_full_design"])
+                ?: -1L
+        )
+        val healthPct = if (chargeFull > 0 && chargeDesign > 0) {
+            (chargeFull * 100 / chargeDesign).toInt().takeIf { it in 30..130 } ?: -1
+        } else {
+            -1
+        }
 
         return BatterySnapshot(
             level = level * 100 / scale.coerceAtLeast(1),
@@ -886,6 +978,9 @@ class PerformanceRepository(private val context: Context) {
             chargeCounterUah = chargeCounter,
             technology = tech,
             powerW = power,
+            healthPct = healthPct,
+            chargeFullUah = chargeFull,
+            chargeFullDesignUah = chargeDesign,
         )
     }
 

@@ -73,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import java.util.Locale
 
 private data class CachedBackground(
     val bitmap: ImageBitmap,
@@ -686,6 +687,80 @@ fun Sparkline(
         drawCircle(color, 2.6.dp.toPx(), Offset(lastX, size.height - lastN * size.height))
     }
 }
+
+/**
+ * Sparkline with the current value, unit and min/avg/max labels. A bare curve
+ * is unreadable without a scale, especially for temperature and current.
+ */
+@Composable
+fun MetricSpark(
+    title: String,
+    values: List<Float>,
+    unit: String,
+    modifier: Modifier = Modifier,
+    color: Color = Glass.Accent,
+    maxOverride: Float? = null,
+    decimals: Int = 1,
+    showStats: Boolean = true,
+) {
+    if (values.isEmpty()) return
+    val last = values.last()
+    val min = values.minOrNull() ?: last
+    val max = values.maxOrNull() ?: last
+    val avg = values.average().toFloat()
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${formatMetric(last, decimals)} $unit",
+                style = MaterialTheme.typography.bodySmall,
+                color = color,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Sparkline(
+            values,
+            Modifier.fillMaxWidth().height(36.dp),
+            color = color,
+            maxOverride = maxOverride,
+        )
+        if (showStats) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "最低 ${formatMetric(min, decimals)} $unit",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+                Text(
+                    "平均 ${formatMetric(avg, decimals)} $unit",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+                Text(
+                    "最高 ${formatMetric(max, decimals)} $unit",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Glass.Faint,
+                )
+            }
+        }
+    }
+}
+
+private fun formatMetric(value: Float, decimals: Int): String =
+    String.format(Locale.US, "%.${decimals}f", value)
 
 @Composable
 fun KeyValueRow(

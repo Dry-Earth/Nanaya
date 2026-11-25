@@ -66,7 +66,7 @@ fun MemoryScreen(onBack: () -> Unit) {
         // Refresh only while this screen is composed; leaving cancels the loop.
         while (isActive) {
             val nextSnapshot = withContext(Dispatchers.IO) {
-                repo.snapshot(includeProcesses = false)
+                repo.memorySnapshot()
             }
             val nextProcesses = withContext(Dispatchers.IO) {
                 repo.memoryProcesses(force = true)
@@ -74,7 +74,7 @@ fun MemoryScreen(onBack: () -> Unit) {
             snapshot = nextSnapshot
             processes = nextProcesses
             loading = false
-            delay(2_000)
+            delay(1_000)
         }
     }
 
@@ -89,7 +89,7 @@ fun MemoryScreen(onBack: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("内存详情", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
-                    Text("RAM · Swap · ZRAM · 每应用 RSS", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                    Text("RAM · Swap · ZRAM · 每应用 RSS · 1 秒刷新", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
                 }
             }
         }

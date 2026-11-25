@@ -3,6 +3,7 @@ package io.github.dryearth.Nanaya.ui.screens
 import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,9 +61,9 @@ import io.github.dryearth.Nanaya.ui.components.GlassPanel
 import io.github.dryearth.Nanaya.ui.components.statusBarInset
 import io.github.dryearth.Nanaya.ui.components.KeyValueRow
 import io.github.dryearth.Nanaya.ui.components.Meter
+import io.github.dryearth.Nanaya.ui.components.MetricSpark
 import io.github.dryearth.Nanaya.ui.components.Pill
 import io.github.dryearth.Nanaya.ui.components.SectionHeader
-import io.github.dryearth.Nanaya.ui.components.Sparkline
 import io.github.dryearth.Nanaya.ui.components.ToastEffect
 import io.github.dryearth.Nanaya.ui.components.formatDuration
 import io.github.dryearth.Nanaya.ui.components.humanRate
@@ -243,9 +245,19 @@ private fun LivePanel(perf: PerfUiState, vm: ButlerViewModel) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Sparkline(perf.cpuHistory, Modifier.fillMaxWidth().height(56.dp), color = Glass.Ice, maxOverride = 100f)
+        MetricSpark(
+            "CPU 趋势",
+            perf.cpuHistory,
+            "%",
+            color = Glass.Ice,
+            maxOverride = 100f,
+            decimals = 0,
+        )
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Pill(
                 "RAM ${safePct(perf.snapshot.ramUsed, perf.snapshot.ramTotal).let { (it * 100).toInt() }}%",
                 selected = true,
@@ -260,6 +272,31 @@ private fun LivePanel(perf: PerfUiState, vm: ButlerViewModel) {
             }
             if (perf.snapshot.refreshRateHz > 0f) {
                 Pill("${perf.snapshot.refreshRateHz.toInt()} Hz", color = Glass.Mint)
+            }
+            val battery = perf.snapshot.battery
+            if (battery.powerW > 0f) {
+                Pill(
+                    buildString {
+                        append(
+                            when {
+                                battery.charging -> "充电"
+                                battery.plugged != "未连接" -> "输入"
+                                else -> "放电"
+                            },
+                        )
+                        append(" ")
+                        append(
+                            String.format(
+                                java.util.Locale.US,
+                                if (battery.powerW < 1f) "%.2f W" else "%.1f W",
+                                battery.powerW,
+                            ),
+                        )
+                    },
+                    color = if (battery.charging) Glass.Mint else Glass.Amber,
+                )
+            } else if (battery.currentUa != 0) {
+                Pill("${battery.currentUa / 1000} mA", color = Glass.Amber)
             }
             if (perf.snapshot.npuLoad >= 0) {
                 Pill("NPU ${perf.snapshot.npuLoad}%", color = Glass.Ice)
@@ -555,6 +592,13 @@ private fun TimeButton(label: String, modifier: Modifier = Modifier, onPick: (In
 private fun secToTime(sec: Int): String =
     "%02d:%02d".format((sec / 3600) % 24, (sec % 3600) / 60)
 
+private fun formatCurrent(ua: Int): String = when {
+    ua == 0 -> "—"
+    kotlin.math.abs(ua) >= 1_000_000 ->
+        String.format(java.util.Locale.US, "%.2f A", ua / 1_000_000f)
+    else -> "${ua / 1000} mA"
+}
+
 @Composable
 private fun BatteryPanel(perf: PerfUiState) {
     val b = perf.snapshot.battery
@@ -575,12 +619,14 @@ private fun BatteryPanel(perf: PerfUiState) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        if (perf.history.isNotEmpty()) {
-            Sparkline(
+        if (perf.history.size > 2) {
+            MetricSpark(
+                "电量趋势 · 30 分钟",
                 perf.history.map { it.second.toFloat() },
-                Modifier.fillMaxWidth().height(40.dp),
+                "%",
                 color = Glass.Mint,
                 maxOverride = 100f,
+                decimals = 0,
             )
             Spacer(Modifier.height(6.dp))
         }
@@ -605,34 +651,42 @@ private fun BatteryPanel(perf: PerfUiState) {
             b.chargeCounterUah * 100 / b.level / 1000
         } else -1L
         KeyValueRow("满充估算", if (capacity > 0) "$capacity mAh" else "系统未提供")
+        KeyValueRow(
+            "健康度估算",
+            if (b.healthPct >= 0) "${b.healthPct}%" else "系统未提供",
+            color = when {
+                b.healthPct < 0 -> Glass.Muted
+                b.healthPct >= 90 -> Glass.Mint
+                b.healthPct >= 80 -> Glass.Amber
+                else -> Glass.Rose
+            },
+        )
+        KeyValueRow(
+            "设计容量",
+            if (b.chargeFullDesignUah > 0) "${b.chargeFullDesignUah / 1000} mAh" else "—",
+        )
+        KeyValueRow(
+            "当前满充容量",
+            if (b.chargeFullUah > 0) "${b.chargeFullUah / 1000} mAh" else "—",
+        )
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
-        KeyValueRow("瞬时电流", if (b.currentUa != 0) "${b.currentUa / 1000} mA" else "—")
+        KeyValueRow("瞬时电流", formatCurrent(b.currentUa))
         KeyValueRow("供电", b.plugged)
         if (perf.tempHistory.size > 2) {
-            Spacer(Modifier.height(8.dp))
-            Text("电池温度 · 实时", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-            Sparkline(
-                perf.tempHistory,
-                Modifier.fillMaxWidth().height(30.dp),
-                color = Glass.Amber,
-            )
+            Spacer(Modifier.height(10.dp))
+            MetricSpark("电池温度 · 实时", perf.tempHistory, "℃", color = Glass.Amber)
         }
         if (perf.currentHistory.size > 2) {
-            Spacer(Modifier.height(6.dp))
-            Text("电流绝对值 · mA", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-            Sparkline(
-                perf.currentHistory,
-                Modifier.fillMaxWidth().height(30.dp),
-                color = Glass.Ice,
-            )
+            Spacer(Modifier.height(10.dp))
+            MetricSpark("电流绝对值 · 实时", perf.currentHistory, "mA", color = Glass.Ice, decimals = 0)
         }
         if (perf.history.size > 2) {
-            Spacer(Modifier.height(8.dp))
-            Text("电池温度趋势", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-            Sparkline(
+            Spacer(Modifier.height(10.dp))
+            MetricSpark(
+                "电池温度趋势 · 30 分钟",
                 perf.history.map { it.third.toFloat() },
-                Modifier.fillMaxWidth().height(30.dp),
+                "℃",
                 color = Glass.Amber,
             )
             Text(
@@ -785,7 +839,14 @@ private fun MemoryPanel(perf: PerfUiState, onTrim: () -> Unit, onOpenMemory: () 
         Spacer(Modifier.height(8.dp))
         Meter(safePct(used, total), color = Glass.Accent)
         Spacer(Modifier.height(12.dp))
-        Sparkline(perf.ramHistory, Modifier.fillMaxWidth().height(34.dp), color = Glass.Accent, maxOverride = 100f)
+        MetricSpark(
+            "RAM 趋势",
+            perf.ramHistory,
+            "%",
+            color = Glass.Accent,
+            maxOverride = 100f,
+            decimals = 0,
+        )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton(
