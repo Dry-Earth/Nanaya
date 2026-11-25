@@ -23,8 +23,6 @@ class PerformanceRepository(private val context: Context) {
     private var lastProcList: List<ProcLoad> = emptyList()
     private var lastMemAt = 0L
     private var lastMemList: List<MemProcess> = emptyList()
-    private var lastHtopCpuAt = 0L
-    private var lastHtopCpu: Map<Int, Float> = emptyMap()
 
     private val gpuPaths = listOf(
         "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
@@ -93,12 +91,6 @@ class PerformanceRepository(private val context: Context) {
     )
 
     private val memoryPaths = listOf("/proc/meminfo") + zramPaths
-    private val htopPaths = listOf(
-        "/proc/stat",
-        "/proc/meminfo",
-        "/proc/loadavg",
-        "/proc/uptime",
-    ) + zramPaths
 
     /** Every node one sample needs, so the privileged fallback runs at most once. */
     private fun samplePaths(): List<String> {
@@ -131,120 +123,6 @@ class PerformanceRepository(private val context: Context) {
             }
         }
         return paths.toList()
-    }
-
-    /** htop-style snapshot: load, per-core CPU, memory and a full process table. */
-    fun htopSnapshot(): HtopSnapshot {
-        PrivilegedShell.beginSample()
-        runCatching { PrivilegedShell.readAll(htopPaths) }
-        val cpu = runCatching { readCpu() }.getOrDefault(CpuSample())
-        val memory = runCatching {
-            val am = context.getSystemService(ActivityManager::class.java)
-            val mi = ActivityManager.MemoryInfo()
-            am.getMemoryInfo(mi)
-            mi
-        }.getOrNull()
-        val load = PrivilegedShell.read("/proc/loadavg")
-            ?.trim()?.split(Regex("\\s+")).orEmpty()
-        val uptime = PrivilegedShell.firstNumber(PrivilegedShell.read("/proc/uptime")) ?: 0L
-        val (swapTotal, swapFree) = runCatching { readSwap() }.getOrDefault(0L to 0L)
-        val zram = runCatching { readZram() }.getOrDefault(ZramReading())
-        val totalRam = memory?.totalMem ?: 0L
-        val processes = runCatching { processTable(totalRam) }.getOrDefault(emptyList())
-        return HtopSnapshot(
-            load1 = load.getOrNull(0)?.toFloatOrNull() ?: 0f,
-            load5 = load.getOrNull(1)?.toFloatOrNull() ?: 0f,
-            load15 = load.getOrNull(2)?.toFloatOrNull() ?: 0f,
-            uptimeSec = uptime,
-            tasks = processes.size,
-            cpu = cpu,
-            ramUsed = ((memory?.totalMem ?: 0L) - (memory?.availMem ?: 0L)).coerceAtLeast(0L),
-            ramTotal = totalRam,
-            ramAvailable = memory?.availMem ?: 0L,
-            swapTotal = swapTotal,
-            swapFree = swapFree,
-            zramSize = zram.size,
-            zramUsed = zram.used,
-            zramCompr = zram.compr,
-            zramOrig = zram.orig,
-            processes = processes,
-            privileged = Shell.isPrivileged(),
-        )
-    }
-
-    private data class RawProcess(
-        val pid: Int,
-        val user: String,
-        val rssKb: Long,
-        val name: String,
-    )
-
-    private fun processTable(totalRamBytes: Long): List<HtopProcess> {
-        if (!Shell.isPrivileged()) return emptyList()
-        val withUser = Shell.run("ps -A -o PID,USER,RSS,NAME", 12_000)
-        var rows = if (withUser.ok) parsePsTable(withUser.text, hasUser = true) else emptyList()
-        if (rows.isEmpty()) {
-            val noUser = Shell.run("ps -A -o PID,RSS,NAME", 12_000)
-            rows = parsePsTable(noUser.text, hasUser = false)
-        }
-        val cpu = cpuByPid()
-        return rows.map { raw ->
-            val memPct = if (totalRamBytes > 0) {
-                raw.rssKb * 1024f / totalRamBytes.toFloat() * 100f
-            } else {
-                0f
-            }
-            HtopProcess(
-                pid = raw.pid,
-                user = raw.user,
-                cpuPct = cpu[raw.pid] ?: 0f,
-                memPct = memPct,
-                rssKb = raw.rssKb,
-                name = raw.name,
-            )
-        }.sortedByDescending { it.cpuPct }
-    }
-
-    private fun parsePsTable(text: String, hasUser: Boolean): List<RawProcess> {
-        val regex = if (hasUser) {
-            Regex("""^\s*(\d+)\s+(\S+)\s+(\d+)\s+(.+)$""")
-        } else {
-            Regex("""^\s*(\d+)\s+(\d+)\s+(.+)$""")
-        }
-        return text.lineSequence().mapNotNull { line ->
-            if (line.contains("PID") && line.contains("RSS")) return@mapNotNull null
-            val m = regex.find(line) ?: return@mapNotNull null
-            if (hasUser) {
-                val pid = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val user = m.groupValues[2]
-                val rss = m.groupValues[3].toLongOrNull() ?: return@mapNotNull null
-                val name = m.groupValues[4].trim()
-                if (name.isBlank()) null else RawProcess(pid, user, rss, name)
-            } else {
-                val pid = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val rss = m.groupValues[2].toLongOrNull() ?: return@mapNotNull null
-                val name = m.groupValues[3].trim()
-                if (name.isBlank()) null else RawProcess(pid, "", rss, name)
-            }
-        }.distinctBy { it.pid }.take(400).toList()
-    }
-
-    private fun cpuByPid(): Map<Int, Float> {
-        val now = System.currentTimeMillis()
-        if (now - lastHtopCpuAt < 5_000 && lastHtopCpu.isNotEmpty()) return lastHtopCpu
-        lastHtopCpuAt = now
-        val result = Shell.run("dumpsys cpuinfo", 12_000)
-        if (!result.ok) return lastHtopCpu
-        val values = HashMap<Int, Float>()
-        val regex = Regex("""^\s*([0-9.]+)%\s+(\d+)/([^\s:]+)""")
-        for (line in result.text.lineSequence()) {
-            val m = regex.find(line) ?: continue
-            val pct = m.groupValues[1].toFloatOrNull() ?: continue
-            val pid = m.groupValues[2].toIntOrNull() ?: continue
-            values[pid] = (values[pid] ?: 0f) + pct
-        }
-        if (values.isNotEmpty()) lastHtopCpu = values
-        return lastHtopCpu
     }
 
     /**

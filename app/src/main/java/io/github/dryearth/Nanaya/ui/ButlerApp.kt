@@ -131,7 +131,6 @@ import io.github.dryearth.Nanaya.ui.screens.RulesScreen
 import io.github.dryearth.Nanaya.ui.screens.WakeupScreen
 import io.github.dryearth.Nanaya.ui.screens.SpecialPermissionsScreen
 import io.github.dryearth.Nanaya.ui.screens.HomeScreen
-import io.github.dryearth.Nanaya.ui.screens.HtopScreen
 import io.github.dryearth.Nanaya.ui.screens.ToolsScreen
 import io.github.dryearth.Nanaya.ui.screens.RemoteAdbScreen
 import io.github.dryearth.Nanaya.ui.screens.AdbConsoleScreen
@@ -332,8 +331,6 @@ fun ButlerApp(
                     UsbAdbScreen(onBack = { closeSub() })
                 } else if (sub == "adbconsole") {
                     AdbConsoleScreen(onBack = { closeSub() })
-                } else if (sub == "htop") {
-                    HtopScreen(onBack = { closeSub() })
                 } else if (sub == "autostart") {
                     AutostartScreen(vm, onBack = { closeSub() }, onOpenWakeup = { sub = "wakeup" })
                 } else if (sub == "lineage") {
@@ -397,7 +394,6 @@ fun ButlerApp(
                                 onOpenUsb = { sub = "usbotg" },
                                 onOpenMusic = { sub = "music" },
                                 onOpenDroidspaces = { sub = "droidspaces" },
-                                onOpenHtop = { sub = "htop" },
                             )
                         }
                     }

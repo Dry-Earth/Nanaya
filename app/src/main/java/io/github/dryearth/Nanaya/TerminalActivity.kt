@@ -56,9 +56,7 @@ class TerminalActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
-        val hostCommand = intent.getStringExtra(EXTRA_HOST_COMMAND)
         val name = intent.getStringExtra(EXTRA_NAME)
-            ?: if (hostCommand != null) "Android htop" else null
         val pid = intent.getIntExtra(EXTRA_PID, 0)
         val rootfs = intent.getStringExtra(EXTRA_ROOTFS).orEmpty()
         if (name.isNullOrBlank()) {
@@ -66,11 +64,7 @@ class TerminalActivity : ComponentActivity() {
             return
         }
 
-        session = if (hostCommand != null) {
-            DroidspacesTerminals.getOrOpenHost(this, "host-htop", name, hostCommand)
-        } else {
-            DroidspacesTerminals.getOrOpen(this, name, pid, rootfs)
-        }
+        session = DroidspacesTerminals.getOrOpen(this, name, pid, rootfs)
 
         terminalView = TerminalView(this, null).apply {
             isFocusableInTouchMode = true
@@ -357,7 +351,6 @@ class TerminalActivity : ComponentActivity() {
         const val EXTRA_NAME = "container"
         const val EXTRA_PID = "pid"
         const val EXTRA_ROOTFS = "rootfs"
-        const val EXTRA_HOST_COMMAND = "host_command"
 
         fun intent(
             context: Context,
@@ -369,11 +362,5 @@ class TerminalActivity : ComponentActivity() {
             putExtra(EXTRA_PID, pid)
             putExtra(EXTRA_ROOTFS, rootfs)
         }
-
-        fun hostIntent(context: Context, name: String, command: String): Intent =
-            Intent(context, TerminalActivity::class.java).apply {
-                putExtra(EXTRA_NAME, name)
-                putExtra(EXTRA_HOST_COMMAND, command)
-            }
     }
 }

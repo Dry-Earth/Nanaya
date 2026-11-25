@@ -196,35 +196,6 @@ data class AppDrain(
     val energyMah: Float = -1f,
 )
 
-data class HtopProcess(
-    val pid: Int,
-    val user: String,
-    val cpuPct: Float,
-    val memPct: Float,
-    val rssKb: Long,
-    val name: String,
-)
-
-data class HtopSnapshot(
-    val load1: Float = 0f,
-    val load5: Float = 0f,
-    val load15: Float = 0f,
-    val uptimeSec: Long = 0,
-    val tasks: Int = 0,
-    val cpu: CpuSample = CpuSample(),
-    val ramUsed: Long = 0,
-    val ramTotal: Long = 0,
-    val ramAvailable: Long = 0,
-    val swapTotal: Long = 0,
-    val swapFree: Long = 0,
-    val zramSize: Long = 0,
-    val zramUsed: Long = 0,
-    val zramCompr: Long = 0,
-    val zramOrig: Long = 0,
-    val processes: List<HtopProcess> = emptyList(),
-    val privileged: Boolean = false,
-)
-
 data class PerfPreset(
     val id: String,
     val title: String,

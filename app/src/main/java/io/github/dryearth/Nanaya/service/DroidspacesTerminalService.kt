@@ -24,7 +24,7 @@ class DroidspacesTerminalService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL,
-                "终端",
+                "Droidspaces 终端",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 setShowBadge(false)
@@ -43,8 +43,8 @@ class DroidspacesTerminalService : Service() {
         )
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_status_terminal)
-            .setContentTitle("Nanaya 终端")
-            .setContentText("终端会话运行中")
+            .setContentTitle("Droidspaces")
+            .setContentText("容器终端会话运行中")
             .setContentIntent(pending)
             .setOngoing(true)
             .setSilent(true)
