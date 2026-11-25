@@ -64,6 +64,7 @@ class PerformanceRepository(private val context: Context) {
         "/sys/class/power_supply/battery/voltage_now",
         "/sys/class/power_supply/usb/voltage_now",
         "/sys/class/power_supply/battery/current_now",
+        "/sys/class/power_supply/usb/online",
         "/sys/class/power_supply/usb/current_now",
         "/sys/class/power_supply/main/current_now",
         "/sys/class/power_supply/battery/current_max",
@@ -678,6 +679,14 @@ class PerformanceRepository(private val context: Context) {
         val grouped = HashMap<String, MutableList<Pair<Float, String>>>()
         for (zone in zones) {
             val type = values["$zone/type"]?.takeIf { it.isNotBlank() } ?: continue
+            val lower = type.lowercase(Locale.US)
+            // BCL/ibat/vbat zones expose current/voltage thresholds in `temp`,
+            // not temperatures. Counting them produced fake 10-30 °C readings.
+            if (lower.contains("ibat") || lower.contains("vbat") ||
+                lower.contains("bcl") || lower.contains("lvl")
+            ) {
+                continue
+            }
             val raw = PrivilegedShell.firstNumber(values["$zone/temp"]) ?: continue
             if (raw <= 0) continue
             val celsius = normalizeTemp(raw) ?: continue
@@ -703,9 +712,14 @@ class PerformanceRepository(private val context: Context) {
                 entries.map { it.second }.distinct().joinToString(" / ").take(40),
             )
         }.sortedByDescending { it.celsius }.toMutableList()
-        if (list.isEmpty()) {
-            val b = readBattery()
-            if (b.tempC > 0) list.add(TempReading("电池", b.tempC))
+        // This kernel exposes the battery sensor through power_supply, not a
+        // thermal zone. Add it unless a real battery zone already exists.
+        if (list.none { it.label == "电池" }) {
+            val battery = readBattery()
+            if (battery.tempC > 0f) {
+                list.add(TempReading("电池", battery.tempC, "power_supply/battery/temp"))
+                list.sortByDescending { it.celsius }
+            }
         }
         return list
     }
@@ -733,6 +747,10 @@ class PerformanceRepository(private val context: Context) {
             t.contains("display") || t.contains("panel") || t.contains("lcd") -> "屏幕"
             t.contains("camera") || t.contains("cam") -> "相机"
             t.contains("ambient") -> "环境"
+            t.contains("svooc") || t.contains("mos") || t.contains("btb") -> "电源"
+            t.contains("sdr") || t.contains("mmw") || t.contains("ific") -> "基带"
+            t.startsWith("pm") -> "电源"
+            t.contains("aoss") -> "主板"
             t.contains("socd") || t.contains("soc") || t.contains("cpu") ||
                 t.contains("cluster") || t.contains("core") || t.contains("little") ||
                 t.contains("big") || t.contains("mid") || t.contains("gold") ||
@@ -823,34 +841,47 @@ class PerformanceRepository(private val context: Context) {
         // abs() and the power calculation.
         if (current !in -30_000_000L..30_000_000L) current = 0L
         var currentSource = if (current != 0L) "battery" else ""
-        var fromSysfs = false
+        var fromBatteryManager = current != 0L
+        var fromBatteryNode = false
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/current_now"]) ?: 0L
-            fromSysfs = current != 0L
-            if (fromSysfs) currentSource = "battery"
+            fromBatteryNode = current != 0L
+            if (fromBatteryNode) {
+                currentSource = "battery"
+                fromBatteryManager = false
+            }
         }
-        if (current == 0L) {
+        // usb/current_now can be non-zero while the port is offline; only use
+        // it when the supply is actually online.
+        val usbOnline = (PrivilegedShell.firstNumber(
+            values["/sys/class/power_supply/usb/online"]
+        ) ?: 0L) != 0L
+        if (current == 0L && usbOnline) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/current_now"]) ?: 0L
-            fromSysfs = current != 0L
-            if (fromSysfs) currentSource = "usb"
+            if (current != 0L) currentSource = "usb"
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/main/current_now"]) ?: 0L
-            fromSysfs = current != 0L
-            if (fromSysfs) currentSource = "main"
+            if (current != 0L) currentSource = "main"
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/bms/current_now"]) ?: 0L
-            fromSysfs = current != 0L
-            if (fromSysfs) currentSource = "battery"
+            if (current != 0L) currentSource = "battery"
         }
-        if (fromSysfs && (current in 1L..9999L || current in -9999L..-1L)) {
-            // Standard kernel nodes use µA. A handful of vendor nodes use mA;
-            // when `current_max` is also in the thousands, treat the node as mA.
-            val currentMax = PrivilegedShell.firstNumber(
-                values["/sys/class/power_supply/battery/current_max"]
-            ) ?: 0L
-            if (currentMax > 0 && currentMax <= 100_000L) current *= 1000L
+        if (currentSource == "battery" && (current in 1L..9999L || current in -9999L..-1L)) {
+            // OnePlus/OPPO battery/current_now is in mA (232 = 232 mA), while
+            // most kernels use µA. `current_max` is often absent on those
+            // devices, so use magnitude plus an optional max-value hint.
+            // BatteryManager is specified in µA, but some ROMs pass the raw
+            // mA value through, so apply the same sanity check there.
+            if (fromBatteryManager) {
+                current *= 1000L
+            } else if (fromBatteryNode) {
+                val currentMax = PrivilegedShell.firstNumber(
+                    values["/sys/class/power_supply/battery/current_max"]
+                ) ?: 0L
+                if (currentMax <= 0L || currentMax <= 100_000L) current *= 1000L
+            }
         }
 
         if (voltage !in 1_000..10_000) voltage = 0

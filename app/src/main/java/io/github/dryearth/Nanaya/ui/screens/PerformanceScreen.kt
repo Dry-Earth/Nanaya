@@ -669,6 +669,11 @@ private fun BatteryPanel(perf: PerfUiState) {
             "当前满充容量",
             if (b.chargeFullUah > 0) "${b.chargeFullUah / 1000} mAh" else "—",
         )
+        Text(
+            "健康度由内核 charge_full 与设计容量估算，仅供参考。",
+            style = MaterialTheme.typography.labelSmall,
+            color = Glass.Faint,
+        )
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
         KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
         KeyValueRow("瞬时电流", formatCurrent(b.currentUa))

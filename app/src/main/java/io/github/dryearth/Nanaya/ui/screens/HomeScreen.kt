@@ -450,11 +450,12 @@ private fun BatteryTiles(snapshot: PerfSnapshot) {
     val maxTemp = snapshot.temps.maxByOrNull { it.celsius }?.celsius ?: b.tempC
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val currentUa = kotlin.math.abs(b.currentUa)
             val currentText = when {
-                b.currentUa == 0 -> ""
-                kotlin.math.abs(b.currentUa) >= 1_000_000 ->
-                    String.format(Locale.US, "%.2f A", b.currentUa / 1_000_000f)
-                else -> "${b.currentUa / 1000} mA"
+                currentUa == 0 -> ""
+                currentUa >= 1_000_000 ->
+                    String.format(Locale.US, "%.2f A", currentUa / 1_000_000f)
+                else -> "${currentUa / 1000} mA"
             }
             val powerLabel = when {
                 b.charging -> "充电"
