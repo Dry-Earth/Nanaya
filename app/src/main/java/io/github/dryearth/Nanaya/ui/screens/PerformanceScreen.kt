@@ -114,7 +114,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
         item {
             SectionHeader(
                 "24 小时耗电",
-                "UsageStats + cpuinfo",
+                "UsageStats + cpuinfo · GPU 不按应用统计",
                 trailing = {
                     Icon(
                         Icons.Rounded.Refresh,
@@ -140,8 +140,11 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                "前台 ${formatDuration(d.foregroundMs)}" +
-                                    if (d.cpuPct > 0f) " · CPU ${d.cpuPct.toInt()}%" else "",
+                                buildString {
+                                    append("前台 ${formatDuration(d.foregroundMs)}")
+                                    if (d.cpuPct > 0f) append(" · CPU ${d.cpuPct.toInt()}%")
+                                    if (d.memoryKb > 0) append(" · RAM ${(d.memoryKb * 1024).bytes()}")
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Glass.Faint,
                             )
@@ -582,8 +585,20 @@ private fun BatteryPanel(perf: PerfUiState) {
             Spacer(Modifier.height(6.dp))
         }
         KeyValueRow(
-            if (b.charging) "充电功率" else "放电功率",
-            if (b.powerW > 0f) String.format(java.util.Locale.US, "%.1f W", b.powerW) else "—",
+            when {
+                b.charging -> "充电功率"
+                b.plugged != "未连接" -> "输入功率"
+                else -> "放电功率"
+            },
+            if (b.powerW > 0f) {
+                String.format(
+                    java.util.Locale.US,
+                    if (b.powerW < 1f) "%.2f W" else "%.1f W",
+                    b.powerW,
+                )
+            } else {
+                "—"
+            },
             color = if (b.charging) Glass.Mint else Glass.Muted,
         )
         val capacity = if (b.chargeCounterUah > 0 && b.level > 0) {
@@ -736,9 +751,11 @@ private fun ZramCard(perf: PerfUiState) {
         Spacer(Modifier.height(10.dp))
         if (s.zramSize > 0) {
             KeyValueRow("ZRAM 设备", s.zramSize.bytes())
-            KeyValueRow("已压缩", s.zramUsed.bytes())
+            KeyValueRow("占用内存", s.zramUsed.bytes())
+            if (s.zramCompr > 0) KeyValueRow("压缩后", s.zramCompr.bytes())
             KeyValueRow("原始数据", s.zramOrig.bytes())
-            val ratio = if (s.zramUsed > 0) s.zramOrig.toFloat() / s.zramUsed.toFloat() else 0f
+            val compressed = if (s.zramCompr > 0) s.zramCompr else s.zramUsed
+            val ratio = if (compressed > 0) s.zramOrig.toFloat() / compressed.toFloat() else 0f
             KeyValueRow("压缩比", if (ratio > 0) String.format(java.util.Locale.US, "%.2f×", ratio) else "—")
         }
         if (s.swapTotal > 0) {

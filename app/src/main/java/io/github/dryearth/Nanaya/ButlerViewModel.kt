@@ -94,6 +94,8 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var monitorJob: Job? = null
     private var monitorIntervalMs = 0L
+    private var lastProcUiAt = 0L
+    @Volatile private var processBusy = false
     private var booted = false
 
     val aiConfigured: Boolean get() = ai.configured()
@@ -443,10 +445,15 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     lastSlowAt = now
                     refreshCharging()
                 }
+                // Process CPU/RSS is much heavier than sysfs, but 30 s was too
+                // slow for the home card. Keep it on its own 10 s cadence and
+                // never let two dumpsys runs overlap.
+                val procDue = now - lastProcUiAt >= 10_000 && !processBusy
+                if (procDue) lastProcUiAt = now
                 // One transient sysfs/binder failure must not kill the whole
                 // sampler; otherwise every metric stays frozen at its default.
                 val sampleError = runCatching {
-                    refreshPerf(includeProcesses = slow, includeHistory = slow)
+                    refreshPerf(includeProcesses = procDue, includeHistory = slow)
                 }.exceptionOrNull()
                 if (sampleError != null) {
                     _perf.update {
@@ -542,13 +549,17 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
         val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
         _perf.update { it.copy(governor = governor, presets = presets) }
-        if (includeProcesses) {
-            // Async and non-blocking: a slow root shell or dumpsys cannot stall
-            // the sampler any more.
+        if (includeProcesses && !processBusy) {
+            // Async and non-blocking: a slow dumpsys cannot stall the sampler.
+            processBusy = true
             viewModelScope.launch(Dispatchers.IO) {
-                val procs = runCatching { perfRepo.processLoads() }.getOrDefault(emptyList())
-                _perf.update { current ->
-                    current.copy(snapshot = current.snapshot.copy(processes = procs))
+                try {
+                    val procs = runCatching { perfRepo.processLoads() }.getOrDefault(emptyList())
+                    _perf.update { current ->
+                        current.copy(snapshot = current.snapshot.copy(processes = procs))
+                    }
+                } finally {
+                    processBusy = false
                 }
             }
         }

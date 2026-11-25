@@ -123,9 +123,11 @@ fun MemoryScreen(onBack: () -> Unit) {
                     if (s.zramSize > 0) {
                         Spacer(Modifier.height(8.dp))
                         KeyValueRow("设备大小", s.zramSize.bytes())
-                        KeyValueRow("已压缩", s.zramUsed.bytes())
+                        KeyValueRow("占用内存", s.zramUsed.bytes())
+                        if (s.zramCompr > 0) KeyValueRow("压缩后", s.zramCompr.bytes())
                         KeyValueRow("原始大小", s.zramOrig.bytes())
-                        val ratio = if (s.zramUsed > 0) s.zramOrig.toFloat() / s.zramUsed.toFloat() else 0f
+                        val compressed = if (s.zramCompr > 0) s.zramCompr else s.zramUsed
+                        val ratio = if (compressed > 0) s.zramOrig.toFloat() / compressed.toFloat() else 0f
                         KeyValueRow("压缩比", if (ratio > 0) String.format(java.util.Locale.US, "%.2f×", ratio) else "—")
                         if (s.zramUsed > 0) {
                             Spacer(Modifier.height(6.dp))

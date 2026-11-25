@@ -176,6 +176,7 @@ data class PerfSnapshot(
     val zramSize: Long = 0,
     val zramUsed: Long = 0,
     val zramOrig: Long = 0,
+    val zramCompr: Long = 0,
     val uptimeMs: Long = 0,
     val timestamp: Long = 0,
     val refreshRateHz: Float = 0f,
@@ -188,6 +189,7 @@ data class AppDrain(
     val lastUsed: Long,
     val uid: Int,
     val cpuPct: Float = 0f,
+    val memoryKb: Long = 0,
 )
 
 data class PerfPreset(

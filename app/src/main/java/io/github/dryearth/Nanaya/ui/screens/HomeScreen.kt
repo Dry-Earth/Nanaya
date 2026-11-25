@@ -261,7 +261,14 @@ private fun ProcessCard(snapshot: PerfSnapshot, onManage: () -> Unit) {
     GlassPanel(padding = PaddingValues(14.dp)) {
         SectionHeader(
             "进程与内存",
-            if (snapshot.processes.isEmpty()) "需要 Root 或无线 ADB 读取 dumpsys" else "按 CPU/内存排序 · 10 秒刷新",
+            if (snapshot.processes.isEmpty()) {
+                "需要 Root 或无线 ADB 读取 dumpsys"
+            } else {
+                buildString {
+                    append("按 CPU/内存排序 · 10 秒刷新")
+                    if (snapshot.gpuLoad >= 0) append(" · GPU 全局 ${snapshot.gpuLoad}%")
+                }
+            },
             trailing = {
                 Text(
                     "内存详情",
@@ -315,15 +322,21 @@ private fun ProcessRow(proc: ProcLoad) {
             modifier = Modifier.weight(1f),
         )
         Text(
-            if (proc.pssKb > 0) bytesShort(proc.pssKb * 1024)
-            else String.format(Locale.US, "%.1f%%", proc.pct),
+            buildString {
+                if (proc.pct > 0f) append(String.format(Locale.US, "CPU %.1f%%", proc.pct))
+                if (proc.pssKb > 0) {
+                    if (length > 0) append(" · ")
+                    append("RAM ").append(bytesShort(proc.pssKb * 1024))
+                }
+                if (length == 0) append("—")
+            },
             style = MaterialTheme.typography.labelSmall,
             color = Glass.Muted,
         )
         Spacer(Modifier.width(8.dp))
         Meter(
-            if (proc.pssKb > 0) (proc.pssKb / 1024f / 512f).coerceIn(0f, 1f)
-            else (proc.pct / 40f).coerceIn(0f, 1f),
+            if (proc.pct > 0f) (proc.pct / 40f).coerceIn(0f, 1f)
+            else (proc.pssKb / 1024f / 512f).coerceIn(0f, 1f),
             color = Glass.Accent,
             height = 4.dp,
             modifier = Modifier.width(44.dp),
@@ -439,8 +452,21 @@ private fun BatteryTiles(snapshot: PerfSnapshot) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Tile(
                 icon = Icons.Rounded.Bolt,
-                value = if (b.powerW > 0f) String.format(Locale.US, "%s%.2f W", if (b.charging) "+" else "-", b.powerW) else "—",
-                label = if (b.charging) "充电功率" else "放电功率",
+                value = if (b.powerW > 0f) {
+                    val sign = when {
+                        b.charging -> "+"
+                        b.plugged != "未连接" -> ""
+                        else -> "-"
+                    }
+                    String.format(Locale.US, "%s%.2f W", sign, b.powerW)
+                } else {
+                    "—"
+                },
+                label = when {
+                    b.charging -> "充电功率"
+                    b.plugged != "未连接" -> "输入功率"
+                    else -> "放电功率"
+                },
                 color = if (b.charging) Glass.Mint else Glass.Amber,
                 modifier = Modifier.weight(1f),
             )

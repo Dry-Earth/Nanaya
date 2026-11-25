@@ -144,8 +144,7 @@ class PerformanceRepository(private val context: Context) {
         val battery = runCatching { readBattery() }.getOrDefault(BatterySnapshot())
         val (swapTotal, swapFree) = runCatching { readSwap() }.getOrDefault(0L to 0L)
         val (cached, buffers) = runCatching { readMemDetail() }.getOrDefault(0L to 0L)
-        val (zramSize, zramUsed, zramOrig) = runCatching { readZram() }
-            .getOrDefault(Triple(0L, 0L, 0L))
+        val zram = runCatching { readZram() }.getOrDefault(ZramReading())
         val storage = runCatching { Shell.storageStats() }
             .getOrElse { Triple(0L, 0L, 0L) }
         val refreshRateHz = runCatching {
@@ -175,9 +174,10 @@ class PerformanceRepository(private val context: Context) {
             storageTotal = storage.first,
             cachedBytes = cached,
             buffersBytes = buffers,
-            zramSize = zramSize,
-            zramUsed = zramUsed,
-            zramOrig = zramOrig,
+            zramSize = zram.size,
+            zramUsed = zram.used,
+            zramOrig = zram.orig,
+            zramCompr = zram.compr,
             temps = temps,
             rxBps = rx,
             txBps = tx,
@@ -447,7 +447,7 @@ class PerformanceRepository(private val context: Context) {
     fun memoryProcesses(force: Boolean = false): List<MemProcess> {
         if (!Shell.isPrivileged()) return emptyList()
         val now = System.currentTimeMillis()
-        if (!force && now - lastMemAt < 15_000 && lastMemList.isNotEmpty()) return lastMemList
+        if (!force && now - lastMemAt < 8_000 && lastMemList.isNotEmpty()) return lastMemList
         lastMemAt = now
 
         // ps is much faster than dumpsys meminfo and works through ADB too.
@@ -502,20 +502,37 @@ class PerformanceRepository(private val context: Context) {
         return cached * 1024 to buffers * 1024
     }
 
-    private fun readZram(): Triple<Long, Long, Long> {
+    private data class ZramReading(
+        val size: Long = 0L,
+        val used: Long = 0L,
+        val compr: Long = 0L,
+        val orig: Long = 0L,
+    )
+
+    private fun readZram(): ZramReading {
         val values = PrivilegedShell.readAll(zramPaths)
         val size = PrivilegedShell.firstNumber(values["/sys/block/zram0/disksize"])?.coerceAtLeast(0) ?: 0L
         var used = PrivilegedShell.firstNumber(values["/sys/block/zram0/mem_used_total"]) ?: 0L
         var orig = PrivilegedShell.firstNumber(values["/sys/block/zram0/orig_data_size"]) ?: 0L
-        if (used <= 0 || orig <= 0) {
-            val stat = values["/sys/block/zram0/mm_stat"]
-            if (stat != null) {
-                val parts = stat.trim().split(Regex("""\s+"""))
-                if (orig <= 0) orig = parts.getOrNull(0)?.toLongOrNull() ?: orig
-                if (used <= 0) used = parts.getOrNull(1)?.toLongOrNull() ?: used
-            }
+        var compr = 0L
+        val stat = values["/sys/block/zram0/mm_stat"]
+        if (stat != null) {
+            // mm_stat: orig_data_size compr_data_size mem_used_total ...
+            val parts = stat.trim().split(Regex("""\s+"""))
+            if (orig <= 0) orig = parts.getOrNull(0)?.toLongOrNull() ?: orig
+            compr = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+            if (used <= 0) used = parts.getOrNull(2)?.toLongOrNull() ?: used
         }
-        return Triple(size.coerceAtLeast(0), used.coerceAtLeast(0), orig.coerceAtLeast(0))
+        if (compr <= 0) compr = used
+        // Some kernels report 0 for mem_used_total while compr_data_size is
+        // valid; use the compressed payload as a lower-bound estimate.
+        if (used <= 0) used = compr
+        return ZramReading(
+            size = size.coerceAtLeast(0),
+            used = used.coerceAtLeast(0),
+            compr = compr.coerceAtLeast(0),
+            orig = orig.coerceAtLeast(0),
+        )
     }
 
     private fun readSwap(): Pair<Long, Long> {
@@ -562,7 +579,7 @@ class PerformanceRepository(private val context: Context) {
 
     private fun readProcesses(): List<ProcLoad> {
         val now = System.currentTimeMillis()
-        if (now - lastProcAt < 10_000 && lastProcList.isNotEmpty()) return lastProcList
+        if (now - lastProcAt < 8_000 && lastProcList.isNotEmpty()) return lastProcList
         lastProcAt = now
         if (!Shell.isPrivileged()) return lastProcList
 
@@ -577,11 +594,29 @@ class PerformanceRepository(private val context: Context) {
                 map[name] = (map[name] ?: 0f) + pct
             }
         }
+        val memMap = HashMap<String, Long>()
+        runCatching { memoryProcesses(force = false) }.getOrDefault(emptyList()).forEach { p ->
+            val base = p.name.substringBefore(':')
+            memMap[base] = (memMap[base] ?: 0L) + p.pssKb
+        }
         if (map.isNotEmpty()) {
-            lastProcList = map.entries.sortedByDescending { it.value }.take(10)
-                .map { ProcLoad(it.key, it.value) }
+            val merged = HashMap<String, ProcLoad>()
+            for ((name, pct) in map) {
+                val base = name.substringBefore(':')
+                val previous = merged[base]
+                merged[base] = ProcLoad(
+                    base,
+                    (previous?.pct ?: 0f) + pct,
+                    memMap[base] ?: previous?.pssKb ?: 0L,
+                )
+            }
+            // Both CPU-heavy and memory-heavy entries are useful on the home
+            // card; merging them here means every row has CPU and RSS.
+            val byCpu = merged.values.sortedByDescending { it.pct }.take(8)
+            val byMem = merged.values.sortedByDescending { it.pssKb }.take(4)
+            lastProcList = (byCpu + byMem).distinctBy { it.name }.take(10)
         } else if (lastProcList.isEmpty()) {
-            // Android's cpuinfo format can differ; fall back to PSS per process.
+            // Android's cpuinfo format can differ; fall back to RSS per process.
             lastProcList = memoryProcesses().take(10).map { ProcLoad(it.name, 0f, it.pssKb) }
         }
         return lastProcList
@@ -739,6 +774,7 @@ class PerformanceRepository(private val context: Context) {
                 ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/charge_now"])
                 ?: -1L
         }
+        if (chargeCounter !in 0L..100_000_000L) chargeCounter = -1L
 
         var current = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
@@ -746,18 +782,22 @@ class PerformanceRepository(private val context: Context) {
         // Unsupported properties come back as Long.MIN_VALUE; keep it out of
         // abs() and the power calculation.
         if (current !in -30_000_000L..30_000_000L) current = 0L
+        var currentSource = if (current != 0L) "battery" else ""
         var fromSysfs = false
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/current_now"]) ?: 0L
             fromSysfs = current != 0L
+            if (fromSysfs) currentSource = "battery"
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/current_now"]) ?: 0L
             fromSysfs = current != 0L
+            if (fromSysfs) currentSource = "usb"
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/main/current_now"]) ?: 0L
             fromSysfs = current != 0L
+            if (fromSysfs) currentSource = "main"
         }
         if (fromSysfs && (current in 1L..9999L || current in -9999L..-1L)) {
             // Standard kernel nodes use µA. A handful of vendor nodes use mA;
@@ -769,13 +809,49 @@ class PerformanceRepository(private val context: Context) {
         }
 
         if (voltage !in 1_000..10_000) voltage = 0
-        var power = kotlin.math.abs(current) / 1_000_000f * (voltage / 1000f)
-        if (power <= 0f || !power.isFinite() || power > 300f) {
-            val powerNow = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/power_now"])
-                ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/power_now"])
-                ?: 0L
-            power = if (powerNow in 1L..300_000_000L) powerNow / 1_000_000f else 0f
+        val usbVoltageMv = (PrivilegedShell.firstNumber(
+            values["/sys/class/power_supply/usb/voltage_now"]
+        ) ?: 0L).let {
+            when {
+                it in 1_000_000L..20_000_000L -> (it / 1000L).toInt()
+                it in 1_000L..20_000L -> it.toInt()
+                else -> 0
+            }
         }
+        val powerVoltageMv = when {
+            currentSource == "battery" -> voltage
+            usbVoltageMv in 1_000..20_000 -> usbVoltageMv
+            else -> voltage
+        }
+        val batteryPowerUw = PrivilegedShell.firstNumber(
+            values["/sys/class/power_supply/battery/power_now"]
+        )
+        val usbPowerUw = PrivilegedShell.firstNumber(
+            values["/sys/class/power_supply/usb/power_now"]
+        )
+        fun sanePowerUw(value: Long?): Float {
+            if (value == null || value == Long.MIN_VALUE) return 0f
+            val magnitude = kotlin.math.abs(value)
+            return if (magnitude in 1L..300_000_000L) magnitude / 1_000_000f else 0f
+        }
+        var power = 0f
+        if (current != 0L && powerVoltageMv in 1_000..20_000) {
+            power = kotlin.math.abs(current) / 1_000_000f * (powerVoltageMv / 1000f)
+        }
+        // Input current (usb/main) times battery voltage is only an estimate.
+        // Prefer the kernel's power_now when the input voltage is unknown.
+        val inputPowerNow = sanePowerUw(usbPowerUw)
+            .takeIf { it > 0f }
+            ?: sanePowerUw(batteryPowerUw)
+        val batteryPowerNow = sanePowerUw(batteryPowerUw)
+            .takeIf { it > 0f }
+            ?: sanePowerUw(usbPowerUw)
+        if (currentSource != "battery" && usbVoltageMv !in 1_000..20_000 && inputPowerNow > 0f) {
+            power = inputPowerNow
+        } else if (power <= 0f || !power.isFinite() || power > 300f) {
+            power = if (currentSource == "battery") batteryPowerNow else inputPowerNow
+        }
+        if (!power.isFinite() || power !in 0f..300f) power = 0f
 
         return BatterySnapshot(
             level = level * 100 / scale.coerceAtLeast(1),
@@ -853,6 +929,11 @@ class PerformanceRepository(private val context: Context) {
         }.getOrDefault(emptyList())
         val pm = context.packageManager
         val cpu = cpuInfo()
+        val memByPkg = HashMap<String, Long>()
+        runCatching { memoryProcesses(force = false) }.getOrDefault(emptyList()).forEach { p ->
+            val base = p.name.substringBefore(':')
+            memByPkg[base] = (memByPkg[base] ?: 0L) + p.pssKb
+        }
         return stats.asSequence()
             .filter { it.totalTimeInForeground > 0 }
             .sortedByDescending { it.totalTimeInForeground }
@@ -869,6 +950,7 @@ class PerformanceRepository(private val context: Context) {
                     lastUsed = s.lastTimeUsed,
                     uid = uid,
                     cpuPct = cpu[s.packageName] ?: 0f,
+                    memoryKb = memByPkg[s.packageName] ?: 0L,
                 )
             }
             .toList()
