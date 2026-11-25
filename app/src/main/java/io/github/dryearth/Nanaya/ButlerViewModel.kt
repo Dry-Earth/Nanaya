@@ -1006,6 +1006,29 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         return reply.ifBlank { if (action == null) cleaned else "我可以执行：${action.title}" } to action
     }
 
+    private fun effectiveLocalBackend(requested: String?): Shell.Backend =
+        when (prefs.aiAdbScope) {
+            "adb" -> Shell.Backend.ADB
+            "root" -> Shell.Backend.ROOT
+            else -> when (requested?.lowercase()) {
+                "adb" -> Shell.Backend.ADB
+                "root" -> Shell.Backend.ROOT
+                else -> Shell.backend()
+            }
+        }
+
+    private fun backendName(backend: Shell.Backend): String = when (backend) {
+        Shell.Backend.ADB -> "无线 ADB"
+        Shell.Backend.ROOT -> "Root"
+        Shell.Backend.APP -> "普通权限"
+    }
+
+    private fun scopeLabel(): String = when (prefs.aiAdbScope) {
+        "adb" -> "仅无线 ADB"
+        "root" -> "仅 Root"
+        else -> "ADB + Root"
+    }
+
     private fun describeAction(action: ButlerAction): ButlerAction {
         val args = action.args
         val appToken = args["package"] ?: args["app"] ?: ""
@@ -1067,11 +1090,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             "list_drain" -> action.copy(title = "查看耗电排行", detail = "读取 UsageStats 与 cpuinfo")
             "adb_local_run" -> {
                 val cmd = args["command"].orEmpty()
-                val backend = when (args["backend"]?.lowercase()) {
-                    "adb" -> "无线 ADB"
-                    "root" -> "Root"
-                    else -> Shell.backendLabel()
-                }
+                val backend = backendName(effectiveLocalBackend(args["backend"]))
                 action.copy(
                     title = "执行本机命令",
                     detail = if (cmd.isBlank()) "未指定命令" else
@@ -1259,26 +1278,24 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 "已为你打开。"
             }
             "adb_status" -> buildString {
-                append("本机后端：${Shell.backendLabel()}")
+                append("AI 本机后端：${backendName(effectiveLocalBackend(null))}")
                 append("（Root=${Shell.rootReady}，无线 ADB=${AdbManager.connected()}）")
                 append("；远程 ADB：${if (AdbManager.remoteConnected()) "已连接" else "未连接"}")
                 append("；USB ADB：${UsbAdbHub.status(getApplication())}")
+                append("；AI 权能：${scopeLabel()}")
             }
             "adb_local_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
                 val command = args["command"].orEmpty().trim()
                 if (command.isBlank()) return "没有提供命令"
-                val requested = args["backend"]?.lowercase()
-                val backend = when (requested) {
-                    "adb" -> Shell.Backend.ADB
-                    "root" -> Shell.Backend.ROOT
-                    else -> Shell.backend()
+                val backend = effectiveLocalBackend(args["backend"])
+                if (backend == Shell.Backend.ADB && !AdbManager.connected()) {
+                    return "当前权能为仅无线 ADB，但无线 ADB 未连接。请先在 工具 → 本机 ADB 终端 连接，或在 AI 设置里改为 ADB + Root。"
                 }
-                val backendLabel = when (backend) {
-                    Shell.Backend.ADB -> "无线 ADB"
-                    Shell.Backend.ROOT -> "Root"
-                    Shell.Backend.APP -> "普通权限"
+                if (backend == Shell.Backend.ROOT && !Shell.rootReady) {
+                    return "当前权能为仅 Root，但 Root 未授权。请先在权限页授权，或改用仅无线 ADB。"
                 }
+                val backendLabel = backendName(backend)
                 val result = withContext(Dispatchers.IO) {
                     val r = Shell.runAs(backend, command, 60_000)
                     AdbAuditLog.append(getApplication(), backendLabel, command, r.code, r.text)
@@ -1289,6 +1306,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             }
             "adb_remote_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
+                if (prefs.aiAdbScope == "root") return "当前权能为仅 Root，远程 ADB 命令已停用"
                 val command = args["command"].orEmpty().trim()
                 if (command.isBlank()) return "没有提供命令"
                 if (!AdbManager.remoteConnected()) {
@@ -1310,6 +1328,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             }
             "adb_usb_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
+                if (prefs.aiAdbScope == "root") return "当前权能为仅 Root，USB ADB 命令已停用"
                 val command = args["command"].orEmpty().trim()
                 if (command.isBlank()) return "没有提供命令"
                 val output = withContext(Dispatchers.IO) {
@@ -1407,14 +1426,26 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val s = _storage.value.report
         val appsCount = _apps.value.apps.size
         val sen = _security.value.report
+        val adbScope = prefs.aiAdbScope
+        val adbRule = when (adbScope) {
+            "adb" -> "权能：仅无线 ADB。本机命令只能走无线 ADB 的 shell 用户，不要请求 root；未连接无线 ADB 时命令会失败。远程/USB ADB 可用。"
+            "root" -> "权能：仅 Root。本机命令只能走 Root；远程/USB ADB 已停用；Root 未授权时命令会失败。"
+            else -> "权能：ADB + Root。本机命令可用 auto/adb/root；auto 仍 Root 优先。远程/USB ADB 可用。"
+        }
+        val adbActions = buildString {
+            append("- {\"type\":\"adb_local_run\",\"args\":{\"command\":\"...\"")
+            if (adbScope == "both") append(",\"backend\":\"auto|adb|root\"")
+            append("}}\n")
+            if (adbScope != "root") {
+                append("- {\"type\":\"adb_remote_run\",\"args\":{\"command\":\"...\"}}\n")
+                append("- {\"type\":\"adb_usb_run\",\"args\":{\"command\":\"...\"}}\n")
+            }
+            append("- {\"type\":\"adb_status\",\"args\":{}}\n")
+        }
         val adbSection = if (prefs.aiAdbEnabled) """
-23. {"type":"adb_local_run","args":{"command":"...","backend":"auto|adb|root"}}
-24. {"type":"adb_remote_run","args":{"command":"..."}}
-25. {"type":"adb_usb_run","args":{"command":"..."}}
-26. {"type":"adb_status","args":{}}
-
-ADB 工具已开启：adb_local_run 默认使用当前后端，也可指定 backend=adb/root；adb_remote_run 使用已连接的远程设备；adb_usb_run 使用 USB OTG 设备。
-危险命令会由用户二次确认；一次只给一条命令，不要用分号或 && 拼接多条。
+$adbActions
+ADB 工具已开启：$adbRule
+普通 ADB 命令会自动执行；危险命令会要求用户确认。可以在一条命令里使用管道或 &&，但请保持目的明确。
 """ else ""
         return """
 你是「${prefs.personaName}」，住在用户 LineageOS 24（Android 17）手机里的设备管家。

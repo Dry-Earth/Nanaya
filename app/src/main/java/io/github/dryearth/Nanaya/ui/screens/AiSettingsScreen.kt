@@ -145,6 +145,7 @@ fun AiSettingsScreen(
     var thinking by remember { mutableStateOf(vm.prefs.aiThinking) }
     var effort by remember { mutableStateOf(vm.prefs.aiEffort) }
     var aiAdb by remember { mutableStateOf(vm.prefs.aiAdbEnabled) }
+    var aiAdbScope by remember { mutableStateOf(vm.prefs.aiAdbScope) }
     var showAdbLog by remember { mutableStateOf(false) }
     var adbLog by remember { mutableStateOf<List<AdbAuditEntry>>(emptyList()) }
 
@@ -369,12 +370,12 @@ fun AiSettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "允许 AI 执行 ADB / Shell 命令",
+                        "允许 AI 执行命令",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Glass.Text,
                     )
                     Text(
-                        "使用本机当前后端（Root / 无线 ADB / 普通权限）、已连接的远程 ADB 设备，以及 USB OTG ADB（需先在工具页连接一次）。开启后普通 ADB 命令自动执行；危险命令仍需二次确认。",
+                        "使用下方选择的权能执行本机命令，以及可用的远程/USB ADB。普通命令自动执行；危险命令仍需二次确认。",
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Muted,
                     )
@@ -390,6 +391,44 @@ fun AiSettingsScreen(
                     },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "AI 命令权能",
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "adb" to "仅 ADB",
+                    "both" to "ADB + Root",
+                    "root" to "仅 Root",
+                ).forEach { (value, label) ->
+                    Pill(
+                        label,
+                        selected = aiAdbScope == value,
+                        color = when (value) {
+                            "root" -> Glass.Rose
+                            "both" -> Glass.Amber
+                            else -> Glass.Mint
+                        },
+                        onClick = {
+                            aiAdbScope = value
+                            vm.prefs.aiAdbScope = value
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when (aiAdbScope) {
+                    "adb" -> "只允许无线 ADB 的 shell 用户；不会使用 Root。远程/USB ADB 可用，未连接 ADB 时本机命令会失败。"
+                    "root" -> "只允许本机 Root；远程/USB ADB 命令会被拒绝。"
+                    else -> "本机命令可用无线 ADB 或 Root；auto 仍 Root 优先。"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Glass.Faint,
+            )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(

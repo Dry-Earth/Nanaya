@@ -52,6 +52,14 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("ai_adb_enabled", false)
         set(value) = sp.edit().putBoolean("ai_adb_enabled", value).apply()
 
+    /** adb = wireless ADB only, both = ADB + Root, root = Root only. */
+    var aiAdbScope: String
+        get() = sp.getString("ai_adb_scope", "adb")
+            ?.takeIf { it in setOf("adb", "both", "root") } ?: "adb"
+        set(value) = sp.edit()
+            .putString("ai_adb_scope", value.takeIf { it in setOf("adb", "both", "root") } ?: "adb")
+            .apply()
+
     var sttPackage: String
         get() = sp.getString("stt_package", "") ?: ""
         set(value) = sp.edit().putString("stt_package", value).apply()
