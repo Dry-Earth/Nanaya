@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Usb
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ fun ToolsScreen(
     onOpenUsb: () -> Unit,
     onOpenMusic: () -> Unit,
     onOpenDroidspaces: () -> Unit,
+    onOpenHtop: () -> Unit,
 ) {
     LazyColumn(
         Modifier.fillMaxSize().statusBarsPadding(),
@@ -89,6 +91,27 @@ fun ToolsScreen(
                         Text("Droidspaces", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
                         Text(
                             "扫描容器，查看进程、应用、硬件占用与系统服务",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Glass.Muted,
+                        )
+                    }
+                    Text("›", style = MaterialTheme.typography.headlineMedium, color = Glass.Faint)
+                }
+            }
+        }
+
+        item {
+            SectionHeader("系统", "实时进程与资源监视")
+        }
+        item {
+            GlassPanel(corner = 16.dp, padding = PaddingValues(14.dp), onClick = onOpenHtop) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Speed, null, tint = Glass.Ice)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("系统监视器", style = MaterialTheme.typography.titleMedium, color = Glass.Text)
+                        Text(
+                            "htop 风格：负载、每核 CPU、内存、ZRAM 与完整进程表",
                             style = MaterialTheme.typography.bodySmall,
                             color = Glass.Muted,
                         )

@@ -116,7 +116,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
         item {
             SectionHeader(
                 "24 小时耗电",
-                "UsageStats + cpuinfo · GPU 不按应用统计",
+                "UsageStats + cpuinfo · 用电量自上次充电估算",
                 trailing = {
                     Icon(
                         Icons.Rounded.Refresh,
@@ -146,6 +146,15 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
                                     append("前台 ${formatDuration(d.foregroundMs)}")
                                     if (d.cpuPct > 0f) append(" · CPU ${d.cpuPct.toInt()}%")
                                     if (d.memoryKb > 0) append(" · RAM ${(d.memoryKb * 1024).bytes()}")
+                                    if (d.energyMah >= 0f) {
+                                        append(
+                                            " · 用电 " + String.format(
+                                                java.util.Locale.US,
+                                                "%.1f mAh",
+                                                d.energyMah,
+                                            ),
+                                        )
+                                    }
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Glass.Faint,
@@ -675,7 +684,7 @@ private fun BatteryPanel(perf: PerfUiState) {
             color = Glass.Faint,
         )
         KeyValueRow("循环次数", if (b.cycles >= 0) "${b.cycles} 次" else "系统未提供")
-        KeyValueRow("充电计数", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
+        KeyValueRow("当前电荷量", if (b.chargeCounterUah > 0) "${b.chargeCounterUah / 1000} mAh" else "—")
         KeyValueRow("瞬时电流", formatCurrent(b.currentUa))
         KeyValueRow("供电", b.plugged)
         if (perf.tempHistory.size > 2) {
