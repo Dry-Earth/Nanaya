@@ -4,8 +4,6 @@ import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,14 +86,11 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
     ) {
         item { LivePanel(perf, vm) }
         item { CoresPanel(perf) }
-        item { CpuControlPanel(perf, vm) }
-        item { GpuPanel(perf, vm) }
+        item { GpuPanel(perf) }
         item { NpuPanel(perf) }
         item { TemperaturePanel(perf) }
         if (perf.charging.supported) {
             item { ChargingPanel(vm, perf) }
-        } else if (perf.snapshot.vendorChargeSupported) {
-            item { VendorChargingPanel(perf, vm) }
         }
         item { BatteryPanel(perf) }
         item { BatteryRulesCard(perf.charging.supported) }
@@ -115,7 +110,7 @@ fun PerformanceScreen(vm: ButlerViewModel, onOpenRules: () -> Unit = {}, onOpenM
             }
         }
         item { MemoryPanel(perf, onTrim = { vm.killBackground() }, onOpenMemory = onOpenMemory) }
-        item { ZramCard(perf, vm) }
+        item { ZramCard(perf) }
         item {
             SectionHeader(
                 "24 小时耗电",
@@ -307,7 +302,7 @@ private fun CoresPanel(perf: PerfUiState) {
 }
 
 @Composable
-private fun GpuPanel(perf: PerfUiState, vm: ButlerViewModel) {
+private fun GpuPanel(perf: PerfUiState) {
     val s = perf.snapshot
     if (s.gpuLoad < 0 && s.gpuFreqMhz <= 0 && s.gpuMaxMhz <= 0 && s.gpuName.isBlank()) return
     GlassPanel {
@@ -340,127 +335,12 @@ private fun GpuPanel(perf: PerfUiState, vm: ButlerViewModel) {
             Spacer(Modifier.height(10.dp))
             Meter(s.gpuLoad / 100f, color = Glass.Violet)
         }
-        if (s.gpuGovernor.isNotBlank() || s.gpuGovernors.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            KeyValueRow("governor", s.gpuGovernor.ifBlank { "—" })
-            if (s.gpuGovernors.isNotEmpty()) {
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    s.gpuGovernors.take(8).forEach { governor ->
-                        Pill(
-                            governor,
-                            selected = s.gpuGovernor == governor,
-                            color = Glass.Violet,
-                            onClick = { vm.applyGpuGovernor(governor) },
-                        )
-                    }
-                }
-            }
-            if (s.gpuMaxMhz > 0) {
-                Spacer(Modifier.height(8.dp))
-                Text("最高频率上限", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(100, 85, 70, 55).forEach { pct ->
-                        Pill(
-                            "$pct%",
-                            color = Glass.Ice,
-                            onClick = { vm.applyGpuMaxPct(pct) },
-                        )
-                    }
-                }
-            }
-        }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (s.glEsVersion.isNotBlank()) Pill("GLES ${s.glEsVersion}", color = Glass.Ice)
             if (s.vulkanVersion.isNotBlank()) Pill("Vulkan ${s.vulkanVersion}", color = Glass.Mint)
             if (s.socModel.isNotBlank()) Pill(s.socModel, color = Glass.Faint)
         }
-    }
-}
-
-@Composable
-private fun CpuControlPanel(perf: PerfUiState, vm: ButlerViewModel) {
-    if (perf.cpuGovernors.isEmpty() && perf.presets.isEmpty()) return
-    GlassPanel {
-        SectionHeader("CPU 调度", "写 sysfs · 需要 Root 或可写 ADB")
-        Spacer(Modifier.height(10.dp))
-        Text("governor", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-        Spacer(Modifier.height(5.dp))
-        if (perf.cpuGovernors.isEmpty()) {
-            Text("内核没有暴露 available_governors", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
-        } else {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                perf.cpuGovernors.forEach { governor ->
-                    Pill(
-                        governor,
-                        selected = perf.governor == governor,
-                        color = Glass.Violet,
-                        onClick = { vm.applyCpuGovernor(governor) },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Text("最高频率", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-        Spacer(Modifier.height(5.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(100, 85, 70, 55).forEach { pct ->
-                Pill("$pct%", color = Glass.Ice, onClick = { vm.applyCpuMaxPct(pct) })
-            }
-        }
-        if (perf.presets.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text("一键预设", style = MaterialTheme.typography.labelSmall, color = Glass.Faint)
-            Spacer(Modifier.height(5.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                perf.presets.forEach { preset ->
-                    Pill(preset.title, color = Glass.Mint, onClick = { vm.applyCpuPreset(preset) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VendorChargingPanel(perf: PerfUiState, vm: ButlerViewModel) {
-    val s = perf.snapshot
-    GlassPanel {
-        SectionHeader(
-            "充电控制",
-            "厂商 power_supply 节点 · 需要 Root",
-            trailing = {
-                Pill(
-                    if (s.vendorChargeEnabled) "允许充电" else "已停止",
-                    selected = s.vendorChargeEnabled,
-                    color = if (s.vendorChargeEnabled) Glass.Mint else Glass.Amber,
-                    onClick = { vm.setVendorCharging(!s.vendorChargeEnabled) },
-                )
-            },
-        )
-        Spacer(Modifier.height(8.dp))
-        KeyValueRow("当前限流", if (s.vendorChargeLimitMa > 0) "${s.vendorChargeLimitMa} mA" else "—")
-        if (s.vendorChargeLimitMaxMa > 0) {
-            KeyValueRow("节点上限", "${s.vendorChargeLimitMaxMa} mA")
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(100, 80, 60, 40).forEach { pct ->
-                    Pill("$pct%", color = Glass.Ice, onClick = { vm.setVendorChargeLimit(pct) })
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "直接写厂商充电节点；百分比按节点原始单位缩放，不会超过读到的硬件上限。",
-            style = MaterialTheme.typography.labelSmall,
-            color = Glass.Faint,
-        )
     }
 }
 
@@ -847,7 +727,7 @@ private fun RuleToggle(label: String, checked: Boolean, onChange: (Boolean) -> U
 }
 
 @Composable
-private fun ZramCard(perf: PerfUiState, vm: ButlerViewModel) {
+private fun ZramCard(perf: PerfUiState) {
     val s = perf.snapshot
     if (s.zramSize <= 0 && s.swapTotal <= 0) return
     val swapUsed = (s.swapTotal - s.swapFree).coerceAtLeast(0)
@@ -864,30 +744,6 @@ private fun ZramCard(perf: PerfUiState, vm: ButlerViewModel) {
         if (s.swapTotal > 0) {
             KeyValueRow("Swap", "${swapUsed.bytes()} / ${s.swapTotal.bytes()}")
         }
-        if (s.swappiness >= 0) {
-            Spacer(Modifier.height(10.dp))
-            KeyValueRow("swappiness", s.swappiness.toString())
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0, 60, 100, 150).forEach { value ->
-                    Pill(
-                        value.toString(),
-                        selected = s.swappiness == value,
-                        color = Glass.Violet,
-                        onClick = { vm.setSwappiness(value) },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("清理缓存", color = Glass.Amber, onClick = { vm.dropCaches() })
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "清理缓存会回收页缓存和 dentries，短时间重新变慢是正常现象。",
-            style = MaterialTheme.typography.labelSmall,
-            color = Glass.Faint,
-        )
     }
 }
 

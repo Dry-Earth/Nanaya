@@ -36,13 +36,11 @@ class PerformanceRepository(private val context: Context) {
             mi
         }.getOrNull()
         val gpu = runCatching { readGpu() }
-            .getOrDefault(GpuReading(-1, 0, 0, -1, "", emptyList(), emptyList(), ""))
+            .getOrDefault(GpuReading(-1, 0, 0, ""))
         val npu = runCatching { readNpu() }.getOrDefault(NpuReading("", -1, -1))
         val temps = runCatching { readTemps() }.getOrDefault(emptyList())
         val (rx, tx) = runCatching { readNetwork() }.getOrDefault(0L to 0L)
         val battery = runCatching { readBattery() }.getOrDefault(BatterySnapshot())
-        val vendorCharging = runCatching { readVendorCharging() }.getOrDefault(VendorCharging())
-        val swappiness = runCatching { readSwappiness() }.getOrDefault(-1)
         val (swapTotal, swapFree) = runCatching { readSwap() }.getOrDefault(0L to 0L)
         val (cached, buffers) = runCatching { readMemDetail() }.getOrDefault(0L to 0L)
         val (zramSize, zramUsed, zramOrig) = runCatching { readZram() }
@@ -61,15 +59,6 @@ class PerformanceRepository(private val context: Context) {
             gpuLoad = gpu.load,
             gpuFreqMhz = gpu.freqMhz,
             gpuMaxMhz = gpu.maxMhz,
-            gpuMinMhz = gpu.minMhz,
-            gpuGovernor = gpu.governor,
-            gpuGovernors = gpu.governors,
-            gpuAvailableMhz = gpu.availableMhz,
-            swappiness = swappiness,
-            vendorChargeSupported = vendorCharging.supported,
-            vendorChargeEnabled = vendorCharging.enabled,
-            vendorChargeLimitMa = vendorCharging.limitMa,
-            vendorChargeLimitMaxMa = vendorCharging.limitMaxMa,
             npuName = npu.name,
             npuLoad = npu.load,
             npuFreqMhz = npu.freqMhz,
@@ -101,7 +90,21 @@ class PerformanceRepository(private val context: Context) {
     // ---------------- CPU ----------------
 
     private fun readCpu(): CpuSample {
-        val statText = PrivilegedShell.read("/proc/stat")
+        // One batch covers /proc/stat and every cpufreq leaf. Reading them in
+        // separate shell round trips made a 1 s sample take several hundred ms.
+        val guess = Runtime.getRuntime().availableProcessors().coerceIn(1, 32)
+        val paths = ArrayList<String>(guess * 10 + 4)
+        paths += "/proc/stat"
+        for (i in 0 until guess) {
+            paths += cpuFreqPaths(i, "scaling_cur_freq")
+            paths += cpuFreqPaths(i, "cpuinfo_max_freq")
+            paths += cpuFreqPaths(i, "scaling_max_freq")
+            paths += cpuFreqPaths(i, "cpuinfo_min_freq")
+            paths += cpuFreqPaths(i, "scaling_min_freq")
+        }
+        paths += cpuFreqPaths(0, "scaling_governor")
+        val values = PrivilegedShell.readAll(paths)
+        val statText = values["/proc/stat"]
             ?: runCatching { File("/proc/stat").readText() }.getOrNull()
         val now = parseProcStat(statText.orEmpty())
         if (now.isEmpty()) return CpuSample()
@@ -117,17 +120,6 @@ class PerformanceRepository(private val context: Context) {
             if (a == null || b == null) 0f else busyDelta(a, b)
         }
         prevCpu = now
-
-        val paths = ArrayList<String>(cores * 4 + 1)
-        for (i in 0 until cores) {
-            paths += cpuFreqPaths(i, "scaling_cur_freq")
-            paths += cpuFreqPaths(i, "cpuinfo_max_freq")
-            paths += cpuFreqPaths(i, "scaling_max_freq")
-            paths += cpuFreqPaths(i, "cpuinfo_min_freq")
-            paths += cpuFreqPaths(i, "scaling_min_freq")
-        }
-        paths += cpuFreqPaths(0, "scaling_governor")
-        val values = PrivilegedShell.readAll(paths)
 
         fun pick(i: Int, vararg leaves: String): Long {
             for (leaf in leaves) {
@@ -189,10 +181,6 @@ class PerformanceRepository(private val context: Context) {
         val load: Int,
         val freqMhz: Int,
         val maxMhz: Int,
-        val minMhz: Int,
-        val governor: String,
-        val governors: List<String>,
-        val availableMhz: List<Int>,
         val name: String,
     )
 
@@ -205,36 +193,24 @@ class PerformanceRepository(private val context: Context) {
             "$kgsl/gpubusy",
             "$kgsl/gpuclk",
             "$kgsl/max_gpuclk",
-            "$kgsl/min_gpuclk",
             "$kgsl/gpu_model",
             "$kgsl/device/gpu_model",
             "$kgsl/gpu_available_frequencies",
             "$kgsl/freq_table_mhz",
-            "$kgsl/governor",
-            "$kgsl/available_governors",
             "$kgslDev/cur_freq",
             "$kgslDev/max_freq",
-            "$kgslDev/min_freq",
-            "$kgslDev/governor",
-            "$kgslDev/available_governors",
             "$kgslDev/name",
             "$kgslDev/available_frequencies",
             "$devfreq/gpu_load",
             "$devfreq/load",
             "$devfreq/cur_freq",
             "$devfreq/max_freq",
-            "$devfreq/min_freq",
-            "$devfreq/governor",
-            "$devfreq/available_governors",
             "$devfreq/name",
             "$devfreq/available_frequencies",
             "/sys/class/devfreq/gpufreq/cur_freq",
             "/sys/class/devfreq/gpufreq/max_freq",
-            "/sys/class/devfreq/gpufreq/min_freq",
-            "/sys/class/devfreq/gpufreq/governor",
-            "/sys/class/devfreq/gpufreq/available_governors",
-            "/sys/class/devfreq/gpufreq/available_frequencies",
             "/sys/class/devfreq/gpufreq/gpu_load",
+            "/sys/class/devfreq/gpufreq/available_frequencies",
             "/sys/kernel/gpu/gpu_busy",
             "/sys/kernel/gpu/gpu_clock",
             "/sys/kernel/gpu/gpu_freq",
@@ -246,8 +222,6 @@ class PerformanceRepository(private val context: Context) {
             "/sys/class/misc/mali0/device/clock",
             "/sys/class/misc/mali0/device/cur_freq",
             "/sys/class/misc/mali0/device/max_freq",
-            "/sys/class/misc/mali0/device/min_freq",
-            "/sys/class/misc/mali0/device/governor",
         )
         val values = PrivilegedShell.readAll(candidates)
 
@@ -301,15 +275,26 @@ class PerformanceRepository(private val context: Context) {
             }
         }
 
-        // The available table is the hardware maximum. `max_freq` may already
-        // have been lowered by an earlier limit, so never use it as the base
-        // for a percentage: that would ratchet the limit down every time.
-        val availableMhz = run {
+        var maxMhz = 0
+        for (path in listOf(
+            "$kgsl/max_gpuclk",
+            "$kgslDev/max_freq",
+            "$devfreq/max_freq",
+            "/sys/class/devfreq/gpufreq/max_freq",
+            "/sys/class/misc/mali0/device/max_freq",
+        )) {
+            val v = number(path) ?: continue
+            if (v > 0) {
+                maxMhz = hzToMhz(v)
+                break
+            }
+        }
+        if (maxMhz <= 0) {
             for (path in listOf(
+                "$kgsl/gpu_available_frequencies",
                 "$kgslDev/available_frequencies",
                 "$devfreq/available_frequencies",
                 "/sys/class/devfreq/gpufreq/available_frequencies",
-                "$kgsl/gpu_available_frequencies",
                 "$kgsl/freq_table_mhz",
             )) {
                 val raw = values[path] ?: continue
@@ -318,73 +303,10 @@ class PerformanceRepository(private val context: Context) {
                     .filter { it > 0 }
                     .toList()
                 if (nums.isEmpty()) continue
-                val mhz = nums
-                    .map { if (path.endsWith("freq_table_mhz")) it.toInt() else hzToMhz(it) }
-                    .filter { it > 0 }
-                    .distinct()
-                    .sorted()
-                if (mhz.isNotEmpty()) return@run mhz
-            }
-            emptyList<Int>()
-        }
-
-        var maxMhz = availableMhz.lastOrNull() ?: 0
-        if (maxMhz <= 0) {
-            for (path in listOf(
-                "$kgsl/max_gpuclk",
-                "$kgslDev/max_freq",
-                "$devfreq/max_freq",
-                "/sys/class/devfreq/gpufreq/max_freq",
-                "/sys/class/misc/mali0/device/max_freq",
-            )) {
-                val v = number(path) ?: continue
-                if (v > 0) {
-                    maxMhz = hzToMhz(v)
-                    break
-                }
-            }
-        }
-
-        var minMhz = 0
-        for (path in listOf(
-            "$kgsl/min_gpuclk",
-            "$kgslDev/min_freq",
-            "$devfreq/min_freq",
-            "/sys/class/devfreq/gpufreq/min_freq",
-            "/sys/class/misc/mali0/device/min_freq",
-        )) {
-            val v = number(path) ?: continue
-            if (v > 0) {
-                minMhz = hzToMhz(v)
+                val highest = nums.reduce { a, b -> if (a > b) a else b }
+                maxMhz = if (path.endsWith("freq_table_mhz")) highest.toInt() else hzToMhz(highest)
                 break
             }
-        }
-        if (minMhz <= 0) minMhz = availableMhz.firstOrNull() ?: -1
-
-        var governor = ""
-        for (path in listOf(
-            "$kgslDev/governor",
-            "/sys/class/devfreq/gpufreq/governor",
-            "$devfreq/governor",
-            "$kgsl/governor",
-            "/sys/class/misc/mali0/device/governor",
-        )) {
-            val v = values[path]?.takeIf { it.isNotBlank() } ?: continue
-            governor = v
-            break
-        }
-        val governors = run {
-            for (path in listOf(
-                "$kgslDev/available_governors",
-                "/sys/class/devfreq/gpufreq/available_governors",
-                "$devfreq/available_governors",
-                "$kgsl/available_governors",
-            )) {
-                val raw = values[path] ?: continue
-                val list = raw.split(Regex("\\s+")).filter { it.isNotBlank() }
-                if (list.isNotEmpty()) return@run list
-            }
-            emptyList<String>()
         }
 
         val name = values["$kgsl/gpu_model"]
@@ -392,7 +314,7 @@ class PerformanceRepository(private val context: Context) {
             ?: values["$kgslDev/name"]
             ?: values["$devfreq/name"]
             ?: runCatching { Build.SOC_MODEL }.getOrDefault("")
-        return GpuReading(load, freqMhz, maxMhz, minMhz, governor, governors, availableMhz, name)
+        return GpuReading(load, freqMhz, maxMhz, name)
     }
 
     private fun hzToMhz(value: Long): Int =
@@ -454,7 +376,7 @@ class PerformanceRepository(private val context: Context) {
         lastMemAt = now
 
         // ps is much faster than dumpsys meminfo and works through ADB too.
-        val ps = PrivilegedShell.run("ps -A -o PID,RSS,NAME", 8_000)
+        val ps = Shell.run("ps -A -o PID,RSS,NAME", 8_000)
         val fromPs = parsePs(ps.text)
         if (fromPs.isNotEmpty()) {
             lastMemList = fromPs
@@ -462,7 +384,7 @@ class PerformanceRepository(private val context: Context) {
         }
 
         // Fallback for ROMs whose ps lacks -o.
-        val text = PrivilegedShell.run("dumpsys meminfo", 20_000).text
+        val text = Shell.run("dumpsys meminfo", 20_000).text
         val parsed = parseMeminfo(text)
         if (parsed.isNotEmpty()) lastMemList = parsed
         return lastMemList
@@ -576,7 +498,7 @@ class PerformanceRepository(private val context: Context) {
         lastProcAt = now
         if (!Shell.isPrivileged()) return lastProcList
 
-        val r = PrivilegedShell.run("dumpsys cpuinfo", 12_000)
+        val r = Shell.run("dumpsys cpuinfo", 12_000)
         val regex = Regex("""^\s*([0-9.]+)%\s+\d+/([^\s:]+)""")
         val map = HashMap<String, Float>()
         if (r.ok) {
@@ -813,208 +735,6 @@ class PerformanceRepository(private val context: Context) {
         )
     }
 
-    // ---------------- vendor charging ----------------
-
-    private data class VendorCharging(
-        val supported: Boolean = false,
-        val enabled: Boolean = false,
-        val limitMa: Int = -1,
-        val limitMaxMa: Int = -1,
-    )
-
-    private fun readVendorCharging(): VendorCharging {
-        val enabledPaths = listOf(
-            "/sys/class/power_supply/battery/charging_enabled",
-            "/sys/class/power_supply/battery/input_suspend",
-            "/sys/class/power_supply/battery/charge_disable",
-        )
-        val limitPaths = listOf(
-            "/sys/class/power_supply/battery/constant_charge_current_max",
-            "/sys/class/power_supply/main/constant_charge_current_max",
-            "/sys/class/power_supply/battery/input_current_limit",
-            "/sys/class/power_supply/usb/input_current_limit",
-        )
-        val maxPaths = listOf(
-            "/sys/class/power_supply/battery/current_max",
-            "/sys/class/power_supply/main/current_max",
-            "/sys/class/power_supply/battery/charge_control_limit_max",
-            "/sys/class/power_supply/battery/current_limit_max",
-        )
-        val values = PrivilegedShell.readAll(enabledPaths + limitPaths + maxPaths)
-        val enabledPath = enabledPaths.firstOrNull { values[it] != null } ?: ""
-        val limitPath = limitPaths.firstOrNull { values[it] != null } ?: ""
-        val maxPath = maxPaths.firstOrNull { values[it] != null } ?: ""
-        if (enabledPath.isEmpty() && limitPath.isEmpty()) return VendorCharging()
-
-        val rawEnabled = PrivilegedShell.firstNumber(values[enabledPath])
-        val enabled = when {
-            rawEnabled == null -> true
-            enabledPath.endsWith("input_suspend") || enabledPath.endsWith("charge_disable") ->
-                rawEnabled == 0L
-            else -> rawEnabled != 0L
-        }
-        val rawLimit = PrivilegedShell.firstNumber(values[limitPath])
-        val rawMax = PrivilegedShell.firstNumber(values[maxPath])
-        val micro = (rawLimit ?: 0L) >= 100_000L || (rawMax ?: 0L) >= 100_000L
-        fun toMa(value: Long?): Int = when {
-            value == null || value <= 0 -> -1
-            micro -> (value / 1000L).toInt()
-            else -> value.toInt()
-        }
-        return VendorCharging(
-            supported = true,
-            enabled = enabled,
-            limitMa = toMa(rawLimit),
-            limitMaxMa = toMa(rawMax),
-        )
-    }
-
-    fun setVendorChargingEnabled(enabled: Boolean): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        val paths = listOf(
-            "/sys/class/power_supply/battery/charging_enabled",
-            "/sys/class/power_supply/battery/input_suspend",
-            "/sys/class/power_supply/battery/charge_disable",
-        )
-        val values = PrivilegedShell.readAll(paths)
-        val path = paths.firstOrNull { values[it] != null }
-            ?: return false to "设备没有充电开关节点"
-        val inverted = path.endsWith("input_suspend") || path.endsWith("charge_disable")
-        val raw = if (enabled != inverted) "1" else "0"
-        val ok = writeFirst(listOf(path), raw)
-        return ok to if (ok) {
-            if (enabled) "已允许充电" else "已停止充电"
-        } else {
-            "写入失败，需要 Root"
-        }
-    }
-
-    fun setVendorChargeLimit(pct: Int): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        val state = readVendorCharging()
-        val rawMax = readChargeMaxRaw()
-        if (!state.supported || rawMax == null || rawMax <= 0) {
-            return false to "设备没有可写的最大电流节点"
-        }
-        val clamped = pct.coerceIn(20, 100)
-        val target = rawMax * clamped / 100
-        val path = listOf(
-            "/sys/class/power_supply/battery/constant_charge_current_max",
-            "/sys/class/power_supply/main/constant_charge_current_max",
-            "/sys/class/power_supply/battery/input_current_limit",
-            "/sys/class/power_supply/usb/input_current_limit",
-        ).firstOrNull { PrivilegedShell.read(it) != null } ?: return false to "找不到限流节点"
-        val ok = writeFirst(listOf(path), target.toString())
-        return ok to if (ok) "充电电流上限已设为 $clamped%" else "写入失败，需要 Root"
-    }
-
-    private fun readChargeMaxRaw(): Long? {
-        val paths = listOf(
-            "/sys/class/power_supply/battery/current_max",
-            "/sys/class/power_supply/main/current_max",
-            "/sys/class/power_supply/battery/charge_control_limit_max",
-            "/sys/class/power_supply/battery/current_limit_max",
-        )
-        val values = PrivilegedShell.readAll(paths)
-        for (path in paths) {
-            val value = PrivilegedShell.firstNumber(values[path]) ?: continue
-            if (value > 0) return value
-        }
-        return null
-    }
-
-    // ---------------- memory tuning ----------------
-
-    private fun readSwappiness(): Int =
-        runCatching {
-            File("/proc/sys/vm/swappiness").readText().trim().toIntOrNull()
-        }.getOrNull() ?: -1
-
-    fun setSwappiness(value: Int): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        val clamped = value.coerceIn(0, 200)
-        val ok = writeFirst(listOf("/proc/sys/vm/swappiness"), clamped.toString())
-        return ok to if (ok) "swappiness 已设为 $clamped" else "写入失败，需要 Root"
-    }
-
-    fun dropCaches(): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        val r = PrivilegedShell.run(
-            "sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null; echo done",
-            15_000,
-        )
-        val ok = r.text.contains("done")
-        return ok to if (ok) "已清理页缓存、dentries 与 inodes" else "清理失败，需要 Root"
-    }
-
-    // ---------------- GPU control ----------------
-
-    fun applyGpuGovernor(governor: String): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        if (!governor.matches(Regex("[A-Za-z0-9_-]+"))) return false to "governor 名称无效"
-        val ok = writeFirst(
-            listOf(
-                "/sys/class/kgsl/kgsl-3d0/devfreq/governor",
-                "/sys/class/devfreq/gpufreq/governor",
-                "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/governor",
-                "/sys/class/kgsl/kgsl-3d0/governor",
-            ),
-            governor,
-        )
-        return ok to if (ok) "GPU governor：$governor" else "设备不支持写 GPU governor"
-    }
-
-    fun setGpuMaxMhz(mhz: Int): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        if (mhz <= 0) return false to "频率无效"
-        val hz = mhz.toLong() * 1_000_000L
-        val ok = writeFirst(
-            listOf(
-                "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq",
-                "/sys/class/devfreq/gpufreq/max_freq",
-                "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/max_freq",
-                "/sys/class/kgsl/kgsl-3d0/max_gpuclk",
-            ),
-            hz.toString(),
-        )
-        return ok to if (ok) "GPU 最高频率：$mhz MHz" else "写入失败，需要 Root"
-    }
-
-    fun setCpuMaxPct(pct: Int): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
-        val p = pct.coerceIn(30, 100)
-        val cmd = "ok=0; for d in /sys/devices/system/cpu/cpu[0-9]*/cpufreq " +
-            "/sys/devices/system/cpu/cpufreq/policy[0-9]*; do " +
-            "[ -d \"\$d\" ] || continue; " +
-            "max=\$(cat \"\$d/cpuinfo_max_freq\" 2>/dev/null); " +
-            "[ -z \"\$max\" ] && max=\$(cat \"\$d/scaling_max_freq\" 2>/dev/null); " +
-            "[ -z \"\$max\" ] && continue; " +
-            "target=\$((max * $p / 100)); " +
-            "echo \$target > \"\$d/scaling_max_freq\" 2>/dev/null && ok=1; " +
-            "done; echo \$ok"
-        val r = PrivilegedShell.run(cmd, 12_000)
-        val ok = r.text.trim().endsWith("1")
-        return ok to if (ok) "CPU 最高频率限制为 $p%" else "写入失败，需要 Root"
-    }
-
-    private fun writeFirst(paths: List<String>, value: String): Boolean {
-        if (!value.matches(Regex("[-0-9A-Za-z_.]+"))) return false
-        val script = buildString {
-            append("ok=0\n")
-            for (path in paths) {
-                val quoted = shQuote(path)
-                append("if [ -e ").append(quoted).append(" ]; then ")
-                append("echo ").append(value).append(" > ").append(quoted)
-                    .append(" 2>/dev/null && ok=1; fi\n")
-            }
-            append("echo \$ok")
-        }
-        return PrivilegedShell.run(script, 10_000).text.trim().endsWith("1")
-    }
-
-    private fun shQuote(value: String): String =
-        "'" + value.replace("'", "'\\''") + "'"
-
     // ---------------- CPU control ----------------
 
     fun cpuGovernor(): String =
@@ -1027,15 +747,13 @@ class PerformanceRepository(private val context: Context) {
             ?.split(Regex("\\s+"))?.filter { it.isNotBlank() } ?: emptyList()
 
     fun applyGovernor(governor: String): Pair<Boolean, String> {
-        if (!Shell.isPrivileged()) return false to "需要 Root 或无线 ADB"
+        if (!Shell.rootReady) return false to "需要 Root"
         if (!governor.matches(Regex("[A-Za-z0-9_-]+"))) return false to "governor 名称无效"
         if (governor !in availableGovernors()) return false to "内核不支持 $governor"
-        val cmd = "ok=0; for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor " +
-            "/sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do " +
-            "[ -e \"\$f\" ] && echo $governor > \"\$f\" 2>/dev/null && ok=1; done; echo \$ok"
-        val r = PrivilegedShell.run(cmd, 12_000)
-        val ok = r.text.trim().endsWith("1")
-        return ok to if (ok) "CPU governor：$governor" else "写入失败，需要 Root"
+        val cmd = "for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo $governor > \$f 2>/dev/null; done; " +
+            "echo -n applied"
+        val r = Shell.runAs(Shell.Backend.ROOT, cmd)
+        return r.text.contains("applied") to (r.text.ifBlank { "完成" })
     }
 
     fun presets(): List<PerfPreset> {
@@ -1081,7 +799,7 @@ class PerformanceRepository(private val context: Context) {
     private fun cpuInfo(): Map<String, Float> {
         val out = HashMap<String, Float>()
         if (!Shell.isPrivileged()) return out
-        val r = PrivilegedShell.run("dumpsys cpuinfo", 12_000)
+        val r = Shell.run("dumpsys cpuinfo", 12_000)
         if (!r.ok) return out
         val regex = Regex("""^\s*([0-9.]+)%\s+\d+/([^\s:]+)""")
         for (line in r.text.lineSequence()) {

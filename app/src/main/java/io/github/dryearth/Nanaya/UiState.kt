@@ -43,7 +43,6 @@ data class PerfUiState(
     val tempHistory: List<Float> = emptyList(),
     val currentHistory: List<Float> = emptyList(),
     val governor: String = "",
-    val cpuGovernors: List<String> = emptyList(),
     val presets: List<PerfPreset> = emptyList(),
     val history: List<Triple<Long, Int, Int>> = emptyList(),
     val toast: String? = null,

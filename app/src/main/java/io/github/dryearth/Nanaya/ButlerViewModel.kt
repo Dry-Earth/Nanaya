@@ -33,7 +33,6 @@ import io.github.dryearth.Nanaya.data.ChatImageStore
 import io.github.dryearth.Nanaya.data.ChatMessage
 import io.github.dryearth.Nanaya.data.ChatRole
 import io.github.dryearth.Nanaya.data.PerformanceRepository
-import io.github.dryearth.Nanaya.data.PerfPreset
 import io.github.dryearth.Nanaya.data.RiskLevel
 import io.github.dryearth.Nanaya.data.SecurityReport
 import io.github.dryearth.Nanaya.data.SecurityRepository
@@ -41,7 +40,6 @@ import io.github.dryearth.Nanaya.data.DuplicateGroup
 import io.github.dryearth.Nanaya.data.StorageCategory
 import io.github.dryearth.Nanaya.data.StorageItem
 import io.github.dryearth.Nanaya.data.StorageRepository
-import io.github.dryearth.Nanaya.service.NanayaStatus
 import io.github.dryearth.Nanaya.data.StorageReport
 import io.github.dryearth.Nanaya.music.MusicAssistant
 import io.github.dryearth.Nanaya.music.MusicIntentParser
@@ -96,7 +94,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var monitorJob: Job? = null
     private var monitorIntervalMs = 0L
-    private var lastStatusAt = 0L
     private var booted = false
 
     val aiConfigured: Boolean get() = ai.configured()
@@ -480,7 +477,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         monitorJob?.cancel()
         monitorJob = null
         monitorIntervalMs = 0L
-        NanayaStatus.setPerfSummary(null)
         _perf.update { it.copy(monitoring = false) }
     }
 
@@ -540,30 +536,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 currentHistory = currentHist,
                 lastSampleAt = System.currentTimeMillis(),
                 sampleError = null,
-                readChannel = if (PrivilegedShell.rootShellRunning) {
-                    "Root 常驻通道"
-                } else {
-                    Shell.backendLabel()
-                },
+                readChannel = PrivilegedShell.channelLabel,
             )
         }
         val governor = withContext(Dispatchers.IO) { perfRepo.cpuGovernor() }
         val presets = withContext(Dispatchers.IO) { perfRepo.presets() }
-        val governors = withContext(Dispatchers.IO) { perfRepo.availableGovernors() }
-        _perf.update { it.copy(governor = governor, presets = presets, cpuGovernors = governors) }
-        val statusNow = SystemClock.elapsedRealtime()
-        if (statusNow - lastStatusAt >= 2_000L) {
-            lastStatusAt = statusNow
-            val hottest = snap.temps.firstOrNull()?.celsius
-            NanayaStatus.setPerfSummary(
-                buildString {
-                    append("CPU ${snap.cpu.loadPct.toInt()}%")
-                    if (snap.gpuLoad >= 0) append(" · GPU ${snap.gpuLoad}%")
-                    append(" · RAM ${(safePct(snap.ramUsed, snap.ramTotal) * 100).toInt()}%")
-                    if (hottest != null) append(" · ${hottest.toInt()}℃")
-                },
-            )
-        }
+        _perf.update { it.copy(governor = governor, presets = presets) }
         if (includeProcesses) {
             // Async and non-blocking: a slow root shell or dumpsys cannot stall
             // the sampler any more.
@@ -653,100 +631,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearPerfToast() = _perf.update { it.copy(toast = null) }
-
-    // ---------------- performance controls ----------------
-
-    fun applyCpuGovernor(governor: String) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) { perfRepo.applyGovernor(governor) }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun applyCpuMaxPct(pct: Int) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) { perfRepo.setCpuMaxPct(pct) }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun applyCpuPreset(preset: PerfPreset) {
-        viewModelScope.launch {
-            val first = withContext(Dispatchers.IO) {
-                val governor = preset.governors.firstOrNull()
-                if (governor != null) perfRepo.applyGovernor(governor) else true to ""
-            }
-            val second = withContext(Dispatchers.IO) { perfRepo.setCpuMaxPct(preset.maxFreqPct) }
-            val message = listOf(first.second, second.second)
-                .filter { it.isNotBlank() }
-                .joinToString(" · ")
-            _perf.update { it.copy(toast = message.ifBlank { "已应用 ${preset.title}" }) }
-            if (first.first || second.first) refreshPerf()
-        }
-    }
-
-    fun applyGpuGovernor(governor: String) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) { perfRepo.applyGpuGovernor(governor) }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun applyGpuMaxPct(pct: Int) {
-        viewModelScope.launch {
-            val snap = _perf.value.snapshot
-            if (snap.gpuMaxMhz <= 0) {
-                _perf.update { it.copy(toast = "没有读到 GPU 可用频率表") }
-                return@launch
-            }
-            val percent = pct.coerceIn(20, 100)
-            val target = (snap.gpuMaxMhz.toLong() * percent / 100L).toInt()
-                .coerceAtLeast(snap.gpuMinMhz.coerceAtLeast(1))
-            val chosen = snap.gpuAvailableMhz.filter { it <= target }.maxOrNull() ?: target
-            val (ok, message) = withContext(Dispatchers.IO) { perfRepo.setGpuMaxMhz(chosen) }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun setSwappiness(value: Int) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) { perfRepo.setSwappiness(value) }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun dropCaches() {
-        viewModelScope.launch {
-            val (_, message) = withContext(Dispatchers.IO) { perfRepo.dropCaches() }
-            _perf.update { it.copy(toast = message) }
-            refreshPerf()
-        }
-    }
-
-    fun setVendorCharging(enabled: Boolean) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) {
-                perfRepo.setVendorChargingEnabled(enabled)
-            }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
-
-    fun setVendorChargeLimit(pct: Int) {
-        viewModelScope.launch {
-            val (ok, message) = withContext(Dispatchers.IO) {
-                perfRepo.setVendorChargeLimit(pct)
-            }
-            _perf.update { it.copy(toast = message) }
-            if (ok) refreshPerf()
-        }
-    }
 
     fun killBackground() {
         if (!_caps.value.privileged) {
@@ -1444,7 +1328,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        NanayaStatus.setPerfSummary(null)
         PrivilegedShell.close()
         super.onCleared()
     }
