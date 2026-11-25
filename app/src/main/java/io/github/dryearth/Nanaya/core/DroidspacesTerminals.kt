@@ -51,6 +51,23 @@ object DroidspacesTerminals {
         return session
     }
 
+    fun getOrOpenHost(context: Context, key: String, name: String, command: String): Session {
+        appContext = context.applicationContext
+        sessions[key]?.takeIf { it.alive.value }?.let {
+            DroidspacesTerminalService.start(appContext)
+            return it
+        }
+        val session = Session(name, 0, null, command)
+        session.onFinished = {
+            if (sessions[key] === session) sessions.remove(key)
+            refreshActive()
+        }
+        sessions[key] = session
+        DroidspacesTerminalService.start(appContext)
+        refreshActive()
+        return session
+    }
+
     fun close(name: String) {
         sessions.remove(name)?.close()
         refreshActive()
@@ -95,8 +112,13 @@ object DroidspacesTerminals {
         val name: String,
         pid: Int,
         rootfs: String?,
+        hostCommand: String? = null,
     ) {
-        private val terminalCommand = DroidspacesRepository.terminalCommand(name, pid, rootfs)
+        private val terminalCommand = if (hostCommand == null) {
+            DroidspacesRepository.terminalCommand(name, pid, rootfs)
+        } else {
+            null
+        }
         private val needsScriptSize = terminalCommand?.direct == false
 
         private val _alive = MutableStateFlow(true)
@@ -191,7 +213,7 @@ object DroidspacesTerminals {
         val terminalSession: TerminalSession = TerminalSession(
             "su",
             "/",
-            arrayOf("su", "-c", terminalCommand?.command ?: "exit 1"),
+            arrayOf("su", "-c", hostCommand ?: terminalCommand?.command ?: "exit 1"),
             DroidspacesTerminals.buildEnvironment(),
             5000,
             client,
