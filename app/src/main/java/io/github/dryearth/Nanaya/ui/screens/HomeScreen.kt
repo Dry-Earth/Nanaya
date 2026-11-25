@@ -477,7 +477,7 @@ private fun BatteryTiles(snapshot: PerfSnapshot) {
                 },
                 label = when {
                     b.powerW > 0f && currentText.isNotEmpty() -> "$powerLabel · $currentText"
-                    b.powerW > 0f -> "$powerLabel功率"
+                    b.powerW > 0f -> "${powerLabel}功率"
                     currentText.isNotEmpty() -> "瞬时电流"
                     else -> "电池状态"
                 },
