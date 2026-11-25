@@ -35,16 +35,26 @@ class AiClient(private val prefs: Prefs) {
             recent.forEach { m ->
                 val role = if (m.role == ChatRole.USER) "user" else "assistant"
                 val image = if (m.id in imageIds) ChatImageStore.base64(m.imageSendPath) else null
+                // ADB results live outside the bubble text; include them so the
+                // model can actually analyse the command output on the next turn.
+                val text = buildString {
+                    append(m.text)
+                    val result = m.actionResult
+                    if (!result.isNullOrBlank()) {
+                        append("\n\n[动作结果]\n")
+                        append(result.take(6000))
+                    }
+                }
                 val content: Any = if (image != null) {
                     JSONArray()
-                        .put(JSONObject().put("type", "text").put("text", m.text))
+                        .put(JSONObject().put("type", "text").put("text", text))
                         .put(
                             JSONObject()
                                 .put("type", "image_url")
                                 .put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$image"))
                         )
                 } else {
-                    m.text
+                    text
                 }
                 messages.put(JSONObject().put("role", role).put("content", content))
             }

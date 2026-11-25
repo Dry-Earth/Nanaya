@@ -94,7 +94,7 @@ class UsbAdbClient(private val context: Context, private val device: UsbDevice) 
         remoteId = 0
         sendPacket(CMD_OPEN, localId, 0, "shell:$command\u0000".toByteArray())
         val output = ByteArrayOutputStream()
-        val deadline = System.currentTimeMillis() + 20_000
+        val deadline = System.currentTimeMillis() + 60_000
         while (System.currentTimeMillis() < deadline) {
             val packet = readPacket(1_000) ?: continue
             when (packet.command) {

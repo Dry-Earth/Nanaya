@@ -884,17 +884,33 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { ai.complete(buildSystemPrompt(), _chat.value.messages) }
                 .onSuccess { raw ->
                     val (reply, action) = parseResponse(raw)
+                    // With the ADB switch on, ordinary ADB commands are part of
+                    // the opted-in workflow and run immediately. Dangerous ones
+                    // stay pending for the second confirmation.
+                    val auto = action != null && prefs.aiAdbEnabled && !action.dangerous &&
+                        action.type in setOf(
+                            "adb_local_run",
+                            "adb_remote_run",
+                            "adb_usb_run",
+                            "adb_status",
+                        )
+                    val assistant = ChatMessage(
+                        role = ChatRole.ASSISTANT,
+                        text = reply,
+                        action = action,
+                        actionState = when {
+                            action == null -> ActionState.NONE
+                            auto -> ActionState.RUNNING
+                            else -> ActionState.PENDING
+                        },
+                    )
                     _chat.update {
                         it.copy(
                             sending = false,
-                            messages = trimChatImages(it.messages + ChatMessage(
-                                role = ChatRole.ASSISTANT,
-                                text = reply,
-                                action = action,
-                                actionState = if (action != null) ActionState.PENDING else ActionState.NONE,
-                            )),
+                            messages = trimChatImages(it.messages + assistant),
                         )
                     }
+                    if (auto && action != null) runAction(assistant.id, action)
                 }
                 .onFailure { e ->
                     _chat.update {
@@ -926,6 +942,10 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val msg = _chat.value.messages.firstOrNull { it.id == id } ?: return
         val action = msg.action ?: return
         if (action.dangerous && !dangerConfirmed) return
+        runAction(id, action)
+    }
+
+    private fun runAction(id: Long, action: ButlerAction) {
         updateMessage(id) { it.copy(actionState = ActionState.RUNNING) }
         viewModelScope.launch {
             val result = runCatching { execute(action) }
@@ -1260,12 +1280,12 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     Shell.Backend.APP -> "普通权限"
                 }
                 val result = withContext(Dispatchers.IO) {
-                    val r = Shell.runAs(backend, command, 20_000)
+                    val r = Shell.runAs(backend, command, 60_000)
                     AdbAuditLog.append(getApplication(), backendLabel, command, r.code, r.text)
                     r
                 }
                 "后端：$backendLabel · 退出码 ${result.code}\n" +
-                    result.text.ifBlank { "（无输出）" }.take(6000)
+                    result.text.ifBlank { "（无输出）" }.take(12_000)
             }
             "adb_remote_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
@@ -1275,7 +1295,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     return "远程 ADB 未连接，请先在 工具 → 远程 ADB 里连接"
                 }
                 val result = withContext(Dispatchers.IO) {
-                    AdbManager.runRemote(command, 20_000)?.also { r ->
+                    AdbManager.runRemote(command, 60_000)?.also { r ->
                         AdbAuditLog.append(
                             getApplication(),
                             "远程 ADB",
@@ -1286,7 +1306,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } ?: return "远程 ADB 执行失败：${AdbManager.lastRunError()}"
                 "远程 ADB · 退出码 ${result.code}\n" +
-                    result.output.ifBlank { "（无输出）" }.take(6000)
+                    result.output.ifBlank { "（无输出）" }.take(12_000)
             }
             "adb_usb_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
@@ -1297,7 +1317,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                     AdbAuditLog.append(getApplication(), "USB ADB", command, 0, text)
                     text
                 }
-                "USB ADB\n" + output.ifBlank { "（无输出）" }.take(6000)
+                "USB ADB\n" + output.ifBlank { "（无输出）" }.take(12_000)
             }
             else -> "暂不支持这个动作：${action.type}"
         }
@@ -1400,7 +1420,7 @@ ADB 工具已开启：adb_local_run 默认使用当前后端，也可指定 back
 你是「${prefs.personaName}」，住在用户 LineageOS 24（Android 17）手机里的设备管家。
 用户自定义人设：${prefs.personaPrompt.ifBlank { "冷静、简短、可靠，不卖萌" }}
 称呼用户：${prefs.userTitle}
-你只能通过下面列出的 action 操作设备，每次操作都会由用户二次确认后执行。
+你只能通过下面列出的 action 操作设备。普通 ADB 命令在 ADB 开关开启时会自动执行；其他操作和危险命令仍会由用户确认。
 不确定的数据不要编造；需要先扫描就提出扫描。
 
 设备状态：

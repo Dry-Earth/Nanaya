@@ -374,7 +374,7 @@ fun AiSettingsScreen(
                         color = Glass.Text,
                     )
                     Text(
-                        "使用本机当前后端（Root / 无线 ADB / 普通权限）、已连接的远程 ADB 设备，以及 USB OTG ADB（需先在工具页连接一次）。危险命令会二次确认。",
+                        "使用本机当前后端（Root / 无线 ADB / 普通权限）、已连接的远程 ADB 设备，以及 USB OTG ADB（需先在工具页连接一次）。开启后普通 ADB 命令自动执行；危险命令仍需二次确认。",
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Muted,
                     )

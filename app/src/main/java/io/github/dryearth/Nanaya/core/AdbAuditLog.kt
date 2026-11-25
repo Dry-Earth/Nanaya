@@ -31,7 +31,7 @@ object AdbAuditLog {
                 put("b", backend)
                 put("c", command.take(4000))
                 put("x", code)
-                put("o", output.take(1000))
+                put("o", output.take(2000))
             }.toString()
             file.appendText(line + "\n")
             val lines = file.readLines()
