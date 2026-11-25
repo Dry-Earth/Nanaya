@@ -22,7 +22,7 @@ import kotlin.concurrent.withLock
  * one sample share the same work.
  */
 object PrivilegedShell {
-    private const val CACHE_TTL_MS = 300L
+    private const val CACHE_TTL_MS = 5_000L
     private const val BATCH_TIMEOUT_MS = 2_500L
     private const val MAX_BATCH_FAILURES = 2
     private const val BYPASS_MS = 60_000L
@@ -116,6 +116,18 @@ object PrivilegedShell {
     /** Runs a trusted shell command through the normal privileged backend. */
     fun run(command: String, timeoutMs: Long = 15_000L): ShellResult =
         Shell.run(command, timeoutMs)
+
+    /**
+     * Starts a new sampling cycle. Everything read during the cycle shares one
+     * set of values (and at most one privileged batch), so a slow group cannot
+     * make the following groups re-read the same nodes.
+     */
+    fun beginSample() {
+        lock.withLock {
+            cache.clear()
+            cacheAt = SystemClock.elapsedRealtime()
+        }
+    }
 
     /** Drops cached values after a privilege change. */
     fun reset() {

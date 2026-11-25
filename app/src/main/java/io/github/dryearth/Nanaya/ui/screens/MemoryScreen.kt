@@ -89,7 +89,7 @@ fun MemoryScreen(onBack: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("内存详情", style = MaterialTheme.typography.headlineMedium, color = Glass.Text)
-                    Text("RAM · Swap · ZRAM · 每应用 PSS", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
+                    Text("RAM · Swap · ZRAM · 每应用 RSS", style = MaterialTheme.typography.bodySmall, color = Glass.Muted)
                 }
             }
         }
@@ -141,7 +141,7 @@ fun MemoryScreen(onBack: () -> Unit) {
         item {
             SectionHeader(
                 "应用内存占用",
-                if (processes.isEmpty()) "需要 Root 或无线 ADB 读取进程内存" else "内存占用 · 降序",
+                if (processes.isEmpty()) "需要 Root 或无线 ADB 读取进程内存" else "RSS · 降序",
             )
         }
         if (loading) {

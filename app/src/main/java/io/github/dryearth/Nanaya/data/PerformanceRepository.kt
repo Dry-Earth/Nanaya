@@ -24,7 +24,108 @@ class PerformanceRepository(private val context: Context) {
     private var lastMemAt = 0L
     private var lastMemList: List<MemProcess> = emptyList()
 
+    private val gpuPaths = listOf(
+        "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+        "/sys/class/kgsl/kgsl-3d0/gpubusy",
+        "/sys/class/kgsl/kgsl-3d0/gpuclk",
+        "/sys/class/kgsl/kgsl-3d0/max_gpuclk",
+        "/sys/class/kgsl/kgsl-3d0/gpu_model",
+        "/sys/class/kgsl/kgsl-3d0/device/gpu_model",
+        "/sys/class/kgsl/kgsl-3d0/gpu_available_frequencies",
+        "/sys/class/kgsl/kgsl-3d0/freq_table_mhz",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/name",
+        "/sys/class/kgsl/kgsl-3d0/devfreq/available_frequencies",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/gpu_load",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/load",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/cur_freq",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/max_freq",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/name",
+        "/sys/class/devfreq/3d00000.qcom,kgsl-3d0/available_frequencies",
+        "/sys/class/devfreq/gpufreq/cur_freq",
+        "/sys/class/devfreq/gpufreq/max_freq",
+        "/sys/class/devfreq/gpufreq/gpu_load",
+        "/sys/class/devfreq/gpufreq/available_frequencies",
+        "/sys/kernel/gpu/gpu_busy",
+        "/sys/kernel/gpu/gpu_clock",
+        "/sys/kernel/gpu/gpu_freq",
+        "/sys/kernel/fpsgo/common/gpu_load",
+        "/sys/kernel/ged/hal/gpu_utilization",
+        "/proc/game_opt/gpu_load",
+        "/sys/class/misc/mali0/device/utilisation",
+        "/sys/class/misc/mali0/device/gpu_busy",
+        "/sys/class/misc/mali0/device/clock",
+        "/sys/class/misc/mali0/device/cur_freq",
+        "/sys/class/misc/mali0/device/max_freq",
+    )
+
+    private val batterySysfsPaths = listOf(
+        "/sys/class/power_supply/battery/voltage_now",
+        "/sys/class/power_supply/usb/voltage_now",
+        "/sys/class/power_supply/battery/current_now",
+        "/sys/class/power_supply/usb/current_now",
+        "/sys/class/power_supply/main/current_now",
+        "/sys/class/power_supply/battery/current_max",
+        "/sys/class/power_supply/battery/power_now",
+        "/sys/class/power_supply/usb/power_now",
+        "/sys/class/power_supply/battery/cycle_count",
+        "/sys/class/power_supply/battery/battery_cycle",
+        "/sys/class/power_supply/battery/charge_counter",
+        "/sys/class/power_supply/battery/charge_now",
+        "/sys/class/power_supply/battery/charge_full",
+        "/sys/class/power_supply/battery/charge_full_design",
+    )
+
+    private val zramPaths = listOf(
+        "/sys/block/zram0/disksize",
+        "/sys/block/zram0/mem_used_total",
+        "/sys/block/zram0/orig_data_size",
+        "/sys/block/zram0/mm_stat",
+        "/proc/zraminfo",
+    )
+
+    /** Every node one sample needs, so the privileged fallback runs at most once. */
+    private fun samplePaths(): List<String> {
+        val paths = LinkedHashSet<String>()
+        paths += "/proc/stat"
+        paths += "/proc/meminfo"
+        val cores = Runtime.getRuntime().availableProcessors().coerceIn(1, 32)
+        for (i in 0 until cores) {
+            for (leaf in listOf(
+                "scaling_cur_freq",
+                "cpuinfo_max_freq",
+                "scaling_max_freq",
+                "cpuinfo_min_freq",
+                "scaling_min_freq",
+            )) {
+                paths += cpuFreqPaths(i, leaf)
+            }
+        }
+        paths += cpuFreqPaths(0, "scaling_governor")
+        paths += gpuPaths
+        paths += batterySysfsPaths
+        paths += zramPaths
+        for (zone in thermalZoneDirs()) {
+            paths += "$zone/type"
+            paths += "$zone/temp"
+        }
+        for (dir in npuDirs()) {
+            for (leaf in listOf("load", "busy", "utilization", "gpu_busy_percentage", "cur_freq", "frequency")) {
+                paths += "$dir/$leaf"
+            }
+        }
+        return paths.toList()
+    }
+
     fun snapshot(includeProcesses: Boolean = true): PerfSnapshot {
+        // One sampling cycle: collect every path first, read them in one pass
+        // (direct where possible, at most one root batch for the rest), then
+        // parse. Groups below all hit the same cache instead of each opening
+        // its own privileged round trip.
+        PrivilegedShell.beginSample()
+        runCatching { PrivilegedShell.readAll(samplePaths()) }
+
         // Each group is isolated: one blocked/failed node (a vendor sysfs file,
         // a binder, a storage mount that disappeared with a container) must not
         // discard the metrics that did read successfully.
@@ -188,42 +289,7 @@ class PerformanceRepository(private val context: Context) {
         val kgsl = "/sys/class/kgsl/kgsl-3d0"
         val kgslDev = "$kgsl/devfreq"
         val devfreq = "/sys/class/devfreq/3d00000.qcom,kgsl-3d0"
-        val candidates = listOf(
-            "$kgsl/gpu_busy_percentage",
-            "$kgsl/gpubusy",
-            "$kgsl/gpuclk",
-            "$kgsl/max_gpuclk",
-            "$kgsl/gpu_model",
-            "$kgsl/device/gpu_model",
-            "$kgsl/gpu_available_frequencies",
-            "$kgsl/freq_table_mhz",
-            "$kgslDev/cur_freq",
-            "$kgslDev/max_freq",
-            "$kgslDev/name",
-            "$kgslDev/available_frequencies",
-            "$devfreq/gpu_load",
-            "$devfreq/load",
-            "$devfreq/cur_freq",
-            "$devfreq/max_freq",
-            "$devfreq/name",
-            "$devfreq/available_frequencies",
-            "/sys/class/devfreq/gpufreq/cur_freq",
-            "/sys/class/devfreq/gpufreq/max_freq",
-            "/sys/class/devfreq/gpufreq/gpu_load",
-            "/sys/class/devfreq/gpufreq/available_frequencies",
-            "/sys/kernel/gpu/gpu_busy",
-            "/sys/kernel/gpu/gpu_clock",
-            "/sys/kernel/gpu/gpu_freq",
-            "/sys/kernel/fpsgo/common/gpu_load",
-            "/sys/kernel/ged/hal/gpu_utilization",
-            "/proc/game_opt/gpu_load",
-            "/sys/class/misc/mali0/device/utilisation",
-            "/sys/class/misc/mali0/device/gpu_busy",
-            "/sys/class/misc/mali0/device/clock",
-            "/sys/class/misc/mali0/device/cur_freq",
-            "/sys/class/misc/mali0/device/max_freq",
-        )
-        val values = PrivilegedShell.readAll(candidates)
+        val values = PrivilegedShell.readAll(gpuPaths)
 
         fun number(path: String): Long? = PrivilegedShell.firstNumber(values[path])
 
@@ -309,11 +375,13 @@ class PerformanceRepository(private val context: Context) {
             }
         }
 
+        // Do not fall back to the SoC model here: the SoC pill already shows it,
+        // and calling an SoC a GPU model would be misleading.
         val name = values["$kgsl/gpu_model"]
             ?: values["$kgsl/device/gpu_model"]
             ?: values["$kgslDev/name"]
             ?: values["$devfreq/name"]
-            ?: runCatching { Build.SOC_MODEL }.getOrDefault("")
+            ?: ""
         return GpuReading(load, freqMhz, maxMhz, name)
     }
 
@@ -321,6 +389,22 @@ class PerformanceRepository(private val context: Context) {
         if (value >= 100_000L) (value / 1_000_000L).toInt() else value.toInt()
 
     // ---------------- NPU ----------------
+
+    private fun npuDirs(): List<String> =
+        PrivilegedShell.listDir("/sys/class/devfreq").filter { path ->
+            val n = path.substringAfterLast('/').lowercase(Locale.US)
+            n.contains("cdsp") || n.contains("npu") || n.contains("nsp") || n.contains("apu")
+        }
+
+    private fun npuPaths(dirs: List<String>): List<String> {
+        val paths = ArrayList<String>(dirs.size * 6)
+        for (dir in dirs) {
+            for (leaf in listOf("load", "busy", "utilization", "gpu_busy_percentage", "cur_freq", "frequency")) {
+                paths += "$dir/$leaf"
+            }
+        }
+        return paths
+    }
 
     private data class NpuReading(val name: String, val load: Int, val freqMhz: Int)
 
@@ -333,18 +417,9 @@ class PerformanceRepository(private val context: Context) {
             soc.isBlank() -> "NPU"
             else -> "NPU · $soc"
         }
-        val dirs = PrivilegedShell.listDir("/sys/class/devfreq").filter { path ->
-            val n = path.substringAfterLast('/').lowercase(Locale.US)
-            n.contains("cdsp") || n.contains("npu") || n.contains("nsp") || n.contains("apu")
-        }
+        val dirs = npuDirs()
         if (dirs.isEmpty()) return NpuReading(name, -1, -1)
-        val paths = ArrayList<String>(dirs.size * 5)
-        for (dir in dirs) {
-            for (leaf in listOf("load", "busy", "utilization", "gpu_busy_percentage", "cur_freq", "frequency")) {
-                paths += "$dir/$leaf"
-            }
-        }
-        val values = PrivilegedShell.readAll(paths)
+        val values = PrivilegedShell.readAll(npuPaths(dirs))
         var load = -1
         var freq = -1
         for (dir in dirs) {
@@ -428,14 +503,7 @@ class PerformanceRepository(private val context: Context) {
     }
 
     private fun readZram(): Triple<Long, Long, Long> {
-        val paths = listOf(
-            "/sys/block/zram0/disksize",
-            "/sys/block/zram0/mem_used_total",
-            "/sys/block/zram0/orig_data_size",
-            "/sys/block/zram0/mm_stat",
-            "/proc/zraminfo",
-        )
-        val values = PrivilegedShell.readAll(paths)
+        val values = PrivilegedShell.readAll(zramPaths)
         val size = PrivilegedShell.firstNumber(values["/sys/block/zram0/disksize"])?.coerceAtLeast(0) ?: 0L
         var used = PrivilegedShell.firstNumber(values["/sys/block/zram0/mem_used_total"]) ?: 0L
         var orig = PrivilegedShell.firstNumber(values["/sys/block/zram0/orig_data_size"]) ?: 0L
@@ -521,10 +589,13 @@ class PerformanceRepository(private val context: Context) {
 
     // ---------------- thermal ----------------
 
-    private fun readTemps(): List<TempReading> {
-        val zones = PrivilegedShell.listDir("/sys/class/thermal").filter {
+    private fun thermalZoneDirs(): List<String> =
+        PrivilegedShell.listDir("/sys/class/thermal").filter {
             it.substringAfterLast('/').startsWith("thermal_zone")
         }
+
+    private fun readTemps(): List<TempReading> {
+        val zones = thermalZoneDirs()
         val paths = ArrayList<String>(zones.size * 2)
         for (zone in zones) {
             paths += "$zone/type"
@@ -550,9 +621,14 @@ class PerformanceRepository(private val context: Context) {
             }
         }
         val list = grouped.map { (label, entries) ->
-            val sorted = entries.map { it.first }.sorted()
-            val median = sorted[sorted.size / 2]
-            TempReading(label, median, entries.map { it.second }.distinct().joinToString(" / ").take(40))
+            // A group can contain several sensors (cpu-0-0..7, gpuss-0..7).
+            // Report the hottest one so a single hot core is not averaged away.
+            val hottest = entries.maxByOrNull { it.first }!!
+            TempReading(
+                label,
+                hottest.first,
+                entries.map { it.second }.distinct().joinToString(" / ").take(40),
+            )
         }.sortedByDescending { it.celsius }.toMutableList()
         if (list.isEmpty()) {
             val b = readBattery()
@@ -633,23 +709,7 @@ class PerformanceRepository(private val context: Context) {
         val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
         val tech = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: ""
 
-        val values = PrivilegedShell.readAll(
-            listOf(
-                "/sys/class/power_supply/battery/voltage_now",
-                "/sys/class/power_supply/usb/voltage_now",
-                "/sys/class/power_supply/battery/current_now",
-                "/sys/class/power_supply/usb/current_now",
-                "/sys/class/power_supply/main/current_now",
-                "/sys/class/power_supply/battery/power_now",
-                "/sys/class/power_supply/usb/power_now",
-                "/sys/class/power_supply/battery/cycle_count",
-                "/sys/class/power_supply/battery/battery_cycle",
-                "/sys/class/power_supply/battery/charge_counter",
-                "/sys/class/power_supply/battery/charge_now",
-                "/sys/class/power_supply/battery/charge_full",
-                "/sys/class/power_supply/battery/charge_full_design",
-            )
-        )
+        val values = PrivilegedShell.readAll(batterySysfsPaths)
 
         var voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
         if (voltage <= 0) {
@@ -667,10 +727,13 @@ class PerformanceRepository(private val context: Context) {
                     ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/battery_cycle"])
                 )?.toInt() ?: -1
         }
+        if (cycles !in 0..10_000) cycles = -1
 
         var chargeCounter = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
         }.getOrDefault(-1L)
+        // getLongProperty returns Long.MIN_VALUE when the property is missing.
+        if (chargeCounter !in 0L..100_000_000L) chargeCounter = -1L
         if (chargeCounter <= 0) {
             chargeCounter = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/charge_counter"])
                 ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/charge_now"])
@@ -680,23 +743,38 @@ class PerformanceRepository(private val context: Context) {
         var current = runCatching {
             bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
         }.getOrDefault(0L)
+        // Unsupported properties come back as Long.MIN_VALUE; keep it out of
+        // abs() and the power calculation.
+        if (current !in -30_000_000L..30_000_000L) current = 0L
+        var fromSysfs = false
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/current_now"]) ?: 0L
+            fromSysfs = current != 0L
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/current_now"]) ?: 0L
+            fromSysfs = current != 0L
         }
         if (current == 0L) {
             current = PrivilegedShell.firstNumber(values["/sys/class/power_supply/main/current_now"]) ?: 0L
+            fromSysfs = current != 0L
         }
-        if (current in 1L..9999L || current in -9999L..-1L) current *= 1000L
+        if (fromSysfs && (current in 1L..9999L || current in -9999L..-1L)) {
+            // Standard kernel nodes use µA. A handful of vendor nodes use mA;
+            // when `current_max` is also in the thousands, treat the node as mA.
+            val currentMax = PrivilegedShell.firstNumber(
+                values["/sys/class/power_supply/battery/current_max"]
+            ) ?: 0L
+            if (currentMax > 0 && currentMax <= 100_000L) current *= 1000L
+        }
 
+        if (voltage !in 1_000..10_000) voltage = 0
         var power = kotlin.math.abs(current) / 1_000_000f * (voltage / 1000f)
-        if (power <= 0f) {
+        if (power <= 0f || !power.isFinite() || power > 300f) {
             val powerNow = PrivilegedShell.firstNumber(values["/sys/class/power_supply/battery/power_now"])
                 ?: PrivilegedShell.firstNumber(values["/sys/class/power_supply/usb/power_now"])
                 ?: 0L
-            if (powerNow > 0) power = powerNow / 1_000_000f
+            power = if (powerNow in 1L..300_000_000L) powerNow / 1_000_000f else 0f
         }
 
         return BatterySnapshot(

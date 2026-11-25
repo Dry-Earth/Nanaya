@@ -128,6 +128,7 @@ data class TempReading(val label: String, val celsius: Float, val source: String
 
 data class ProcLoad(val name: String, val pct: Float, val pssKb: Long = 0)
 
+/** `pssKb` is RSS when the fast `ps` path is used, PSS when dumpsys meminfo is used. */
 data class MemProcess(val name: String, val pssKb: Long)
 
 data class BatterySnapshot(

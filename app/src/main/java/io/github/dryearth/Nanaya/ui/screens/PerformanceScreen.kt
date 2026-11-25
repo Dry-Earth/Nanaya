@@ -348,7 +348,7 @@ private fun GpuPanel(perf: PerfUiState) {
 private fun TemperaturePanel(perf: PerfUiState) {
     if (perf.snapshot.temps.isEmpty()) return
     GlassPanel {
-        SectionHeader("温度", "thermal_zone")
+        SectionHeader("温度", "thermal_zone · 组内最高")
         Spacer(Modifier.height(12.dp))
         perf.snapshot.temps.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
