@@ -1282,7 +1282,7 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
                 append("（Root=${Shell.rootReady}，无线 ADB=${AdbManager.connected()}）")
                 append("；远程 ADB：${if (AdbManager.remoteConnected()) "已连接" else "未连接"}")
                 append("；USB ADB：${UsbAdbHub.status(getApplication())}")
-                append("；AI 权能：${scopeLabel()}")
+                append("；本机权能：${scopeLabel()}")
             }
             "adb_local_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
@@ -1306,7 +1306,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             }
             "adb_remote_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
-                if (prefs.aiAdbScope == "root") return "当前权能为仅 Root，远程 ADB 命令已停用"
                 val command = args["command"].orEmpty().trim()
                 if (command.isBlank()) return "没有提供命令"
                 if (!AdbManager.remoteConnected()) {
@@ -1328,7 +1327,6 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
             }
             "adb_usb_run" -> {
                 if (!prefs.aiAdbEnabled) return "AI 的 ADB 工具未开启，请先到 AI 设置里打开"
-                if (prefs.aiAdbScope == "root") return "当前权能为仅 Root，USB ADB 命令已停用"
                 val command = args["command"].orEmpty().trim()
                 if (command.isBlank()) return "没有提供命令"
                 val output = withContext(Dispatchers.IO) {
@@ -1428,18 +1426,16 @@ class ButlerViewModel(app: Application) : AndroidViewModel(app) {
         val sen = _security.value.report
         val adbScope = prefs.aiAdbScope
         val adbRule = when (adbScope) {
-            "adb" -> "权能：仅无线 ADB。本机命令只能走无线 ADB 的 shell 用户，不要请求 root；未连接无线 ADB 时命令会失败。远程/USB ADB 可用。"
-            "root" -> "权能：仅 Root。本机命令只能走 Root；远程/USB ADB 已停用；Root 未授权时命令会失败。"
-            else -> "权能：ADB + Root。本机命令可用 auto/adb/root；auto 仍 Root 优先。远程/USB ADB 可用。"
+            "adb" -> "权能：本机仅无线 ADB。本机命令只能走无线 ADB 的 shell 用户，不要请求 root；未连接无线 ADB 时命令会失败。远程/USB ADB 仍可用。"
+            "root" -> "权能：本机仅 Root。本机命令只能走 Root；Root 未授权时命令会失败。远程/USB ADB 仍可用。"
+            else -> "权能：本机 ADB + Root。本机命令可用 auto/adb/root；auto 仍 Root 优先。远程/USB ADB 仍可用。"
         }
         val adbActions = buildString {
             append("- {\"type\":\"adb_local_run\",\"args\":{\"command\":\"...\"")
             if (adbScope == "both") append(",\"backend\":\"auto|adb|root\"")
             append("}}\n")
-            if (adbScope != "root") {
-                append("- {\"type\":\"adb_remote_run\",\"args\":{\"command\":\"...\"}}\n")
-                append("- {\"type\":\"adb_usb_run\",\"args\":{\"command\":\"...\"}}\n")
-            }
+            append("- {\"type\":\"adb_remote_run\",\"args\":{\"command\":\"...\"}}\n")
+            append("- {\"type\":\"adb_usb_run\",\"args\":{\"command\":\"...\"}}\n")
             append("- {\"type\":\"adb_status\",\"args\":{}}\n")
         }
         val adbSection = if (prefs.aiAdbEnabled) """

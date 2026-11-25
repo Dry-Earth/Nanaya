@@ -375,7 +375,7 @@ fun AiSettingsScreen(
                         color = Glass.Text,
                     )
                     Text(
-                        "使用下方选择的权能执行本机命令，以及可用的远程/USB ADB。普通命令自动执行；危险命令仍需二次确认。",
+                        "权能仅作用于本机命令；远程/USB ADB 是独立工具，只要总开关打开并已连接就可用。普通命令自动执行；危险命令仍需二次确认。",
                         style = MaterialTheme.typography.labelSmall,
                         color = Glass.Muted,
                     )
@@ -393,7 +393,7 @@ fun AiSettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "AI 命令权能",
+                "本机命令权能",
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
             )
@@ -422,9 +422,9 @@ fun AiSettingsScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 when (aiAdbScope) {
-                    "adb" -> "只允许无线 ADB 的 shell 用户；不会使用 Root。远程/USB ADB 可用，未连接 ADB 时本机命令会失败。"
-                    "root" -> "只允许本机 Root；远程/USB ADB 命令会被拒绝。"
-                    else -> "本机命令可用无线 ADB 或 Root；auto 仍 Root 优先。"
+                    "adb" -> "本机命令只能走无线 ADB；不会使用 Root。远程/USB ADB 仍可用，未连接 ADB 时本机命令会失败。"
+                    "root" -> "本机命令只能走 Root；远程/USB ADB 仍可用。Root 未授权时本机命令会失败。"
+                    else -> "本机命令可用无线 ADB 或 Root；auto 仍 Root 优先。远程/USB ADB 仍可用。"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = Glass.Faint,
