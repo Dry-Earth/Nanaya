@@ -14,7 +14,6 @@ import java.io.File
  */
 object HtopLauncher {
     private const val ASSET = "htop/htop-aarch64"
-    private const val REMOTE = "/data/local/tmp/nanaya-htop"
 
     /** Returns an error message, or null when the terminal was launched. */
     fun launch(context: Context): String? {
@@ -22,15 +21,17 @@ object HtopLauncher {
             return "htop 需要 Root：请先授予 Nanaya Root 权限"
         }
         val binary = extract(context) ?: return "无法解压 htop 二进制"
-        val temp = "$REMOTE.new"
+        val source = quote(binary.absolutePath)
         val command = buildString {
-            append("cp ").append(quote(binary.absolutePath)).append(' ').append(temp)
-            append(" || exit 1; ")
-            append("chmod 755 ").append(temp).append(" || exit 1; ")
-            append("mv ").append(temp).append(' ').append(REMOTE).append(" || exit 1; ")
-            append("export TERM=xterm-256color; ")
-            append("export HOME=/data/local/tmp; ")
-            append("exec ").append(REMOTE)
+            append("export TERM=xterm-256color; export HOME=/data/local/tmp; ")
+            append("for d in /data/local/tmp /data/adb; do ")
+            append("[ -d \"\$d\" ] || continue; ")
+            append("cp ").append(source).append(" \"\$d/nanaya-htop.new\" 2>/dev/null || continue; ")
+            append("chmod 755 \"\$d/nanaya-htop.new\" 2>/dev/null || continue; ")
+            append("mv -f \"\$d/nanaya-htop.new\" \"\$d/nanaya-htop\" 2>/dev/null || continue; ")
+            append("\"\$d/nanaya-htop\"; code=\$?; ")
+            append("[ \$code -ne 126 ] && [ \$code -ne 127 ] && exit \$code; ")
+            append("done; echo '无法执行 htop（SELinux 拒绝执行）'; exit 1")
         }
         return runCatching {
             context.startActivity(TerminalActivity.hostIntent(context, "htop · Android", command))
